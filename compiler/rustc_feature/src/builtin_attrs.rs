@@ -583,6 +583,12 @@ pub const BUILTIN_ATTRIBUTES: &[BuiltinAttribute] = &[
         EncodeCrossCrate::Yes, experimental!(patchable_function_entry)
     ),
 
+    // RFC ???
+    // TODO: Fill this in
+    gated!(
+        context, Normal, template!(Word), WarnFollowing, EncodeCrossCrate::Yes, context_injection, experimental!(context),
+    ),
+
     // ==========================================================================
     // Internal attributes: Stability, deprecation, and unsafe:
     // ==========================================================================

@@ -648,6 +648,8 @@ symbols! {
         const_try,
         constant,
         constructor,
+        context,
+        context_injection,
         convert_identity,
         copy,
         copy_closures,

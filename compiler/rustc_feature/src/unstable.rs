@@ -411,6 +411,9 @@ declare_features! (
     (unstable, const_trait_impl, "1.42.0", Some(67792)),
     /// Allows the `?` operator in const contexts.
     (unstable, const_try, "1.56.0", Some(74935)),
+    /// Allows context injection.
+    // TODO: Fill in tracking issue
+    (unstable, context_injection, "1.74.0", None),
     /// Allows coroutines to be cloned.
     (unstable, coroutine_clone, "1.65.0", Some(95360)),
     /// Allows defining coroutines.
