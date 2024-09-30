@@ -866,3 +866,12 @@ pub(crate) struct DuplicatePreciseCapturing {
     #[label]
     pub bound2: Span,
 }
+
+#[derive(Diagnostic)]
+#[diag(ast_passes_context_has_initializer)]
+pub(crate) struct ContextHasInitializer {
+    #[primary_span]
+    pub span: Span,
+    #[suggestion(code = "", applicability = "has-placeholders")]
+    pub expr_span: Span,
+}

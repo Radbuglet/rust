@@ -246,6 +246,10 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
                 [sym::coroutine, ..] => {
                     self.check_coroutine(attr, target);
                 }
+                [sym::context, ..] => {
+                    self.check_context(hir_id, attr, span, target);
+                }
+
                 [sym::linkage, ..] => self.check_linkage(attr, span, target),
                 [sym::rustc_pub_transparent, ..] => self.check_rustc_pub_transparent( attr.span, span, attrs),
                 [
@@ -2320,6 +2324,19 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
             Target::Closure => return,
             _ => {
                 self.dcx().emit_err(errors::CoroutineOnNonClosure { span: attr.span });
+            }
+        }
+    }
+
+    fn check_context(&self, _hir_id: HirId, attr: &Attribute, span: Span, target: Target) {
+        // TODO: Ensure that `#[thread_local]` and `#[context]` are not applied to the same `static`
+        match target {
+            Target::Static => {}
+            _ => {
+                self.dcx().emit_err(errors::AttrShouldBeAppliedToStatic {
+                    attr_span: attr.span,
+                    defn_span: span,
+                });
             }
         }
     }

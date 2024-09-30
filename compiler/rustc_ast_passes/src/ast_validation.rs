@@ -1160,13 +1160,22 @@ impl<'a> Visitor<'a> for AstValidator<'a> {
                     });
                 }
             }
-            ItemKind::Static(box StaticItem { expr, safety, .. }) => {
+            ItemKind::Static(box StaticItem { expr, safety, ty, .. }) => {
                 self.check_item_safety(item.span, *safety);
                 if matches!(safety, Safety::Unsafe(_)) {
                     self.dcx().emit_err(errors::UnsafeStatic { span: item.span });
                 }
 
-                if expr.is_none() {
+                let is_context = attr::contains_name(&item.attrs, sym::context);
+
+                if let Some(expr) = expr && is_context {
+                    self.dcx().emit_err(errors::ContextHasInitializer {
+                        span: item.vis.span.to(ty.span),
+                        expr_span: expr.span,
+                    });
+                }
+
+                if !is_context && expr.is_none() {
                     self.dcx().emit_err(errors::StaticWithoutBody {
                         span: item.span,
                         replace_span: self.ending_semi_or_hi(item.span),

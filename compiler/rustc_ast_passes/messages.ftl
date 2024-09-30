@@ -219,6 +219,10 @@ ast_passes_pattern_in_foreign = patterns aren't allowed in foreign function decl
 ast_passes_precise_capturing_duplicated = duplicate `use<...>` precise capturing syntax
     .label = second `use<...>` here
 
+ast_passes_context_has_initializer =
+    static marked as `#[context]` cannot have a body
+    .suggestion = remove this definition for the static
+
 ast_passes_precise_capturing_not_allowed_here = `use<...>` precise capturing syntax not allowed in {$loc}
 
 ast_passes_show_span = {$msg}
