@@ -1408,7 +1408,8 @@ impl<'tcx> LateLintPass<'tcx> for ImproperCTypesDefinitions {
         match item.kind {
             hir::ItemKind::Static(ty, ..)
             | hir::ItemKind::Const(ty, ..)
-            | hir::ItemKind::TyAlias(ty, ..) => {
+            | hir::ItemKind::TyAlias(ty, ..)
+            | hir::ItemKind::Context(ty) => {
                 self.check_ty_maybe_containing_foreign_fnptr(
                     cx,
                     ty,

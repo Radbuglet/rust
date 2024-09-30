@@ -236,7 +236,8 @@ impl<'v> hir_visit::Visitor<'v> for StatCollector<'v> {
             Union,
             Trait,
             TraitAlias,
-            Impl
+            Impl,
+            Context
         ]);
         hir_visit::walk_item(self, i)
     }

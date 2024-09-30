@@ -657,6 +657,15 @@ impl<'a> State<'a> {
                 self.end(); // end inner head-block
                 self.end(); // end outer head-block
             }
+            hir::ItemKind::Context(t) => {
+                self.head("static");
+                self.print_ident(item.ident);
+                self.word_space(":");
+                self.print_type(t);
+                self.word(";");
+                self.end(); // end the head-ibox
+                self.end(); // end the outer cbox
+            }
         }
         self.ann.post(self, AnnNode::Item(item))
     }

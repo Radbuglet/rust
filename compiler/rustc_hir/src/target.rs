@@ -121,6 +121,11 @@ impl Target {
             ItemKind::Trait(..) => Target::Trait,
             ItemKind::TraitAlias(..) => Target::TraitAlias,
             ItemKind::Impl { .. } => Target::Impl,
+
+            // Targets are used in `rustc_passes` to check attribute applicability.
+            // We treat context as a static because, for attribute checking, statics and contexts
+            // are one and the same.
+            ItemKind::Context(..) => Target::Static,
         }
     }
 

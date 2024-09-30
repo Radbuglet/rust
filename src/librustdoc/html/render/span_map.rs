@@ -237,6 +237,7 @@ impl<'tcx> Visitor<'tcx> for SpanMapVisitor<'tcx> {
             | ItemKind::Struct(_, _)
             | ItemKind::Union(_, _)
             | ItemKind::Trait(_, _, _, _, _)
+            | ItemKind::Context(_)
             | ItemKind::TraitAlias(_, _) => self.extract_info_from_hir_id(item.hir_id()),
             ItemKind::Impl(_)
             | ItemKind::Use(_, _)

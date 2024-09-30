@@ -187,7 +187,10 @@ impl<'hir> LoweringContext<'_, 'hir> {
             }
             ItemKind::Static(box ast::StaticItem { ty: t, safety: _, mutability: m, expr: e }) => {
                 if attr::contains_name(attrs, sym::context) {
-                    todo!()
+                    let ty =
+                        self.lower_ty(t, ImplTraitContext::Disallowed(ImplTraitPosition::StaticTy));
+
+                    hir::ItemKind::Context(ty)
                 } else {
                     let (ty, body_id) =
                         self.lower_const_item(t, span, e.as_deref(), ImplTraitPosition::StaticTy);

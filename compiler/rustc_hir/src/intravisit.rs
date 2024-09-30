@@ -580,6 +580,9 @@ pub fn walk_item<'v, V: Visitor<'v>>(visitor: &mut V, item: &'v Item<'v>) -> V::
             try_visit!(visitor.visit_generics(generics));
             walk_list!(visitor, visit_param_bound, bounds);
         }
+        ItemKind::Context(ref typ) => {
+            try_visit!(visitor.visit_ty(typ));
+        }
     }
     V::Result::output()
 }

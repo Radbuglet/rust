@@ -774,6 +774,9 @@ fn lower_item(tcx: TyCtxt<'_>, item_id: hir::ItemId) {
             tcx.ensure().fn_sig(def_id);
             tcx.ensure().codegen_fn_attrs(def_id);
         }
+        hir::ItemKind::Context(..) => {
+            todo!();
+        }
     }
 }
 

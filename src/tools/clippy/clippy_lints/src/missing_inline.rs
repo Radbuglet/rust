@@ -134,7 +134,8 @@ impl<'tcx> LateLintPass<'tcx> for MissingInline {
             | hir::ItemKind::ExternCrate(..)
             | hir::ItemKind::ForeignMod { .. }
             | hir::ItemKind::Impl { .. }
-            | hir::ItemKind::Use(..) => {},
+            | hir::ItemKind::Use(..)
+            | hir::ItemKind::Context(..) => {},
         };
     }
 

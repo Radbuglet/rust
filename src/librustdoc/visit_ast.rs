@@ -511,7 +511,8 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
             })
             | hir::ItemKind::Static(..)
             | hir::ItemKind::Trait(..)
-            | hir::ItemKind::TraitAlias(..) => {
+            | hir::ItemKind::TraitAlias(..)
+            | hir::ItemKind::Context(..) => {
                 self.add_to_current_mod(item, renamed, import_id);
             }
             hir::ItemKind::OpaqueTy(hir::OpaqueTy {

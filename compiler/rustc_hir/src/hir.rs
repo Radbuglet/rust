@@ -3454,6 +3454,9 @@ pub enum ItemKind<'hir> {
 
     /// An implementation, e.g., `impl<A> Trait for Foo { .. }`.
     Impl(&'hir Impl<'hir>),
+
+    /// A context item.
+    Context(&'hir Ty<'hir>),
 }
 
 /// Represents an impl block declaration.
@@ -3514,6 +3517,7 @@ impl ItemKind<'_> {
             ItemKind::Trait(..) => "trait",
             ItemKind::TraitAlias(..) => "trait alias",
             ItemKind::Impl(..) => "implementation",
+            ItemKind::Context(..) => "context item",
         }
     }
 }
