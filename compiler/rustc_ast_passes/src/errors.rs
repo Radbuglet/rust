@@ -875,3 +875,11 @@ pub(crate) struct ContextHasInitializer {
     #[suggestion(code = "", applicability = "has-placeholders")]
     pub expr_span: Span,
 }
+
+#[derive(Diagnostic)]
+#[diag(ast_passes_context_is_mutable)]
+#[note]
+pub(crate) struct ContextIsMutable {
+    #[primary_span]
+    pub span: Span,
+}

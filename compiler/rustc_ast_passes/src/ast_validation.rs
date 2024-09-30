@@ -1160,7 +1160,7 @@ impl<'a> Visitor<'a> for AstValidator<'a> {
                     });
                 }
             }
-            ItemKind::Static(box StaticItem { expr, safety, ty, .. }) => {
+            ItemKind::Static(box StaticItem { expr, safety, mutability, ty, .. }) => {
                 self.check_item_safety(item.span, *safety);
                 if matches!(safety, Safety::Unsafe(_)) {
                     self.dcx().emit_err(errors::UnsafeStatic { span: item.span });
@@ -1172,6 +1172,12 @@ impl<'a> Visitor<'a> for AstValidator<'a> {
                     self.dcx().emit_err(errors::ContextHasInitializer {
                         span: item.vis.span.to(ty.span),
                         expr_span: expr.span,
+                    });
+                }
+
+                if is_context && mutability.is_mut() {
+                    self.dcx().emit_err(errors::ContextIsMutable {
+                        span: item.vis.span.to(ty.span),
                     });
                 }
 

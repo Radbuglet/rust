@@ -679,6 +679,10 @@ passes_should_be_applied_to_static =
     attribute should be applied to a static
     .label = not a static
 
+passes_context_and_thread_local_overlap =
+    `#[context]` and `#[thread_local]` cannot be applied to the same static
+    .label = conflicting attribute
+
 passes_should_be_applied_to_struct_enum =
     attribute should be applied to a struct or enum
     .label = not a struct or enum

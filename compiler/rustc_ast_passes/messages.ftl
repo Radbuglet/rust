@@ -223,6 +223,10 @@ ast_passes_context_has_initializer =
     static marked as `#[context]` cannot have a body
     .suggestion = remove this definition for the static
 
+ast_passes_context_is_mutable =
+    static marked as `#[context]` cannot be marked as `mut`
+    .note = context items can be bound as either mutable or immutable without the need for `mut`
+
 ast_passes_precise_capturing_not_allowed_here = `use<...>` precise capturing syntax not allowed in {$loc}
 
 ast_passes_show_span = {$msg}

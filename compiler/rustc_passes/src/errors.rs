@@ -124,6 +124,15 @@ pub(crate) struct AttrShouldBeAppliedToStatic {
 }
 
 #[derive(Diagnostic)]
+#[diag(passes_context_and_thread_local_overlap)]
+pub(crate) struct ContextAndThreadLocalOverlap {
+    #[primary_span]
+    pub span: Span,
+    #[label]
+    pub first_span: Span,
+}
+
+#[derive(Diagnostic)]
 #[diag(passes_doc_expect_str)]
 pub(crate) struct DocExpectStr<'a> {
     #[primary_span]

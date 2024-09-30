@@ -112,7 +112,8 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
     ) {
         let mut doc_aliases = FxHashMap::default();
         let mut specified_inline = None;
-        let mut seen = FxHashMap::default();
+        let mut seen_for_duplicates = FxHashMap::default();
+        let mut seen_for_overlap = FxHashMap::default();
         let attrs = self.tcx.hir().attrs(hir_id);
         for attr in attrs {
             match attr.path().as_slice() {
@@ -328,10 +329,11 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
             }
 
             if let Some(BuiltinAttribute { duplicates, .. }) = builtin {
-                check_duplicates(self.tcx, attr, hir_id, *duplicates, &mut seen);
+                check_duplicates(self.tcx, attr, hir_id, *duplicates, &mut seen_for_duplicates);
             }
 
-            self.check_unused_attribute(hir_id, attr)
+            self.check_unused_attribute(hir_id, attr);
+            self.check_attr_overlap(attr, &mut seen_for_overlap);
         }
 
         self.check_repr(attrs, span, target, item, hir_id);
@@ -2211,6 +2213,19 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
         });
     }
 
+    fn check_attr_overlap(&self, attr: &Attribute, seen: &mut FxHashMap<Symbol, Span>) {
+        if let Some(first_span) = check_attr_overlap(
+            attr,
+            &[sym::context, sym::thread_local],
+            seen,
+        ) {
+            self.dcx().emit_err(errors::ContextAndThreadLocalOverlap {
+                first_span,
+                span: attr.span,
+            });
+        }
+    }
+
     /// A best effort attempt to create an error for a mismatching proc macro signature.
     ///
     /// If this best effort goes wrong, it will just emit a worse error later (see #102923)
@@ -2329,7 +2344,6 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
     }
 
     fn check_context(&self, _hir_id: HirId, attr: &Attribute, span: Span, target: Target) {
-        // TODO: Ensure that `#[thread_local]` and `#[context]` are not applied to the same `static`
         match target {
             Target::Static => {}
             _ => {
@@ -2631,4 +2645,27 @@ fn check_duplicates(
             }
         },
     }
+}
+
+#[must_use]
+fn check_attr_overlap(
+    attr: &Attribute,
+    no_overlap: &[Symbol],
+    seen: &mut FxHashMap<Symbol, Span>,
+) -> Option<Span> {
+    let attr_name = attr.ident()?.name;
+
+    seen.entry(attr_name).or_insert(attr.span);
+
+    for &no_overlap in no_overlap {
+        if no_overlap == attr_name {
+            continue;
+        }
+
+        if let Some(&seen) = seen.get(&no_overlap) {
+            return Some(seen);
+        }
+    }
+
+    None
 }
