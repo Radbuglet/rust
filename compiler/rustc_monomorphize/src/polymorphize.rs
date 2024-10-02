@@ -148,6 +148,7 @@ fn mark_used_by_default_parameters<'tcx>(
         | DefKind::Const
         | DefKind::ConstParam
         | DefKind::Static { .. }
+        | DefKind::Context
         | DefKind::Ctor(_, _)
         | DefKind::AssocFn
         | DefKind::AssocConst

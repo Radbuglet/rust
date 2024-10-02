@@ -749,7 +749,7 @@ fn lower_item(tcx: TyCtxt<'_>, item_id: hir::ItemId) {
             tcx.ensure().predicates_of(def_id);
         }
 
-        hir::ItemKind::Static(ty, ..) | hir::ItemKind::Const(ty, ..) => {
+        hir::ItemKind::Static(ty, ..) | hir::ItemKind::Const(ty, ..) | hir::ItemKind::Context(ty) => {
             tcx.ensure().generics_of(def_id);
             tcx.ensure().type_of(def_id);
             tcx.ensure().predicates_of(def_id);
@@ -773,9 +773,6 @@ fn lower_item(tcx: TyCtxt<'_>, item_id: hir::ItemId) {
             tcx.ensure().predicates_of(def_id);
             tcx.ensure().fn_sig(def_id);
             tcx.ensure().codegen_fn_attrs(def_id);
-        }
-        hir::ItemKind::Context(..) => {
-            todo!();
         }
     }
 }

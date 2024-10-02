@@ -136,6 +136,8 @@ pub enum DefKind {
     /// The definition of a synthetic coroutine body created by the lowering of a
     /// coroutine-closure, such as an async closure.
     SyntheticCoroutineBody,
+    /// A context item.
+    Context,
 }
 
 impl DefKind {
@@ -181,6 +183,7 @@ impl DefKind {
             DefKind::ExternCrate => "extern crate",
             DefKind::GlobalAsm => "global assembly block",
             DefKind::SyntheticCoroutineBody => "synthetic mir body",
+            DefKind::Context => "context item",
         }
     }
 
@@ -223,6 +226,7 @@ impl DefKind {
             | DefKind::Const
             | DefKind::ConstParam
             | DefKind::Static { .. }
+            | DefKind::Context
             | DefKind::Ctor(..)
             | DefKind::AssocFn
             | DefKind::AssocConst => Some(Namespace::ValueNS),
@@ -267,6 +271,7 @@ impl DefKind {
             | DefKind::Const
             | DefKind::ConstParam
             | DefKind::Static { .. }
+            | DefKind::Context
             | DefKind::AssocFn
             | DefKind::AssocConst
             | DefKind::Field => DefPathData::ValueNs(name),
@@ -326,6 +331,7 @@ impl DefKind {
             | DefKind::AnonConst
             | DefKind::InlineConst
             | DefKind::GlobalAsm
+            | DefKind::Context
             | DefKind::ExternCrate => false,
         }
     }

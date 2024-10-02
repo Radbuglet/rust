@@ -866,6 +866,7 @@ fn should_encode_span(def_kind: DefKind) -> bool {
         | DefKind::Fn
         | DefKind::Const
         | DefKind::Static { .. }
+        | DefKind::Context
         | DefKind::Ctor(..)
         | DefKind::AssocFn
         | DefKind::AssocConst
@@ -898,6 +899,7 @@ fn should_encode_attrs(def_kind: DefKind) -> bool {
         | DefKind::Fn
         | DefKind::Const
         | DefKind::Static { nested: false, .. }
+        | DefKind::Context
         | DefKind::AssocFn
         | DefKind::AssocConst
         | DefKind::Macro(_)
@@ -942,6 +944,7 @@ fn should_encode_expn_that_defined(def_kind: DefKind) -> bool {
         | DefKind::Const
         | DefKind::ConstParam
         | DefKind::Static { .. }
+        | DefKind::Context
         | DefKind::Ctor(..)
         | DefKind::AssocFn
         | DefKind::AssocConst
@@ -988,6 +991,7 @@ fn should_encode_visibility(def_kind: DefKind) -> bool {
         | DefKind::AnonConst
         | DefKind::InlineConst
         | DefKind::Static { nested: true, .. }
+        | DefKind::Context
         | DefKind::OpaqueTy
         | DefKind::GlobalAsm
         | DefKind::Impl { .. }
@@ -1010,6 +1014,7 @@ fn should_encode_stability(def_kind: DefKind) -> bool {
         | DefKind::TyParam
         | DefKind::ConstParam
         | DefKind::Static { .. }
+        | DefKind::Context
         | DefKind::Const
         | DefKind::Fn
         | DefKind::ForeignMod
@@ -1107,6 +1112,7 @@ fn should_encode_variances<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, def_kind: Def
         | DefKind::TyParam
         | DefKind::ConstParam
         | DefKind::Static { .. }
+        | DefKind::Context
         | DefKind::Const
         | DefKind::ForeignMod
         | DefKind::Impl { .. }
@@ -1140,6 +1146,7 @@ fn should_encode_generics(def_kind: DefKind) -> bool {
         | DefKind::Fn
         | DefKind::Const
         | DefKind::Static { .. }
+        | DefKind::Context
         | DefKind::Ctor(..)
         | DefKind::AssocFn
         | DefKind::AssocConst
@@ -1173,6 +1180,7 @@ fn should_encode_type(tcx: TyCtxt<'_>, def_id: LocalDefId, def_kind: DefKind) ->
         | DefKind::Fn
         | DefKind::Const
         | DefKind::Static { nested: false, .. }
+        | DefKind::Context
         | DefKind::TyAlias
         | DefKind::ForeignTy
         | DefKind::Impl { .. }
@@ -1234,6 +1242,7 @@ fn should_encode_fn_sig(def_kind: DefKind) -> bool {
         | DefKind::Field
         | DefKind::Const
         | DefKind::Static { .. }
+        | DefKind::Context
         | DefKind::Ctor(..)
         | DefKind::TyAlias
         | DefKind::OpaqueTy
@@ -1276,6 +1285,7 @@ fn should_encode_constness(def_kind: DefKind) -> bool {
         | DefKind::AssocConst
         | DefKind::AnonConst
         | DefKind::Static { .. }
+        | DefKind::Context
         | DefKind::TyAlias
         | DefKind::OpaqueTy
         | DefKind::Impl { of_trait: false }
@@ -1309,6 +1319,7 @@ fn should_encode_const(def_kind: DefKind) -> bool {
         | DefKind::Field
         | DefKind::Fn
         | DefKind::Static { .. }
+        | DefKind::Context
         | DefKind::TyAlias
         | DefKind::OpaqueTy
         | DefKind::ForeignTy

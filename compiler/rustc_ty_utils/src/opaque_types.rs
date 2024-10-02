@@ -320,6 +320,7 @@ fn opaque_types_defined_by<'tcx>(
         DefKind::AssocFn
         | DefKind::Fn
         | DefKind::Static { .. }
+        | DefKind::Context
         | DefKind::Const
         | DefKind::AssocConst
         | DefKind::AnonConst => {

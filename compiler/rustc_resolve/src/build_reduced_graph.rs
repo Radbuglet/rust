@@ -241,6 +241,7 @@ impl<'ra, 'tcx> Resolver<'ra, 'tcx> {
                 DefKind::Fn
                 | DefKind::AssocFn
                 | DefKind::Static { .. }
+                | DefKind::Context
                 | DefKind::Const
                 | DefKind::AssocConst
                 | DefKind::Ctor(..),

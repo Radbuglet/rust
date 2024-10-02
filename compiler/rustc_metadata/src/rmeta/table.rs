@@ -164,6 +164,7 @@ fixed_size_enum! {
         ( Static { safety: hir::Safety::Safe, mutability: ast::Mutability::Not, nested: true } )
         ( Static { safety: hir::Safety::Unsafe, mutability: ast::Mutability::Mut, nested: true } )
         ( Static { safety: hir::Safety::Safe, mutability: ast::Mutability::Mut, nested: true } )
+        ( Context                                  )
         ( Ctor(CtorOf::Struct, CtorKind::Fn)       )
         ( Ctor(CtorOf::Struct, CtorKind::Const)    )
         ( Ctor(CtorOf::Variant, CtorKind::Fn)      )

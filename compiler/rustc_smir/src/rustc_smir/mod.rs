@@ -121,6 +121,7 @@ pub(crate) fn new_item_kind(kind: DefKind) -> ItemKind {
             ItemKind::Const
         }
         DefKind::Static { .. } => ItemKind::Static,
+        DefKind::Context => todo!("context not yet supported in SMIR"),
         DefKind::Ctor(_, rustc_hir::def::CtorKind::Const) => ItemKind::Ctor(CtorKind::Const),
         DefKind::Ctor(_, rustc_hir::def::CtorKind::Fn) => ItemKind::Ctor(CtorKind::Fn),
     }

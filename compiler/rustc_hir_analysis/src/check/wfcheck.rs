@@ -2209,6 +2209,7 @@ fn lint_redundant_lifetimes<'tcx>(
         | DefKind::TyParam
         | DefKind::ConstParam
         | DefKind::Static { .. }
+        | DefKind::Context
         | DefKind::Ctor(_, _)
         | DefKind::Macro(_)
         | DefKind::ExternCrate

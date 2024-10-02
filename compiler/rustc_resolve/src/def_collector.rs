@@ -208,10 +208,19 @@ impl<'a, 'ra, 'tcx> visit::Visitor<'a> for DefCollector<'a, 'ra, 'tcx> {
             ItemKind::Union(..) => DefKind::Union,
             ItemKind::ExternCrate(..) => DefKind::ExternCrate,
             ItemKind::TyAlias(..) => DefKind::TyAlias,
-            ItemKind::Static(s) => DefKind::Static {
-                safety: hir::Safety::Safe,
-                mutability: s.mutability,
-                nested: false,
+            ItemKind::Static(s) => {
+                if attr::contains_name(&i.attrs, sym::context) {
+                    // We've only treated this item as a `static` during parsing and name resolution.
+                    // The only thing left to do after updating the `DefKind` is to update the HIR.
+                    // From there on out, `context` is its own special item kind.
+                    DefKind::Context
+                } else {
+                    DefKind::Static {
+                        safety: hir::Safety::Safe,
+                        mutability: s.mutability,
+                        nested: false,
+                    }
+                }
             },
             ItemKind::Const(..) => DefKind::Const,
             ItemKind::Fn(..) | ItemKind::Delegation(..) => DefKind::Fn,
