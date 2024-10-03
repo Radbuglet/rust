@@ -1777,7 +1777,7 @@ impl Expr<'_> {
     pub fn is_place_expr(&self, mut allow_projections_from: impl FnMut(&Self) -> bool) -> bool {
         match self.kind {
             ExprKind::Path(QPath::Resolved(_, ref path)) => {
-                matches!(path.res, Res::Local(..) | Res::Def(DefKind::Static { .. }, _) | Res::Err)
+                matches!(path.res, Res::Local(..) | Res::Def(DefKind::Static { .. } | DefKind::Context, _) | Res::Err)
             }
 
             // Type ascription inherits its place expression kind from its

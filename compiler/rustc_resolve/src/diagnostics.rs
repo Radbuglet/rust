@@ -571,7 +571,9 @@ impl<'ra, 'tcx> Resolver<'ra, 'tcx> {
             ) => {
                 use errs::GenericParamsFromOuterItemLabel as Label;
                 let static_or_const = match def_kind {
-                    DefKind::Static { .. } => {
+                    DefKind::Static { .. } | DefKind::Context => {
+                        // Context items use the same error as static because the definition syntaxes
+                        // are similar enough.
                         Some(errs::GenericParamsFromOuterItemStaticOrConst::Static)
                     }
                     DefKind::Const => Some(errs::GenericParamsFromOuterItemStaticOrConst::Const),

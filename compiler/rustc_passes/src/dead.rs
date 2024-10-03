@@ -1152,6 +1152,7 @@ impl<'tcx> DeadVisitor<'tcx> {
             | DefKind::AssocFn
             | DefKind::Fn
             | DefKind::Static { .. }
+            | DefKind::Context
             | DefKind::Const
             | DefKind::TyAlias
             | DefKind::Enum

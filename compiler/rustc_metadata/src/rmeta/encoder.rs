@@ -978,6 +978,7 @@ fn should_encode_visibility(def_kind: DefKind) -> bool {
         | DefKind::Fn
         | DefKind::Const
         | DefKind::Static { nested: false, .. }
+        | DefKind::Context
         | DefKind::Ctor(..)
         | DefKind::AssocFn
         | DefKind::AssocConst
@@ -991,7 +992,6 @@ fn should_encode_visibility(def_kind: DefKind) -> bool {
         | DefKind::AnonConst
         | DefKind::InlineConst
         | DefKind::Static { nested: true, .. }
-        | DefKind::Context
         | DefKind::OpaqueTy
         | DefKind::GlobalAsm
         | DefKind::Impl { .. }

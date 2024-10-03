@@ -149,6 +149,9 @@ impl Target {
             DefKind::Trait => Target::Trait,
             DefKind::TraitAlias => Target::TraitAlias,
             DefKind::Impl { .. } => Target::Impl,
+
+            // See note in `from_item`.
+            DefKind::Context => Target::Static,
             _ => panic!("impossible case reached"),
         }
     }

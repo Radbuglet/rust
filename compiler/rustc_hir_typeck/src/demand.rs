@@ -710,7 +710,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                         hir::Path {
                             res:
                                 hir::def::Res::Def(
-                                    hir::def::DefKind::Static { .. } | hir::def::DefKind::Const,
+                                    hir::def::DefKind::Static { .. } | hir::def::DefKind::Const | hir::def::DefKind::Context,
                                     def_id,
                                 ),
                             ..

@@ -1181,7 +1181,7 @@ impl<'tcx> Visitor<'tcx> for TypePrivacyVisitor<'tcx> {
         let def = def.filter(|(kind, _)| {
             matches!(
                 kind,
-                DefKind::AssocFn | DefKind::AssocConst | DefKind::AssocTy | DefKind::Static { .. }
+                DefKind::AssocFn | DefKind::AssocConst | DefKind::AssocTy | DefKind::Static { .. } | DefKind::Context
             )
         });
         if let Some((kind, def_id)) = def {
@@ -1507,7 +1507,7 @@ impl<'tcx> PrivateItemsInPublicInterfacesChecker<'_, 'tcx> {
         let def_kind = tcx.def_kind(def_id);
 
         match def_kind {
-            DefKind::Const | DefKind::Static { .. } | DefKind::Fn | DefKind::TyAlias => {
+            DefKind::Const | DefKind::Static { .. } | DefKind::Context | DefKind::Fn | DefKind::TyAlias => {
                 if let DefKind::TyAlias = def_kind {
                     self.check_unnameable(def_id, effective_vis);
                 }
