@@ -1758,7 +1758,7 @@ impl<'tcx> dyn HirTyLowerer<'tcx> + '_ {
             }
 
             // Case 3. Reference to a top-level value.
-            DefKind::Fn | DefKind::Const | DefKind::ConstParam | DefKind::Static { .. } => {
+            DefKind::Fn | DefKind::Const | DefKind::ConstParam | DefKind::Static { .. } | DefKind::Context => {
                 generic_segments.push(GenericPathSegment(def_id, last));
             }
 

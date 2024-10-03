@@ -514,6 +514,7 @@ impl<'a> PathSource<'a> {
                     DefKind::Ctor(_, CtorKind::Const | CtorKind::Fn)
                         | DefKind::Const
                         | DefKind::Static { .. }
+                        | DefKind::Context
                         | DefKind::Fn
                         | DefKind::AssocFn
                         | DefKind::AssocConst
