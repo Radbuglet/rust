@@ -315,7 +315,7 @@ impl DiagInner {
 
     #[track_caller]
     pub fn new_with_messages(level: Level, messages: Vec<(DiagMessage, Style)>) -> Self {
-        DiagInner {
+        let mut main = DiagInner {
             level,
             messages,
             code: None,
@@ -326,7 +326,14 @@ impl DiagInner {
             sort_span: DUMMY_SP,
             is_lint: None,
             emitted_at: DiagLocation::caller(),
+        };
+
+        // TODO: Remove this!
+        if std::env::var("RUSTC_RILEY_DIAG_BACKTRACE").is_ok() {
+            let trace = std::backtrace::Backtrace::force_capture();
+            main.sub(Level::Note, format!("rustc backtrace:\n{trace}"), MultiSpan::new());
         }
+        main
     }
 
     #[inline(always)]
