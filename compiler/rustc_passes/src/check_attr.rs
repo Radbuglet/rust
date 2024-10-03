@@ -2655,6 +2655,10 @@ fn check_attr_overlap(
 ) -> Option<Span> {
     let attr_name = attr.ident()?.name;
 
+    if !no_overlap.contains(&attr_name) {
+        return None;
+    }
+
     seen.entry(attr_name).or_insert(attr.span);
 
     for &no_overlap in no_overlap {

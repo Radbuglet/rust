@@ -296,6 +296,9 @@ fn check_item<'tcx>(tcx: TyCtxt<'tcx>, item: &'tcx hir::Item<'tcx>) -> Result<()
         hir::ItemKind::Static(ty, ..) => {
             check_item_type(tcx, def_id, ty.span, UnsizedHandling::Forbid)
         }
+        hir::ItemKind::Context(ty) => {
+            check_item_type(tcx, def_id, ty.span, UnsizedHandling::Forbid)
+        }
         hir::ItemKind::Const(ty, ..) => {
             check_item_type(tcx, def_id, ty.span, UnsizedHandling::Forbid)
         }

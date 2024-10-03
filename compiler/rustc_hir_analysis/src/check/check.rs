@@ -676,6 +676,9 @@ pub(crate) fn check_item_type(tcx: TyCtxt<'_>, def_id: LocalDefId) {
         DefKind::Const => {
             tcx.ensure().typeck(def_id);
         }
+        DefKind::Context => {
+            // (no body to type-check)
+        }
         DefKind::Enum => {
             check_enum(tcx, def_id);
         }
