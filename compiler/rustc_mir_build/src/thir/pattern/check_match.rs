@@ -291,6 +291,10 @@ impl<'p, 'tcx> MatchVisitor<'p, 'tcx> {
             // Pointers can validly point to a place with invalid data. It is undecided whether
             // references can too, so we conservatively assume they can.
             Deref { .. } => false,
+
+            // TODO: What to do?
+            ContextRef { .. } => false,
+
             // Inherit validity of the parent place, unless the parent is an union.
             Field { lhs, .. } => {
                 let lhs = &self.thir()[*lhs];

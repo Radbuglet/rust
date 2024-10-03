@@ -68,6 +68,7 @@ impl Category {
             | ExprKind::Assign { .. }
             | ExprKind::AssignOp { .. }
             | ExprKind::ThreadLocalRef(_)
+            | ExprKind::ContextRef(_)
             | ExprKind::OffsetOf { .. } => Some(Category::Rvalue(RvalueFunc::AsRvalue)),
 
             ExprKind::ConstBlock { .. }

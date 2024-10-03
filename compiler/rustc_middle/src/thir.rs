@@ -509,6 +509,8 @@ pub enum ExprKind<'tcx> {
     },
     /// An expression taking a reference to a thread local.
     ThreadLocalRef(DefId),
+    /// A reference to a context item.
+    ContextRef(DefId),
     /// A `yield` expression.
     Yield {
         value: ExprId,

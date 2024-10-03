@@ -1033,6 +1033,19 @@ impl<'tcx> Cx<'tcx> {
                 }
             }
 
+            Res::Def(DefKind::Context, id) => {
+                let ty = self.tcx.context_ptr_ty(id);
+                let temp_lifetime = self
+                    .rvalue_scopes
+                    .temporary_scope(self.region_scope_tree, expr.hir_id.local_id);
+
+                let kind = ExprKind::ContextRef(id);
+
+                ExprKind::Deref {
+                    arg: self.thir.exprs.push(Expr { ty, temp_lifetime, span: expr.span, kind }),
+                }
+            }
+
             Res::Local(var_hir_id) => self.convert_var(var_hir_id),
 
             _ => span_bug!(expr.span, "res `{:?}` not yet implemented", res),
