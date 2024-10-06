@@ -691,7 +691,7 @@ impl<'tcx> TyCtxt<'tcx> {
             self.type_of(def_id).instantiate_identity(),
         );
 
-        Ty::new_mut_ptr(self, context_ty)
+        Ty::new_mut_ref(self, self.lifetimes.re_static, context_ty)
     }
 
     /// Get the type of the pointer to the static that we use in MIR.

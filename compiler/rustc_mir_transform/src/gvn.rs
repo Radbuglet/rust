@@ -856,7 +856,7 @@ impl<'body, 'tcx> VnState<'body, 'tcx> {
             }
 
             // Unsupported values.
-            Rvalue::ThreadLocalRef(..) | Rvalue::ShallowInitBox(..) => return None,
+            Rvalue::ThreadLocalRef(..) | Rvalue::ContextRef(..) | Rvalue::ShallowInitBox(..) => return None,
         };
         debug!(?value);
         Some(self.insert(value))

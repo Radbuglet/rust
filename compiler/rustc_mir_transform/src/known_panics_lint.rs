@@ -434,6 +434,7 @@ impl<'mir, 'tcx> ConstPropagator<'mir, 'tcx> {
 
                 return None;
             }
+            Rvalue::ContextRef(_) => return None,
 
             // There's no other checking to do at this time.
             Rvalue::Aggregate(..)
@@ -544,7 +545,7 @@ impl<'mir, 'tcx> ConstPropagator<'mir, 'tcx> {
         trace!(?layout);
 
         let val: Value<'_> = match *rvalue {
-            ThreadLocalRef(_) => return None,
+            ThreadLocalRef(_) | ContextRef(_) => return None,
 
             Use(ref operand) => self.eval_operand(operand)?.into(),
 

@@ -191,6 +191,8 @@ where
                 }
             }
 
+            mir::Rvalue::ContextRef(_) => todo!(),
+
             mir::Rvalue::Cast(..)
             | mir::Rvalue::ShallowInitBox(..)
             | mir::Rvalue::Use(..)

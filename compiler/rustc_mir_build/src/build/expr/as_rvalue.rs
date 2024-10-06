@@ -52,7 +52,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
 
         match expr.kind {
             ExprKind::ThreadLocalRef(did) => block.and(Rvalue::ThreadLocalRef(did)),
-            ExprKind::ContextRef(_) => todo!(),
+            ExprKind::ContextRef(did) => block.and(Rvalue::ContextRef(did)),
             ExprKind::Scope { region_scope, lint_level, value } => {
                 let region_scope = (region_scope, source_info);
                 this.in_scope(region_scope, lint_level, |this| this.as_rvalue(block, scope, value))
