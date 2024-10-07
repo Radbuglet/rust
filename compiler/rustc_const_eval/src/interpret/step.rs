@@ -167,7 +167,7 @@ impl<'tcx, M: Machine<'tcx>> InterpCx<'tcx, M> {
                 let ptr = M::thread_local_static_pointer(self, did)?;
                 self.write_pointer(ptr, &dest)?;
             }
-            ContextRef(_) => todo!(),
+            ContextRef(_, _) => todo!(),
 
             Use(ref operand) => {
                 // Avoid recomputing the layout

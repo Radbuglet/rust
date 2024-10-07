@@ -174,7 +174,7 @@ impl<'tcx> Stable<'tcx> for mir::Rvalue<'tcx> {
             ThreadLocalRef(def_id) => {
                 stable_mir::mir::Rvalue::ThreadLocalRef(tables.crate_item(*def_id))
             }
-            ContextRef(_) => todo!("context items do not yet support stable MIR"),
+            ContextRef(_, _) => todo!("context items do not yet support stable MIR"),
             RawPtr(mutability, place) => {
                 stable_mir::mir::Rvalue::AddressOf(mutability.stable(tables), place.stable(tables))
             }

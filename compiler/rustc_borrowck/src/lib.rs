@@ -1264,7 +1264,7 @@ impl<'a, 'tcx> MirBorrowckCtxt<'a, '_, 'tcx> {
             }
 
             Rvalue::ThreadLocalRef(_) => {}
-            Rvalue::ContextRef(_) => {},
+            Rvalue::ContextRef(_, _) => {},
 
             Rvalue::Use(operand)
             | Rvalue::Repeat(operand, _)

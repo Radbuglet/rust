@@ -1,5 +1,6 @@
 use itertools::Itertools;
 use rustc_data_structures::stack::ensure_sufficient_stack;
+use rustc_ast::Mutability;
 use rustc_hir as hir;
 use rustc_hir::def::{CtorKind, CtorOf, DefKind, Res};
 use rustc_index::Idx;
@@ -1034,12 +1035,13 @@ impl<'tcx> Cx<'tcx> {
             }
 
             Res::Def(DefKind::Context, id) => {
-                let ty = self.tcx.context_ptr_ty(id);
+                let muta = Mutability::Mut;
+                let ty = self.tcx.context_ptr_ty(id, muta);
                 let temp_lifetime = self
                     .rvalue_scopes
                     .temporary_scope(self.region_scope_tree, expr.hir_id.local_id);
 
-                let kind = ExprKind::ContextRef(id);
+                let kind = ExprKind::ContextRef(id, muta);
 
                 ExprKind::Deref {
                     arg: self.thir.exprs.push(Expr { ty, temp_lifetime, span: expr.span, kind }),

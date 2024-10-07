@@ -12,7 +12,7 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::ops::Index;
 
-use rustc_ast::{InlineAsmOptions, InlineAsmTemplatePiece};
+use rustc_ast::{InlineAsmOptions, InlineAsmTemplatePiece, Mutability};
 use rustc_hir as hir;
 use rustc_hir::def_id::DefId;
 use rustc_hir::{BindingMode, ByRef, HirId, MatchSource, RangeEnd};
@@ -510,7 +510,7 @@ pub enum ExprKind<'tcx> {
     /// An expression taking a reference to a thread local.
     ThreadLocalRef(DefId),
     /// A reference to a context item.
-    ContextRef(DefId),
+    ContextRef(DefId, Mutability),
     /// A `yield` expression.
     Yield {
         value: ExprId,

@@ -658,7 +658,7 @@ macro_rules! make_mir_visitor {
                     }
 
                     Rvalue::ThreadLocalRef(_) => {}
-                    Rvalue::ContextRef(_) => {}
+                    Rvalue::ContextRef(_, _) => {}
 
                     Rvalue::Ref(r, bk, path) => {
                         self.visit_region($(& $mutability)? *r, location);

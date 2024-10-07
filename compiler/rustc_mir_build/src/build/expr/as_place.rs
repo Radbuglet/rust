@@ -561,7 +561,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             | ExprKind::OffsetOf { .. }
             | ExprKind::Yield { .. }
             | ExprKind::ThreadLocalRef(_)
-            | ExprKind::ContextRef(_)
+            | ExprKind::ContextRef(_, _)
             | ExprKind::Call { .. } => {
                 // these are not places, so we need to make a temporary.
                 debug_assert!(!matches!(Category::of(&expr.kind), Some(Category::Place)));

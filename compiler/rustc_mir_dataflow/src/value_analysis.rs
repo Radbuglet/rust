@@ -183,7 +183,7 @@ pub trait ValueAnalysis<'tcx> {
             }
             Rvalue::Repeat(..)
             | Rvalue::ThreadLocalRef(..)
-            | Rvalue::ContextRef(..)
+            | Rvalue::ContextRef(_, _)
             | Rvalue::Len(..)
             | Rvalue::Cast(..)
             | Rvalue::BinaryOp(..)
