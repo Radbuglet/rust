@@ -1073,7 +1073,7 @@ impl<'tcx> Debug for Rvalue<'tcx> {
                 write!(fmt, "&/*tls*/ {}{}", muta, tcx.def_path_str(did))
             }),
             ContextRef(did, muta) => ty::tls::with(|tcx| {
-                write!(fmt, "&/*ctx*/ {} {}", muta.prefix_str(), tcx.def_path_str(did))
+                write!(fmt, "&/*ctx*/ {}{}", muta.prefix_str(), tcx.def_path_str(did))
             }),
             Ref(region, borrow_kind, ref place) => {
                 let kind_str = match borrow_kind {

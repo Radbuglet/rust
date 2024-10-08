@@ -2,6 +2,7 @@
 //! structures into the THIR. The `builder` is generally ignorant of the tcx,
 //! etc., and instead goes through the `Cx` for most of its work.
 
+use rustc_ast::Mutability;
 use rustc_data_structures::steal::Steal;
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir as hir;
@@ -29,6 +30,7 @@ pub(crate) fn thir_body(
         return Err(reported);
     }
     let expr = cx.mirror_expr(body.value);
+    cx.adjust_context_mutabilities(expr, Mutability::Not);
 
     let owner_id = tcx.local_def_id_to_hir_id(owner_def);
     if let Some(fn_decl) = hir.fn_decl_by_hir_id(owner_id) {
@@ -208,4 +210,5 @@ impl<'tcx> UserAnnotatedTyHelpers<'tcx> for Cx<'tcx> {
 }
 
 mod block;
+mod context;
 mod expr;

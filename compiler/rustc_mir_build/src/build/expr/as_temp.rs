@@ -67,6 +67,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     assert!(this.tcx.is_thread_local_static(def_id));
                     LocalInfo::StaticRef { def_id, is_thread_local: true }
                 }
+                // TODO: Implement for `ContextRef`.
                 ExprKind::NamedConst { def_id, .. } | ExprKind::ConstParam { def_id, .. } => {
                     LocalInfo::ConstRef { def_id }
                 }
