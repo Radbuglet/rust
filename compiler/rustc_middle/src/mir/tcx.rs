@@ -166,7 +166,7 @@ impl<'tcx> Rvalue<'tcx> {
                 Ty::new_array_with_const_len(tcx, operand.ty(local_decls, tcx), count)
             }
             Rvalue::ThreadLocalRef(did) => tcx.thread_local_ptr_ty(did),
-            Rvalue::ContextRef(did, muta) => tcx.context_ptr_ty(did, muta),
+            Rvalue::ContextRef(reg, did, muta) => tcx.context_ptr_ty(did, muta, reg),
             Rvalue::Ref(reg, bk, ref place) => {
                 let place_ty = place.ty(local_decls, tcx).ty;
                 Ty::new_ref(tcx, reg, place_ty, bk.to_mutbl_lossy())

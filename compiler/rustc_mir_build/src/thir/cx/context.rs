@@ -103,7 +103,7 @@ impl<'tcx> Cx<'tcx> {
         id: DefId,
     ) -> ExprKind<'tcx> {
         let kind = ExprKind::ContextRef(id, Mutability::Not);
-        let ty = self.tcx.context_ptr_ty(id, Mutability::Not);
+        let ty = self.tcx.context_ptr_ty(id, Mutability::Not, self.tcx.lifetimes.re_erased);
         let temp_lifetime = self
             .rvalue_scopes
             .temporary_scope(self.region_scope_tree, expr.hir_id.local_id);
@@ -290,7 +290,11 @@ impl<'tcx> Cx<'tcx> {
             ContextRef(id, mutbl) => {
                 if rvalue_mut.is_mut() {
                     *mutbl = Mutability::Mut;
-                    expr.ty = self.tcx.context_ptr_ty(*id, Mutability::Mut);
+                    expr.ty = self.tcx.context_ptr_ty(
+                        *id,
+                        Mutability::Mut,
+                        self.tcx.lifetimes.re_erased,
+                    );
                 }
             },
             &mut Yield { value } => {

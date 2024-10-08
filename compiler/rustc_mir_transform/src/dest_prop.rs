@@ -579,7 +579,7 @@ impl WriteInfo {
                         }
                     }
                     Rvalue::ThreadLocalRef(_)
-                    | Rvalue::ContextRef(_, _)
+                    | Rvalue::ContextRef(_, _, _)
                     | Rvalue::NullaryOp(_, _)
                     | Rvalue::Ref(_, _, _)
                     | Rvalue::RawPtr(_, _)

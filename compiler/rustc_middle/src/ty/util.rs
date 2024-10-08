@@ -685,14 +685,14 @@ impl<'tcx> TyCtxt<'tcx> {
     }
 
     /// Get the type of the pointer to the context item that we use in MIR.
-    pub fn context_ptr_ty(self, def_id: DefId, muta: Mutability) -> Ty<'tcx> {
+    pub fn context_ptr_ty(self, def_id: DefId, muta: Mutability, lt: ty::Region<'tcx>) -> Ty<'tcx> {
         // Make sure that any constants in the context's type are evaluated.
         let context_ty = self.normalize_erasing_regions(
             ty::ParamEnv::empty(),
             self.type_of(def_id).instantiate_identity(),
         );
 
-        Ty::new_ref(self, self.lifetimes.re_static, context_ty, muta)
+        Ty::new_ref(self, lt, context_ty, muta)
     }
 
     /// Get the type of the pointer to the static that we use in MIR.

@@ -423,7 +423,7 @@ impl<'tcx> Rvalue<'tcx> {
             | Rvalue::Repeat(_, _)
             | Rvalue::Ref(_, _, _)
             | Rvalue::ThreadLocalRef(_)
-            | Rvalue::ContextRef(_, _)  // TODO: This is during optimization, right?
+            | Rvalue::ContextRef(_, _, _)  // TODO: This is during optimization, right?
             | Rvalue::RawPtr(_, _)
             | Rvalue::Len(_)
             | Rvalue::Cast(

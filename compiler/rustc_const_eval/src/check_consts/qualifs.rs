@@ -270,7 +270,7 @@ where
         Rvalue::ThreadLocalRef(_) | Rvalue::NullaryOp(..) => {
             Q::in_any_value_of_ty(cx, rvalue.ty(cx.body, cx.tcx))
         }
-        Rvalue::ContextRef(_, _) => false,
+        Rvalue::ContextRef(_, _, _) => false,
 
         Rvalue::Discriminant(place) | Rvalue::Len(place) => {
             in_place::<Q, _>(cx, in_local, place.as_ref())

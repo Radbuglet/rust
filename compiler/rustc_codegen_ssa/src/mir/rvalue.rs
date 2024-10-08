@@ -744,7 +744,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                 };
                 OperandRef { val: OperandValue::Immediate(static_), layout }
             }
-            mir::Rvalue::ContextRef(_, _) => todo!(),
+            mir::Rvalue::ContextRef(_, _, _) => todo!(),
             mir::Rvalue::Use(ref operand) => self.codegen_operand(bx, operand),
             mir::Rvalue::Repeat(..) => bug!("{rvalue:?} in codegen_rvalue_operand"),
             mir::Rvalue::Aggregate(_, ref fields) => {
@@ -1098,7 +1098,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             mir::Rvalue::ThreadLocalRef(_) |
             mir::Rvalue::Use(..) => // (*)
                 true,
-            mir::Rvalue::ContextRef(_, _) => todo!(),
+            mir::Rvalue::ContextRef(_, _, _) => todo!(),
             // Arrays are always aggregates, so it's not worth checking anything here.
             // (If it's really `[(); N]` or `[T; 0]` and we use the place path, fine.)
             mir::Rvalue::Repeat(..) => false,
