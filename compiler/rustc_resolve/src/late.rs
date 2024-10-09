@@ -498,7 +498,9 @@ impl<'a> PathSource<'a> {
                         | DefKind::AssocTy
                         | DefKind::TyParam
                         | DefKind::OpaqueTy
-                        | DefKind::ForeignTy,
+                        | DefKind::ForeignTy
+                        // Context items are types, too!
+                        | DefKind::Context,
                     _,
                 ) | Res::PrimTy(..)
                     | Res::SelfTyParam { .. }

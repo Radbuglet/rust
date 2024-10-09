@@ -241,12 +241,19 @@ impl<'ra, 'tcx> Resolver<'ra, 'tcx> {
                 DefKind::Fn
                 | DefKind::AssocFn
                 | DefKind::Static { .. }
-                | DefKind::Context
                 | DefKind::Const
                 | DefKind::AssocConst
                 | DefKind::Ctor(..),
                 _,
             ) => self.define(parent, ident, ValueNS, (res, vis, span, expansion)),
+            Res::Def(DefKind::Context, _) => {
+                // Context items are both values and types. Types can be resolved from any namespace
+                // so this isn't needed to make context items visible to type resolution. Instead,
+                // this is done to avoid having a user-defined type shadow the type for a context
+                // item, which would be quite confusing.
+                self.define(parent, ident, ValueNS, (res, vis, span, expansion));
+                self.define(parent, ident, TypeNS, (res, vis, span, expansion));
+            },
             Res::Def(DefKind::Macro(..), _) | Res::NonMacroAttr(..) => {
                 self.define(parent, ident, MacroNS, (res, vis, span, expansion))
             }

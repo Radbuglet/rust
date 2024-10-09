@@ -801,16 +801,23 @@ impl<'tcx> dyn HirTyLowerer<'tcx> + '_ {
         let tcx = self.tcx();
         let args = self.lower_generic_args_of_path_segment(span, did, item_segment);
 
-        if let DefKind::TyAlias = tcx.def_kind(did)
-            && tcx.type_alias_is_lazy(did)
-        {
-            // Type aliases defined in crates that have the
-            // feature `lazy_type_alias` enabled get encoded as a type alias that normalization will
-            // then actually instantiate the where bounds of.
-            let alias_ty = ty::AliasTy::new_from_args(tcx, did, args);
-            Ty::new_alias(tcx, ty::Weak, alias_ty)
-        } else {
-            tcx.at(span).type_of(did).instantiate(tcx, args)
+        match tcx.def_kind(did) {
+            DefKind::Context => {
+                // We're already using `tcx.type_of` to produce the expression type/pointee type of
+                // the item so we have to implement type lowering here instead.
+                // TODO: Lower this to something appropriate
+                tcx.types.unit
+            }
+            DefKind::TyAlias if tcx.type_alias_is_lazy(did) => {
+                // Type aliases defined in crates that have the
+                // feature `lazy_type_alias` enabled get encoded as a type alias that normalization will
+                // then actually instantiate the where bounds of.
+                let alias_ty = ty::AliasTy::new_from_args(tcx, did, args);
+                Ty::new_alias(tcx, ty::Weak, alias_ty)
+            }
+            _ => {
+                tcx.at(span).type_of(did).instantiate(tcx, args)
+            },
         }
     }
 
@@ -1807,7 +1814,8 @@ impl<'tcx> dyn HirTyLowerer<'tcx> + '_ {
                 | DefKind::TyAlias
                 | DefKind::Struct
                 | DefKind::Union
-                | DefKind::ForeignTy,
+                | DefKind::ForeignTy
+                | DefKind::Context,
                 did,
             ) => {
                 assert_eq!(opt_self_ty, None);
