@@ -989,19 +989,19 @@ impl<'a, 'tcx> MirBorrowckCtxt<'a, '_, 'tcx> {
         // a) if the borrow is mutable, no other borrow to the same `ctx_id` is live.
         // b) if the borrow is immutable, no other mutable borrow to the same `ctx_id` is live.
         //
-        // Unfortunately, under its current form, `dataflow::Borrows` only tracks borrows
-        // introduced by `Rvalue::Ref` under the assumption that all borrows are tied to
-        // locals. Breaking that assumption would require a pretty large refactor so, for now,
-        // we're doing a nasty hack!
+        // Unfortunately, under its current form, `dataflow::Borrows` only tracks the liveness of
+        // borrows introduced by `Rvalue::Ref` under the (admittedly fairly reasonable) assumption
+        // that all borrows are tied to locals. Breaking that assumption would require a pretty
+        // large refactor so, for now, we're doing a nasty hack!
         //
-        // Specifically, we've written MIR lowering such that `ExprKind::ContextRef`, always produces
-        // a temporary that we immediately reborrow in the next statement. We use that reborrow as a
-        // proxy for borrows to the actual `ContextRef`.
+        // Specifically, we've written MIR lowering such that `ExprKind::ContextRef` always produces
+        // a temporary that we immediately reborrow in the next statement. We use the liveness of that
+        // reborrow as a proxy for the liveness of the actual `ContextRef`.
         //
         // This does break a couple assumptions in `PlaceExt::ignore_borrow` which thinks that
-        // immutable borrows don't have to be tracked but that is fairly easy to rectify.
-        //
-        // TODO: This probably still has issues!
+        // reborrows of immutable references don't have to be tracked but that is fairly easy to
+        // rectify by special-casing reborrows of temporaries containing `ContextRef`s as
+        // non-ignorable.
         for bw_id in state.borrows.iter() {
             // Fetch the borrowed place
             let bw_place = self.borrow_set[bw_id].borrowed_place;

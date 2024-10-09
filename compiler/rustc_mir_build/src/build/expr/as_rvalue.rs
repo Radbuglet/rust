@@ -53,12 +53,41 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         match expr.kind {
             ExprKind::ThreadLocalRef(did) => block.and(Rvalue::ThreadLocalRef(did)),
             ExprKind::ContextRef(did, muta) => {
-                // TODO: `rustc_borrowck` depends upon the invariant that this value always be
-                // immediately reborrowed but we don't really uphold that here. I think it happens
-                // regardless because the THIR usually looks like `AddrOf(Deref(ContextRef(...)))`
-                // except when working with lvalues but we probably shouldn't rely on such weird
-                // properties.
-                block.and(Rvalue::ContextRef(this.tcx.lifetimes.re_erased, did, muta))
+                // HACK: `MirBorrowckCtxt::check_context_ref_borrow` depends upon the invariant that
+                // `Rvalue::ContextRef` always be immediately reborrowed.
+
+                // TODO: Do we need `StorageLive` and `StorageDead`? If not, why??
+
+                // Define the temporary local
+                let expr_ty = expr.ty;
+                let mut local_decl = LocalDecl::new(expr_ty, expr_span);
+                **local_decl.local_info.as_mut().assert_crate_local() = LocalInfo::ContextRef {
+                    def_id: did,
+                    mutability: muta,
+                };
+
+                let temp = this.local_decls.push(local_decl);
+
+                // Initialize the temporary
+                this.cfg.push_assign(
+                    block,
+                    source_info,
+                    Place::from(temp),
+                    Rvalue::ContextRef(this.tcx.lifetimes.re_erased, did, muta),
+                );
+
+                // Create the rvalue borrowing the temporary
+                block.and(Rvalue::Ref(
+                    this.tcx.lifetimes.re_erased,
+                    match muta {
+                        Mutability::Mut => BorrowKind::Mut { kind: MutBorrowKind::Default },
+                        Mutability::Not => BorrowKind::Shared,
+                    },
+                    Place {
+                        local: temp,
+                        projection: this.tcx.mk_place_elems(&[PlaceElem::Deref]),
+                    },
+                ))
             },
             ExprKind::Scope { region_scope, lint_level, value } => {
                 let region_scope = (region_scope, source_info);
