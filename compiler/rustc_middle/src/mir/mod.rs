@@ -1075,6 +1075,8 @@ pub enum LocalInfo<'tcx> {
     User(BindingForm<'tcx>),
     /// A temporary created that references the static with the given `DefId`.
     StaticRef { def_id: DefId, is_thread_local: bool },
+    /// A temporary created that references a `ContextRef`.
+    ContextRef { def_id: DefId, mutability: Mutability },
     /// A temporary created that references the const with the given `DefId`
     ConstRef { def_id: DefId },
     /// A temporary created during the creation of an aggregate

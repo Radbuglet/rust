@@ -53,6 +53,11 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         match expr.kind {
             ExprKind::ThreadLocalRef(did) => block.and(Rvalue::ThreadLocalRef(did)),
             ExprKind::ContextRef(did, muta) => {
+                // TODO: `rustc_borrowck` depends upon the invariant that this value always be
+                // immediately reborrowed but we don't really uphold that here. I think it happens
+                // regardless because the THIR usually looks like `AddrOf(Deref(ContextRef(...)))`
+                // except when working with lvalues but we probably shouldn't rely on such weird
+                // properties.
                 block.and(Rvalue::ContextRef(this.tcx.lifetimes.re_erased, did, muta))
             },
             ExprKind::Scope { region_scope, lint_level, value } => {

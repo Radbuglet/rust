@@ -1264,7 +1264,75 @@ impl<'a, 'tcx> MirBorrowckCtxt<'a, '_, 'tcx> {
             }
 
             Rvalue::ThreadLocalRef(_) => {}
-            Rvalue::ContextRef(_, _, _) => {},
+            &Rvalue::ContextRef(_, ctx_id, mutability) => {
+                // HACK: This is the core of `ContextRef`'s borrow checking logic. A new `ContextRef`
+                // borrow is valid *iff* the borrow lifetime is not required to outlive a
+                // universal/`'static` lifetime parameter and...
+                //
+                // a) if the borrow is mutable, no other borrow to the same `ctx_id` is live.
+                // b) if the borrow is immutable, no other mutable borrow to the same `ctx_id` is live.
+                //
+                // Unfortunately, under its current form, `dataflow::Borrows` only tracks borrows
+                // introduced by `Rvalue::Ref` under the assumption that all borrows are tied to
+                // locals. Breaking that assumption would require a pretty large refactor so, for now,
+                // we're doing a nasty hack!
+                //
+                // Specifically, we've written MIR lowering such that `ExprKind::ContextRef`, if used
+                // as reference, always produces a temporary that we immediately reborrow in the next
+                // statement. We use that reborrow as a proxy for borrows to the actual `ContextRef`.
+                //
+                // This does break a couple assumptions in `PlaceExt::ignore_borrow` which thinks that
+                // immutable borrows don't have to be tracked but that is fairly easy to rectify.
+                //
+                // Note that the invariant does mean that, in...
+                //
+                // ```rust
+                // #[context]
+                // static COUNTER: u32;
+                //
+                // fn increment() {
+                //     COUNTER += 1;
+                // }
+                // ```
+                //
+                // No borrows are ever tracked for the `COUNTER += 1` line since we increment the
+                // reference produced by `ContextRef` directly. This, however, is fine, because
+                // this only happens when we're using the value as an lvalue directly and such uses
+                // will never produce long-standing references.
+                for bw_id in state.borrows.iter() {
+                    // Fetch the borrowed place
+                    let bw_place = self.borrow_set[bw_id].borrowed_place;
+
+                    // Ensure that we borrowed a temporary created from a `ContextRef`.
+                    let Some((
+                        other_ctx_id,
+                        other_mutability,
+                    )) = bw_place.as_context_borrow(self.body) else {
+                        continue;
+                    };
+
+                    // Only borrows on the same context item can conflict.
+                    if ctx_id != other_ctx_id {
+                        continue;
+                    }
+
+                    // Only two mutable borrows can conflict.
+                    if !matches!(
+                        (mutability, other_mutability),
+                        (Mutability::Mut, _) | (_, Mutability::Mut),
+                    ) {
+                        continue;
+                    }
+
+                    // If all that passes, we know we have a borrow error!
+                    // TODO
+                    eprintln!(
+                        "conflict between {location:?} and {:?}\nbody: {:#?}",
+                        self.borrow_set[bw_id].reserve_location,
+                        self.body,
+                    );
+                }
+            },
 
             Rvalue::Use(operand)
             | Rvalue::Repeat(operand, _)
