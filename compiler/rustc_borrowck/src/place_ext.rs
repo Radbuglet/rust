@@ -37,7 +37,7 @@ impl<'tcx> Place<'tcx> {
     ) -> bool {
         // HACK: We do not want to ignore reborrows of `ContextRef` since these reborrows are used
         // as a proxy for borrows of what could be considered a mutable place. See note in
-        // `MirBorrowckCtxt::consume_rvalue` for details on this awful hack.
+        // `MirBorrowckCtxt::check_context_ref_borrow` for details on this awful hack.
         if self.as_context_borrow(body).is_some() {
             return false;
         }
