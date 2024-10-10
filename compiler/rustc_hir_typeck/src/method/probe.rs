@@ -719,6 +719,7 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
             | ty::RawPtr(_, _)
             | ty::Ref(..)
             | ty::Never
+            | ty::ContextMarker(_)
             | ty::Tuple(..) => self.assemble_inherent_candidates_for_incoherent_ty(raw_self_ty),
             _ => {}
         }

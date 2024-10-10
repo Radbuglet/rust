@@ -286,7 +286,7 @@ pub fn valtree_to_const_value<'tcx>(
     let (param_env, ty) = param_env_ty.into_parts();
 
     match *ty.kind() {
-        ty::FnDef(..) => {
+        ty::FnDef(..) | ty::ContextMarker(_) => {
             assert!(valtree.unwrap_branch().is_empty());
             mir::ConstValue::ZeroSized
         }
@@ -357,7 +357,6 @@ pub fn valtree_to_const_value<'tcx>(
         | ty::FnPtr(..)
         | ty::Str
         | ty::Slice(_)
-        | ty::ContextMarker(_)
         | ty::Dynamic(..) => bug!("no ValTree should have been created for type {:?}", ty.kind()),
     }
 }

@@ -617,7 +617,8 @@ pub trait PrettyPrinter<'tcx>: Printer<'tcx> + fmt::Write {
                 | ty::Str
                 | ty::Int(_)
                 | ty::Uint(_)
-                | ty::Float(_) => {
+                | ty::Float(_)
+                | ty::ContextMarker(_) => {
                     return self_ty.print(self);
                 }
 

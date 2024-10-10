@@ -1850,7 +1850,7 @@ impl<'tcx> Ty<'tcx> {
             ty::Bool | ty::Char | ty::Never => true,
 
             // These aren't even `Clone`
-            ty::Str | ty::Slice(..) | ty::Foreign(..) | ty::Dynamic(..) => false,
+            ty::Str | ty::Slice(..) | ty::Foreign(..) | ty::Dynamic(..) | ty::ContextMarker(_) => false,
 
             ty::Infer(ty::InferTy::FloatVar(_) | ty::InferTy::IntVar(_))
             | ty::Int(..)
@@ -1889,8 +1889,6 @@ impl<'tcx> Ty<'tcx> {
             ty::Alias(..) => false,
 
             ty::Param(..) | ty::Infer(..) | ty::Error(..) => false,
-
-            ty::ContextMarker(_) => false,
 
             ty::Bound(..) | ty::Placeholder(..) => {
                 bug!("`is_trivially_pure_clone_copy` applied to unexpected type: {:?}", self);

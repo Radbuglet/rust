@@ -1536,6 +1536,7 @@ impl<'a, 'tcx> TypeErrCtxt<'a, 'tcx> {
             match (a.kind(), b.kind()) {
                 (ty::Adt(def_a, _), ty::Adt(def_b, _)) => def_a == def_b,
                 (ty::Foreign(def_a), ty::Foreign(def_b)) => def_a == def_b,
+                (ty::ContextMarker(def_a), ty::ContextMarker(def_b)) => def_a == def_b,
                 // Matching on references results in a lot of unhelpful
                 // suggestions, so let's just not do that for now.
                 //
