@@ -432,7 +432,7 @@ impl<'tcx> Printer<'tcx> for SymbolMangler<'tcx> {
                 self.print_def_path(def_id, args)?;
             }
 
-            ty::Foreign(def_id) => {
+            ty::Foreign(def_id) | ty::ContextMarker(def_id) => {
                 self.print_def_path(def_id, &[])?;
             }
 

@@ -159,7 +159,7 @@ impl<'tcx> InherentCollect<'tcx> {
         }
         match *self_ty.kind() {
             ty::Adt(def, _) => self.check_def_id(id, self_ty, def.did()),
-            ty::Foreign(did) => self.check_def_id(id, self_ty, did),
+            ty::Foreign(did) | ty::ContextMarker(did) => self.check_def_id(id, self_ty, did),
             ty::Dynamic(data, ..) if data.principal_def_id().is_some() => {
                 self.check_def_id(id, self_ty, data.principal_def_id().unwrap())
             }

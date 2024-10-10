@@ -413,6 +413,13 @@ where
                     self.found_non_local_ty(ty)
                 }
             }
+            ty::ContextMarker(did) => {
+                if self.def_id_is_local(did) {
+                    ControlFlow::Break(OrphanCheckEarlyExit::LocalTy(ty))
+                } else {
+                    self.found_non_local_ty(ty)
+                }
+            }
             ty::Foreign(def_id) => {
                 if self.def_id_is_local(def_id) {
                     ControlFlow::Break(OrphanCheckEarlyExit::LocalTy(ty))

@@ -401,6 +401,7 @@ impl<'tcx> TypeSuperFoldable<TyCtxt<'tcx>> for Ty<'tcx> {
             | ty::Bound(..)
             | ty::Placeholder(..)
             | ty::Never
+            | ty::ContextMarker(_)
             | ty::Foreign(..) => return Ok(self),
         };
 
@@ -453,6 +454,7 @@ impl<'tcx> TypeSuperVisitable<TyCtxt<'tcx>> for Ty<'tcx> {
             | ty::Placeholder(..)
             | ty::Param(..)
             | ty::Never
+            | ty::ContextMarker(_)
             | ty::Foreign(..) => V::Result::output(),
         }
     }

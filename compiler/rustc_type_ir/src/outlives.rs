@@ -174,6 +174,7 @@ impl<I: Interner> TypeVisitor<I> for OutlivesCollector<'_, I> {
             | ty::Float(_)
             | ty::Str
             | ty::Never
+            | ty::ContextMarker(_)
             | ty::Error(_) => {
                 // Trivial
             }

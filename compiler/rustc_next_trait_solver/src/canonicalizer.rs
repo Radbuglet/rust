@@ -366,6 +366,7 @@ impl<D: SolverDelegate<Interner = I>, I: Interner> TypeFolder<I> for Canonicaliz
             | ty::CoroutineWitness(..)
             | ty::Never
             | ty::Tuple(_)
+            | ty::ContextMarker(_)
             | ty::Alias(_, _)
             | ty::Bound(_, _)
             | ty::Error(_) => return t.super_fold_with(self),

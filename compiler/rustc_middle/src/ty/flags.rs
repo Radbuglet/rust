@@ -95,6 +95,7 @@ impl FlagComputation {
             | &ty::Uint(_)
             | &ty::Never
             | &ty::Str
+            | &ty::ContextMarker(_)
             | &ty::Foreign(..) => {}
 
             &ty::Error(_) => self.add_flags(TypeFlags::HAS_ERROR),

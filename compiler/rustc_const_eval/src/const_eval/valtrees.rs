@@ -87,7 +87,8 @@ fn const_to_valtree_inner<'tcx>(
     }
 
     match ty.kind() {
-        ty::FnDef(..) => {
+        // ContextMarkers, despite being unconstructable, are ZSTs.
+        ty::FnDef(..) | ty::ContextMarker(_) => {
             *num_nodes += 1;
             Ok(ty::ValTree::zst())
         }
@@ -356,6 +357,7 @@ pub fn valtree_to_const_value<'tcx>(
         | ty::FnPtr(..)
         | ty::Str
         | ty::Slice(_)
+        | ty::ContextMarker(_)
         | ty::Dynamic(..) => bug!("no ValTree should have been created for type {:?}", ty.kind()),
     }
 }

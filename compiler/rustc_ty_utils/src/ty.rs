@@ -35,6 +35,7 @@ fn sized_constraint_for_ty<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Option<Ty<'
         | Coroutine(..)
         | CoroutineWitness(..)
         | Never
+        | ContextMarker(_)
         | Dynamic(_, _, ty::DynStar) => None,
 
         // these are never sized

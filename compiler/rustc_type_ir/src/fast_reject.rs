@@ -42,6 +42,7 @@ pub enum SimplifiedType<DefId> {
     CoroutineWitness(DefId),
     Function(usize),
     Placeholder,
+    ContextMarker(DefId),
     Error,
 }
 
@@ -153,6 +154,7 @@ pub fn simplify_type<I: Interner>(
         },
         ty::Foreign(def_id) => Some(SimplifiedType::Foreign(def_id)),
         ty::Error(_) => Some(SimplifiedType::Error),
+        ty::ContextMarker(def_id) => Some(SimplifiedType::ContextMarker(def_id)),
         ty::Bound(..) | ty::Infer(_) => None,
     }
 }
@@ -270,7 +272,8 @@ impl<I: Interner, const INSTANTIATE_LHS_WITH_INFER: bool, const INSTANTIATE_RHS_
             | ty::Coroutine(..)
             | ty::CoroutineWitness(..)
             | ty::Foreign(_)
-            | ty::Placeholder(_) => {}
+            | ty::Placeholder(_)
+            | ty::ContextMarker(_) => {}
         };
 
         // For purely rigid types, use structural equivalence.
@@ -320,7 +323,8 @@ impl<I: Interner, const INSTANTIATE_LHS_WITH_INFER: bool, const INSTANTIATE_RHS_
             | ty::Bool
             | ty::Char
             | ty::Never
-            | ty::Foreign(_) => lhs == rhs,
+            | ty::Foreign(_)
+            | ty::ContextMarker(_) => lhs == rhs,
 
             ty::Tuple(lhs) => match rhs.kind() {
                 ty::Tuple(rhs) => {

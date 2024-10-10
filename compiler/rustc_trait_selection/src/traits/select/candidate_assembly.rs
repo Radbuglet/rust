@@ -688,6 +688,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                 | ty::CoroutineWitness(..)
                 | ty::Never
                 | ty::Tuple(_)
+                | ty::ContextMarker(_)
                 | ty::Error(_) => return true,
                 // FIXME: Function definitions could actually implement `FnPtr` by
                 // casting the ZST function def to a function pointer.
@@ -829,6 +830,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                 | ty::Coroutine(..)
                 | ty::Never
                 | ty::Tuple(_)
+                | ty::ContextMarker(_)
                 | ty::CoroutineWitness(..) => {
                     // Only consider auto impls if there are no manual impls for the root of `self_ty`.
                     //
@@ -1221,6 +1223,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             | ty::CoroutineClosure(..)
             | ty::Coroutine(..)
             | ty::Tuple(_)
+            | ty::ContextMarker(_)
             | ty::CoroutineWitness(..) => {
                 // These are built-in, and cannot have a custom `impl const Destruct`.
                 candidates.vec.push(ConstDestructCandidate(None));
@@ -1306,6 +1309,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             | ty::Bound(_, _)
             | ty::Error(_)
             | ty::Infer(_)
+            | ty::ContextMarker(_)
             | ty::Placeholder(_) => {}
         }
     }
@@ -1369,6 +1373,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             | ty::Alias(..)
             | ty::Param(..)
             | ty::Bound(..)
+            | ty::ContextMarker(_)
             | ty::Error(_)
             | ty::Infer(
                 ty::InferTy::IntVar(_)

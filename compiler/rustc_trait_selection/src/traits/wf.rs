@@ -660,6 +660,7 @@ impl<'a, 'tcx> TypeVisitor<TyCtxt<'tcx>> for WfPredicates<'a, 'tcx> {
             | ty::Param(_)
             | ty::Bound(..)
             | ty::Placeholder(..)
+            | ty::ContextMarker(_)
             | ty::Foreign(..) => {
                 // WfScalar, WfParameter, etc
             }

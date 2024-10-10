@@ -406,6 +406,8 @@ lint_improper_ctypes_struct_fieldless_help = consider adding a member to this st
 lint_improper_ctypes_struct_fieldless_reason = this struct has no fields
 lint_improper_ctypes_struct_layout_help = consider adding a `#[repr(C)]` or `#[repr(transparent)]` attribute to this struct
 
+lint_improper_ctypes_context_marker_reason = context item marker types have no C equivalent
+
 lint_improper_ctypes_struct_layout_reason = this struct has unspecified layout
 lint_improper_ctypes_struct_non_exhaustive = this struct is non-exhaustive
 lint_improper_ctypes_struct_zst = this struct contains only zero-sized fields

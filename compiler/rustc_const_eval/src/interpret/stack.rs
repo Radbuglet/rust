@@ -494,6 +494,7 @@ impl<'tcx, M: Machine<'tcx>> InterpCx<'tcx, M> {
                 | ty::CoroutineClosure(..)
                 | ty::Never
                 | ty::Error(_)
+                | ty::ContextMarker(_)
                 | ty::Dynamic(_, _, ty::DynStar) => true,
 
                 ty::Str | ty::Slice(_) | ty::Dynamic(_, _, ty::Dyn) | ty::Foreign(..) => false,

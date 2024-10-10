@@ -1055,6 +1055,12 @@ impl<'a, 'tcx> ImproperCTypesVisitor<'a, 'tcx> {
             // Primitive types with a stable representation.
             ty::Bool | ty::Int(..) | ty::Uint(..) | ty::Float(..) | ty::Never => FfiSafe,
 
+            ty::ContextMarker(..) => FfiUnsafe {
+                ty,
+                reason: fluent::lint_improper_ctypes_context_marker_reason,
+                help: None,
+            },
+
             ty::Slice(_) => FfiUnsafe {
                 ty,
                 reason: fluent::lint_improper_ctypes_slice_reason,

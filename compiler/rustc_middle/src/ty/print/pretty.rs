@@ -967,6 +967,7 @@ pub trait PrettyPrinter<'tcx>: Printer<'tcx> + fmt::Write {
             }
             ty::Array(ty, sz) => p!("[", print(ty), "; ", print(sz), "]"),
             ty::Slice(ty) => p!("[", print(ty), "]"),
+            ty::ContextMarker(def) => p!(print_def_path(def, &[])),
         }
 
         Ok(())

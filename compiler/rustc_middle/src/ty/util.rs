@@ -1287,6 +1287,7 @@ impl<'tcx> Ty<'tcx> {
             | ty::RawPtr(_, _)
             | ty::FnDef(..)
             | ty::Error(_)
+            | ty::ContextMarker(_)
             | ty::FnPtr(..) => true,
             ty::Tuple(fields) => fields.iter().all(Self::is_trivially_freeze),
             ty::Pat(ty, _) | ty::Slice(ty) | ty::Array(ty, _) => ty.is_trivially_freeze(),
@@ -1327,6 +1328,7 @@ impl<'tcx> Ty<'tcx> {
             | ty::RawPtr(_, _)
             | ty::FnDef(..)
             | ty::Error(_)
+            | ty::ContextMarker(_)
             | ty::FnPtr(..) => true,
             ty::Tuple(fields) => fields.iter().all(Self::is_trivially_unpin),
             ty::Pat(ty, _) | ty::Slice(ty) | ty::Array(ty, _) => ty.is_trivially_unpin(),
@@ -1367,6 +1369,7 @@ impl<'tcx> Ty<'tcx> {
             | ty::RawPtr(..)
             | ty::FnDef(..)
             | ty::FnPtr(..)
+            | ty::ContextMarker(_)
             | ty::Infer(ty::FreshIntTy(_))
             | ty::Infer(ty::FreshFloatTy(_)) => AsyncDropGlueMorphology::Noop,
 
@@ -1542,6 +1545,10 @@ impl<'tcx> Ty<'tcx> {
             // Primitive types that satisfy `Eq`.
             ty::Bool | ty::Char | ty::Int(_) | ty::Uint(_) | ty::Str | ty::Never => true,
 
+            // Context marker types can't be constructed and so likely should not have an `Eq`
+            // implementation.
+            ty::ContextMarker(_) => false,
+
             // Composite types that satisfy `Eq` when all of their fields do.
             //
             // Because this function is "shallow", we return `true` for these composites regardless
@@ -1684,6 +1691,7 @@ pub fn needs_drop_components_with_async<'tcx>(
         | ty::Char
         | ty::RawPtr(_, _)
         | ty::Ref(..)
+        | ty::ContextMarker(_)
         | ty::Str => Ok(SmallVec::new()),
 
         // Foreign types can never have destructors.
@@ -1749,6 +1757,7 @@ pub fn is_trivially_const_drop(ty: Ty<'_>) -> bool {
         | ty::FnDef(..)
         | ty::FnPtr(..)
         | ty::Never
+        | ty::ContextMarker(_)
         | ty::Foreign(_) => true,
 
         ty::Alias(..)

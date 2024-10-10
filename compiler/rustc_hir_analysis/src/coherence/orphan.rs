@@ -154,7 +154,7 @@ pub(crate) fn orphan_check_impl(
 
             // extern { type OpaqueType; }
             // impl AutoTrait for OpaqueType {}
-            ty::Foreign(did) => (
+            ty::Foreign(did) | ty::ContextMarker(did) => (
                 LocalImpl::Allow,
                 if did.is_local() {
                     NonlocalImpl::Allow

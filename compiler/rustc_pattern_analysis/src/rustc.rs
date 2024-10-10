@@ -405,6 +405,7 @@ impl<'p, 'tcx: 'p> RustcPatCtxt<'p, 'tcx> {
             ty::Float(_)
             | ty::Str
             | ty::Foreign(_)
+            | ty::ContextMarker(_)
             | ty::RawPtr(_, _)
             | ty::FnDef(_, _)
             | ty::FnPtr(..)

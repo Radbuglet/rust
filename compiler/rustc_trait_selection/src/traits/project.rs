@@ -1069,6 +1069,7 @@ fn assemble_candidates_from_impls<'cx, 'tcx>(
                         | ty::CoroutineWitness(..)
                         | ty::Never
                         | ty::Tuple(..)
+                        | ty::ContextMarker(_)
                         // Integers and floats always have `u8` as their discriminant.
                         | ty::Infer(ty::InferTy::IntVar(_) | ty::InferTy::FloatVar(..)) => true,
 
@@ -1105,6 +1106,7 @@ fn assemble_candidates_from_impls<'cx, 'tcx>(
                         | ty::Pat(..)
                         | ty::Never
                         | ty::Tuple(..)
+                        | ty::ContextMarker(_)
                         | ty::Infer(ty::InferTy::IntVar(_) | ty::InferTy::FloatVar(..)) => true,
 
                         // type parameters, opaques, and unnormalized projections don't have
@@ -1156,6 +1158,7 @@ fn assemble_candidates_from_impls<'cx, 'tcx>(
                         | ty::Coroutine(..)
                         | ty::CoroutineWitness(..)
                         | ty::Never
+                        | ty::ContextMarker(..)
                         // Extern types have unit metadata, according to RFC 2850
                         | ty::Foreign(_)
                         // If returned by `struct_tail` this is a unit struct

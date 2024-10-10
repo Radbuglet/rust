@@ -133,6 +133,7 @@ fn push_inner<'tcx>(stack: &mut TypeWalkerStack<'tcx>, parent: GenericArg<'tcx>)
             | ty::Error(_)
             | ty::Placeholder(..)
             | ty::Bound(..)
+            | ty::ContextMarker(_)
             | ty::Foreign(..) => {}
 
             ty::Pat(ty, pat) => {

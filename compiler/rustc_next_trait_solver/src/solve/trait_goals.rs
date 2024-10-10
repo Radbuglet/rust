@@ -1162,6 +1162,7 @@ where
             | ty::CoroutineWitness(..)
             | ty::Never
             | ty::Tuple(_)
+            | ty::ContextMarker(_)
             | ty::Adt(_, _) => {
                 let mut disqualifying_impl = None;
                 self.cx().for_each_relevant_impl(

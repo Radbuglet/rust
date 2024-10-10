@@ -34,6 +34,7 @@ where
         | ty::FnPtr(..)
         | ty::Error(_)
         | ty::Never
+        | ty::ContextMarker(_)
         | ty::Char => Ok(vec![]),
 
         // Treat `str` like it's defined as `struct str([u8]);`
@@ -129,6 +130,7 @@ where
         | ty::CoroutineClosure(..)
         | ty::Never
         | ty::Dynamic(_, _, ty::DynStar)
+        | ty::ContextMarker(_)
         | ty::Error(_) => Ok(vec![]),
 
         ty::Str
@@ -204,6 +206,7 @@ where
         | ty::Adt(_, _)
         | ty::Alias(_, _)
         | ty::Param(_)
+        | ty::ContextMarker(_)  // (can't be constructed so implementing copy/clone is a bit of a red herring)
         | ty::Placeholder(..) => Err(NoSolution),
 
         ty::Bound(..)
@@ -378,6 +381,7 @@ pub(in crate::solve) fn extract_tupled_inputs_and_output_from_callable<I: Intern
         | ty::Param(_)
         | ty::Placeholder(..)
         | ty::Infer(ty::IntVar(_) | ty::FloatVar(_))
+        | ty::ContextMarker(_)
         | ty::Error(_) => Err(NoSolution),
 
         ty::Bound(..)
@@ -549,6 +553,7 @@ pub(in crate::solve) fn extract_tupled_inputs_and_output_from_async_callable<I: 
         | ty::Param(_)
         | ty::Placeholder(..)
         | ty::Infer(ty::IntVar(_) | ty::FloatVar(_))
+        | ty::ContextMarker(_)
         | ty::Error(_) => Err(NoSolution),
 
         ty::Bound(..)

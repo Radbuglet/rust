@@ -611,6 +611,11 @@ impl<'tcx> Ty<'tcx> {
     }
 
     #[inline]
+    pub fn new_context_marker(tcx: TyCtxt<'tcx>, def_id: DefId) -> Ty<'tcx> {
+        Ty::new(tcx, ContextMarker(def_id))
+    }
+
+    #[inline]
     pub fn new_array(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>, n: u64) -> Ty<'tcx> {
         Ty::new(tcx, Array(ty, ty::Const::from_target_usize(tcx, n)))
     }
@@ -1460,6 +1465,7 @@ impl<'tcx> Ty<'tcx> {
             | ty::Never
             | ty::Tuple(_)
             | ty::Error(_)
+            | ty::ContextMarker(_)
             | ty::Infer(IntVar(_) | FloatVar(_)) => tcx.types.u8,
 
             ty::Bound(..)
@@ -1615,6 +1621,7 @@ impl<'tcx> Ty<'tcx> {
             | ty::Closure(..)
             | ty::CoroutineClosure(..)
             | ty::Never
+            | ty::ContextMarker(_)
             | ty::Error(_)
             // Extern types have metadata = ().
             | ty::Foreign(..)
@@ -1809,6 +1816,7 @@ impl<'tcx> Ty<'tcx> {
             | ty::CoroutineClosure(..)
             | ty::Never
             | ty::Error(_)
+            | ty::ContextMarker(_)
             | ty::Dynamic(_, _, ty::DynStar) => true,
 
             ty::Str | ty::Slice(_) | ty::Dynamic(_, _, ty::Dyn) | ty::Foreign(..) => false,
@@ -1882,6 +1890,8 @@ impl<'tcx> Ty<'tcx> {
 
             ty::Param(..) | ty::Infer(..) | ty::Error(..) => false,
 
+            ty::ContextMarker(_) => false,
+
             ty::Bound(..) | ty::Placeholder(..) => {
                 bug!("`is_trivially_pure_clone_copy` applied to unexpected type: {:?}", self);
             }
@@ -1954,6 +1964,7 @@ impl<'tcx> Ty<'tcx> {
             | Coroutine(_, _)
             | CoroutineWitness(..)
             | Never
+            | ContextMarker(_)
             | Tuple(_) => true,
             Error(_) | Infer(_) | Alias(_, _) | Param(_) | Bound(_, _) | Placeholder(_) => false,
         }

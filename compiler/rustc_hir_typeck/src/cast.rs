@@ -141,6 +141,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             | ty::Coroutine(..)
             | ty::Adt(..)
             | ty::Never
+            | ty::ContextMarker(_)
             | ty::Dynamic(_, _, ty::DynStar)
             | ty::Error(_) => {
                 let guar = self

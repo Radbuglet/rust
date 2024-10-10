@@ -64,6 +64,7 @@ impl<'tcx> TypeFolder<TyCtxt<'tcx>> for TransformTy<'tcx> {
             | ty::Pat(..)
             | ty::Slice(..)
             | ty::Str
+            | ty::ContextMarker(_)
             | ty::Tuple(..) => t.super_fold_with(self),
 
             ty::Bool => {

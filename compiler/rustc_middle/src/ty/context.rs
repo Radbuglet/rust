@@ -426,6 +426,7 @@ impl<'tcx> Interner for TyCtxt<'tcx> {
             | ty::CoroutineClosure(..)
             | ty::Coroutine(_, _)
             | ty::Never
+            | ty::ContextMarker(_)  // TODO: What is this?
             | ty::Tuple(_) => {
                 let simp = ty::fast_reject::simplify_type(
                     tcx,
@@ -2278,6 +2279,7 @@ impl<'tcx> TyCtxt<'tcx> {
                     Infer,
                     Alias,
                     Pat,
+                    ContextMarker,
                     Foreign
                 )?;
 

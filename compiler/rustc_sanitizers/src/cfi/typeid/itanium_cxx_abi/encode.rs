@@ -532,6 +532,12 @@ pub fn encode_ty<'tcx>(
             compress(dict, DictKey::Ty(ty, TyQ::None), &mut s);
             typeid.push_str(&s);
         }
+        ty::ContextMarker(def_id) => {
+            let name = tcx.item_name(*def_id).to_string();
+            let mut s = format!("{}{}", name.len(), name);
+            compress(dict, DictKey::Ty(ty, TyQ::None), &mut s);
+            typeid.push_str(&s);
+        }
 
         // Function types
         ty::FnDef(def_id, args) | ty::Closure(def_id, args) => {

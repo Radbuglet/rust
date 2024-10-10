@@ -214,6 +214,11 @@ fn layout_of_uncached<'tcx>(
         // The never type.
         ty::Never => tcx.mk_layout(cx.calc.layout_of_never_type()),
 
+        // Context marker types can never be instantiated but act like units.
+        ty::ContextMarker(_) => {
+            univariant(IndexSlice::empty(), &ReprOptions::default(), StructKind::AlwaysSized)?
+        },
+
         // Potentially-wide pointers.
         ty::Ref(_, pointee, _) | ty::RawPtr(pointee, _) => {
             let mut data_ptr = scalar_unit(Pointer(AddressSpace::DATA));

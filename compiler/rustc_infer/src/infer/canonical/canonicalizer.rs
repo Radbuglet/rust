@@ -446,6 +446,7 @@ impl<'cx, 'tcx> TypeFolder<TyCtxt<'tcx>> for Canonicalizer<'cx, 'tcx> {
             | ty::Alias(..)
             | ty::Foreign(..)
             | ty::Pat(..)
+            | ty::ContextMarker(..)
             | ty::Param(..) => {
                 if t.flags().intersects(self.needs_canonical_flags) {
                     t.super_fold_with(self)

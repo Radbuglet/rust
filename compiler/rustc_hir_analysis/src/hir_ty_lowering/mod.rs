@@ -805,8 +805,7 @@ impl<'tcx> dyn HirTyLowerer<'tcx> + '_ {
             DefKind::Context => {
                 // We're already using `tcx.type_of` to produce the expression type/pointee type of
                 // the item so we have to implement type lowering here instead.
-                // TODO: Lower this to something appropriate
-                tcx.types.unit
+                Ty::new_context_marker(tcx, did)
             }
             DefKind::TyAlias if tcx.type_alias_is_lazy(did) => {
                 // Type aliases defined in crates that have the
