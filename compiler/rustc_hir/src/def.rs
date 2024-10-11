@@ -226,12 +226,15 @@ impl DefKind {
             | DefKind::Const
             | DefKind::ConstParam
             | DefKind::Static { .. }
-            | DefKind::Context
             | DefKind::Ctor(..)
             | DefKind::AssocFn
             | DefKind::AssocConst => Some(Namespace::ValueNS),
 
             DefKind::Macro(..) => Some(Namespace::MacroNS),
+
+            // In both `TypeNS` and `ValueNS`.
+            // TODO: support that explicitly instead of relying on fallback handling
+            DefKind::Context => None,
 
             // Not namespaced.
             DefKind::AnonConst

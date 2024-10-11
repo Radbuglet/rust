@@ -247,10 +247,9 @@ impl<'ra, 'tcx> Resolver<'ra, 'tcx> {
                 _,
             ) => self.define(parent, ident, ValueNS, (res, vis, span, expansion)),
             Res::Def(DefKind::Context, _) => {
-                // Context items are both values and types. Types can be resolved from any namespace
-                // so this isn't needed to make context items visible to type resolution. Instead,
-                // this is done to avoid having a user-defined type shadow the type for a context
-                // item, which would be quite confusing.
+                // Context items are both values and types. We need to make sure that the item is
+                // resolvable in the type namespace to, for example, ensure that generics resolve to
+                // the item as a type marker by default rather than as a constant expression.
                 self.define(parent, ident, ValueNS, (res, vis, span, expansion));
                 self.define(parent, ident, TypeNS, (res, vis, span, expansion));
             },
@@ -815,8 +814,17 @@ impl<'a, 'ra, 'tcx> BuildReducedGraphVisitor<'a, 'ra, 'tcx> {
             }
 
             // These items live in the value namespace.
-            ItemKind::Const(..) | ItemKind::Delegation(..) | ItemKind::Static(..) => {
+            ItemKind::Const(..) | ItemKind::Delegation(..) => {
                 self.r.define(parent, ident, ValueNS, (res, vis, sp, expansion));
+            }
+            ItemKind::Static(..) => {
+                if attr::contains_name(&item.attrs, sym::context) {
+                    // See `build_reduced_graph_for_external_crate_res`
+                    self.r.define(parent, ident, TypeNS, (res, vis, sp, expansion));
+                    self.r.define(parent, ident, ValueNS, (res, vis, sp, expansion));
+                } else {
+                    self.r.define(parent, ident, ValueNS, (res, vis, sp, expansion));
+                }
             }
             ItemKind::Fn(..) => {
                 self.r.define(parent, ident, ValueNS, (res, vis, sp, expansion));
