@@ -699,7 +699,7 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
                     self.assemble_inherent_candidates_for_incoherent_ty(raw_self_ty);
                 }
             }
-            ty::Foreign(did) => {
+            ty::Foreign(did) | ty::ContextMarker(did) => {
                 self.assemble_inherent_impl_candidates_for_type(did);
                 if self.tcx.has_attr(did, sym::rustc_has_incoherent_inherent_impls) {
                     self.assemble_inherent_candidates_for_incoherent_ty(raw_self_ty);
@@ -719,7 +719,6 @@ impl<'a, 'tcx> ProbeContext<'a, 'tcx> {
             | ty::RawPtr(_, _)
             | ty::Ref(..)
             | ty::Never
-            | ty::ContextMarker(_)
             | ty::Tuple(..) => self.assemble_inherent_candidates_for_incoherent_ty(raw_self_ty),
             _ => {}
         }
