@@ -468,4 +468,7 @@ pub mod simd {
     pub use crate::core_simd::simd::*;
 }
 
+#[unstable(feature = "context_injection", issue = "none")]  // TODO: Fill in tracking issue
+pub mod context;
+
 include!("primitive_docs.rs");

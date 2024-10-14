@@ -278,8 +278,8 @@ impl<'tcx> Cx<'tcx> {
             &mut StaticRef { alloc_id: _, ty: _, def_id: _ } => {
                 // (terminal)
             },
-            InlineAsm(expr) => {
-                todo!()
+            InlineAsm(_expr) => {
+                // TODO
             },
             &mut OffsetOf { container: _, fields: _ } => {
                 // (terminal)
