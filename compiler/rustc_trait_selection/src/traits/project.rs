@@ -1204,6 +1204,44 @@ fn assemble_candidates_from_impls<'cx, 'tcx>(
                             false
                         }
                     }
+                } else if tcx.is_lang_item(trait_ref.def_id, LangItem::ContextMarkerTrait) {
+                    match self_ty.kind() {
+                        // Only `ContextMarker`s implement this trait.
+                        ty::ContextMarker(_) => true,
+                        ty::Bool
+                        | ty::Char
+                        | ty::Int(_)
+                        | ty::Uint(_)
+                        | ty::Float(_)
+                        | ty::Adt(..)
+                        | ty::Foreign(_)
+                        | ty::Str
+                        | ty::Array(..)
+                        | ty::Pat(..)
+                        | ty::Slice(_)
+                        | ty::RawPtr(..)
+                        | ty::Ref(..)
+                        | ty::FnDef(..)
+                        | ty::FnPtr(..)
+                        | ty::Dynamic(..)
+                        | ty::Closure(..)
+                        | ty::CoroutineClosure(..)
+                        | ty::Coroutine(..)
+                        | ty::CoroutineWitness(..)
+                        | ty::Never
+                        | ty::Tuple(..)
+                        | ty::Infer(ty::InferTy::IntVar(_) | ty::InferTy::FloatVar(..)) => false,
+
+                        // type parameters, opaques, and unnormalized projections don't have
+                        // a known context item type and may need to be normalized further or rely
+                        // on param env for item projections
+                        ty::Param(_)
+                        | ty::Alias(..)
+                        | ty::Bound(..)
+                        | ty::Placeholder(..)
+                        | ty::Infer(..)
+                        | ty::Error(_) => false,
+                    }
                 } else if tcx.trait_is_auto(trait_ref.def_id) {
                     tcx.dcx().span_delayed_bug(
                         tcx.def_span(obligation.predicate.def_id),
@@ -1613,6 +1651,12 @@ fn confirm_builtin_candidate<'cx, 'tcx>(
             }
         });
         (metadata_ty.into(), obligations)
+    }  else if tcx.is_lang_item(trait_def_id, LangItem::ContextMarkerTrait) {
+        // This should be the only associated type on that trait.
+        let context_item_assoc_para_def_id = tcx.associated_item_def_ids(trait_def_id)[0];
+        assert_eq!(context_item_assoc_para_def_id, item_def_id);
+
+        (self_ty.context_marker_ty(tcx).into(), Vec::new())
     } else {
         bug!("unexpected builtin trait with associated type: {:?}", obligation.predicate);
     };

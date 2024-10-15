@@ -202,6 +202,12 @@ where
         goal: Goal<I, Self>,
     ) -> Result<Candidate<I>, NoSolution>;
 
+    /// `ContextMarker` is implemented if the `Self` type is a context marker.
+    fn consider_builtin_context_marker_candidate(
+        ecx: &mut EvalCtxt<'_, D>,
+        goal: Goal<I, Self>,
+    ) -> Result<Candidate<I>, NoSolution>;
+
     /// A coroutine (that comes from an `async` desugaring) is known to implement
     /// `Future<Output = O>`, where `O` is given by the coroutine's return type
     /// that was computed during type-checking.
@@ -433,6 +439,9 @@ where
                 Some(TraitSolverLangItem::Tuple) => G::consider_builtin_tuple_candidate(self, goal),
                 Some(TraitSolverLangItem::PointeeTrait) => {
                     G::consider_builtin_pointee_candidate(self, goal)
+                }
+                Some(TraitSolverLangItem::ContextMarkerTrait) => {
+                    G::consider_builtin_context_marker_candidate(self, goal)
                 }
                 Some(TraitSolverLangItem::Future) => {
                     G::consider_builtin_future_candidate(self, goal)

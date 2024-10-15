@@ -968,6 +968,10 @@ impl<'tcx> rustc_type_ir::inherent::Ty<TyCtxt<'tcx>> for Ty<'tcx> {
         self.discriminant_ty(interner)
     }
 
+    fn context_marker_ty(self, interner: TyCtxt<'tcx>) -> Ty<'tcx> {
+        self.context_marker_ty(interner)
+    }
+
     fn async_destructor_ty(self, interner: TyCtxt<'tcx>) -> Ty<'tcx> {
         self.async_destructor_ty(interner)
     }
@@ -1473,6 +1477,25 @@ impl<'tcx> Ty<'tcx> {
             | ty::Infer(FreshTy(_) | ty::FreshIntTy(_) | ty::FreshFloatTy(_)) => {
                 bug!("`discriminant_ty` applied to unexpected type: {:?}", self)
             }
+        }
+    }
+
+    /// Returns the type of the context item of this type.
+    pub fn context_marker_ty(self, tcx: TyCtxt<'tcx>) -> Ty<'tcx> {
+        let context_marker_trait_def_id =
+            tcx.require_lang_item(LangItem::ContextMarkerTrait, None);
+        let context_item_assoc_para_def_id =
+            tcx.associated_item_def_ids(context_marker_trait_def_id)[0];
+
+        match self.kind() {
+            // The binder doesn't bind anything for context marker definitions so we can skip it.
+            ty::ContextMarker(did) => tcx.type_of(did).skip_binder(),
+
+            ty::Param(_) | ty::Alias(..) | ty::Placeholder(..) | ty::Infer(ty::TyVar(_)) => {
+                Ty::new_projection(tcx, context_item_assoc_para_def_id, [self])
+            }
+
+            _ => bug!("`context_marker_ty` applied against unexpected type: {self:?}"),
         }
     }
 

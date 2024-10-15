@@ -158,6 +158,8 @@ pub trait Ty<I: Interner<Ty = Self>>:
 
     fn discriminant_ty(self, interner: I) -> I::Ty;
 
+    fn context_marker_ty(self, interner: I) -> I::Ty;
+
     fn async_destructor_ty(self, interner: I) -> I::Ty;
 
     /// Returns `true` when the outermost type cannot be further normalized,
