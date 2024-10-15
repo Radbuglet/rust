@@ -13,7 +13,7 @@ pub enum TraitSolverLangItem {
     CallOnceFuture,
     CallRefFuture,
     Clone,
-    ContextMarkerTrait,
+    ContextItemTrait,
     Copy,
     Coroutine,
     CoroutineReturn,

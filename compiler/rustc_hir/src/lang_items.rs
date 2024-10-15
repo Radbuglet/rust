@@ -425,7 +425,7 @@ language_item_table! {
     EffectsTyCompat,         sym::EffectsTyCompat,     effects_ty_compat,          Target::Trait,          GenericRequirement::Exact(1);
 
     // Context Injection
-    ContextMarkerTrait,      sym::context_marker,      context_marker,             Target::Trait,          GenericRequirement::None;
+    ContextItemTrait,        sym::context_item,        context_item,             Target::Trait,          GenericRequirement::None;
 }
 
 pub enum GenericRequirement {

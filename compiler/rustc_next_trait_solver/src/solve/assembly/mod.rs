@@ -202,8 +202,8 @@ where
         goal: Goal<I, Self>,
     ) -> Result<Candidate<I>, NoSolution>;
 
-    /// `ContextMarker` is implemented if the `Self` type is a context marker.
-    fn consider_builtin_context_marker_candidate(
+    /// `ContextItem` is implemented if the `Self` type is a context marker.
+    fn consider_builtin_context_item_candidate(
         ecx: &mut EvalCtxt<'_, D>,
         goal: Goal<I, Self>,
     ) -> Result<Candidate<I>, NoSolution>;
@@ -440,8 +440,8 @@ where
                 Some(TraitSolverLangItem::PointeeTrait) => {
                     G::consider_builtin_pointee_candidate(self, goal)
                 }
-                Some(TraitSolverLangItem::ContextMarkerTrait) => {
-                    G::consider_builtin_context_marker_candidate(self, goal)
+                Some(TraitSolverLangItem::ContextItemTrait) => {
+                    G::consider_builtin_context_item_candidate(self, goal)
                 }
                 Some(TraitSolverLangItem::Future) => {
                     G::consider_builtin_future_candidate(self, goal)

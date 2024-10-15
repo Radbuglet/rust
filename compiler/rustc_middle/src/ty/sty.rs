@@ -1482,17 +1482,18 @@ impl<'tcx> Ty<'tcx> {
 
     /// Returns the type of the context item of this type.
     pub fn context_marker_ty(self, tcx: TyCtxt<'tcx>) -> Ty<'tcx> {
-        let context_marker_trait_def_id =
-            tcx.require_lang_item(LangItem::ContextMarkerTrait, None);
-        let context_item_assoc_para_def_id =
-            tcx.associated_item_def_ids(context_marker_trait_def_id)[0];
+        let context_item_trait_def_id =
+            tcx.require_lang_item(LangItem::ContextItemTrait, None);
+
+        let item_assoc_para_def_id =
+            tcx.associated_item_def_ids(context_item_trait_def_id)[0];
 
         match self.kind() {
             // The binder doesn't bind anything for context marker definitions so we can skip it.
             ty::ContextMarker(did) => tcx.type_of(did).skip_binder(),
 
             ty::Param(_) | ty::Alias(..) | ty::Placeholder(..) | ty::Infer(ty::TyVar(_)) => {
-                Ty::new_projection(tcx, context_item_assoc_para_def_id, [self])
+                Ty::new_projection(tcx, item_assoc_para_def_id, [self])
             }
 
             _ => bug!("`context_marker_ty` applied against unexpected type: {self:?}"),

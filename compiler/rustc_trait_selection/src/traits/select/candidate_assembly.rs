@@ -113,8 +113,8 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                 self.assemble_candidate_for_pointer_like(obligation, &mut candidates);
             } else if tcx.is_lang_item(def_id, LangItem::FnPtrTrait) {
                 self.assemble_candidates_for_fn_ptr_trait(obligation, &mut candidates);
-            } else if tcx.is_lang_item(def_id, LangItem::ContextMarkerTrait) {
-                self.assemble_candidates_for_context_marker_trait(obligation, &mut candidates);
+            } else if tcx.is_lang_item(def_id, LangItem::ContextItemTrait) {
+                self.assemble_candidates_for_context_item_trait(obligation, &mut candidates);
             } else {
                 if tcx.is_lang_item(def_id, LangItem::Clone) {
                     // Same builtin conditions as `Copy`, i.e., every type which has builtin support
@@ -1389,7 +1389,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
         }
     }
 
-    fn assemble_candidates_for_context_marker_trait(
+    fn assemble_candidates_for_context_item_trait(
         &mut self,
         obligation: &PolyTraitObligation<'tcx>,
         candidates: &mut SelectionCandidateSet<'tcx>,

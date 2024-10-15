@@ -616,7 +616,7 @@ bidirectional_lang_item_map! {
     CallOnceFuture,
     CallRefFuture,
     Clone,
-    ContextMarkerTrait,
+    ContextItemTrait,
     Copy,
     Coroutine,
     CoroutineReturn,

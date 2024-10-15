@@ -1204,7 +1204,7 @@ fn assemble_candidates_from_impls<'cx, 'tcx>(
                             false
                         }
                     }
-                } else if tcx.is_lang_item(trait_ref.def_id, LangItem::ContextMarkerTrait) {
+                } else if tcx.is_lang_item(trait_ref.def_id, LangItem::ContextItemTrait) {
                     match self_ty.kind() {
                         // Only `ContextMarker`s implement this trait.
                         ty::ContextMarker(_) => true,
@@ -1651,7 +1651,7 @@ fn confirm_builtin_candidate<'cx, 'tcx>(
             }
         });
         (metadata_ty.into(), obligations)
-    }  else if tcx.is_lang_item(trait_def_id, LangItem::ContextMarkerTrait) {
+    }  else if tcx.is_lang_item(trait_def_id, LangItem::ContextItemTrait) {
         // This should be the only associated type on that trait.
         let context_item_assoc_para_def_id = tcx.associated_item_def_ids(trait_def_id)[0];
         assert_eq!(context_item_assoc_para_def_id, item_def_id);

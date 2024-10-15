@@ -583,7 +583,7 @@ where
         })
     }
 
-    fn consider_builtin_context_marker_candidate(
+    fn consider_builtin_context_item_candidate(
         ecx: &mut EvalCtxt<'_, D>,
         goal: Goal<I, Self>,
     ) -> Result<Candidate<I>, NoSolution> {

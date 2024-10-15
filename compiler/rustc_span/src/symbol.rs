@@ -650,7 +650,7 @@ symbols! {
         constructor,
         context,
         context_injection,
-        context_marker,
+        context_item,
         convert_identity,
         copy,
         copy_closures,

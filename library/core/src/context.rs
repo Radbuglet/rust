@@ -1,10 +1,10 @@
 #![allow(missing_docs)]  // TODO
 #![cfg(not(bootstrap))]
 
-#[lang = "context_marker"]
+#[lang = "context_item"]
 #[rustc_deny_explicit_impl(implement_via_object = false)]
 #[unstable(feature = "context_injection", issue = "none")]
-pub trait ContextMarker {
+pub trait ContextItem {
     #[unstable(feature = "context_injection", issue = "none")]
     type Item: ?Sized;
 }
@@ -15,23 +15,23 @@ pub trait BundleItem {
     type Item;
 
     #[unstable(feature = "context_injection", issue = "none")]
-    type Context: ContextMarker;
+    type Context: ContextItem;
 }
 
 #[unstable(feature = "context_injection", issue = "none")]
-impl<'a, T: ContextMarker> BundleItem for &'a T {
+impl<'a, T: ContextItem> BundleItem for &'a T {
     type Item = &'a T::Item;
     type Context = T;
 }
 
 #[unstable(feature = "context_injection", issue = "none")]
-impl<'a, T: ContextMarker> BundleItem for &'a mut T {
+impl<'a, T: ContextItem> BundleItem for &'a mut T {
     type Item = &'a mut T::Item;
     type Context = T;
 }
 
 #[unstable(feature = "context_injection", issue = "none")]
-pub trait ContextMarkerSet {}
+pub trait ContextItemSet {}
 
 #[unstable(feature = "context_injection", issue = "none")]
 pub trait BundleItemSet {
@@ -39,13 +39,13 @@ pub trait BundleItemSet {
     type ItemSet;
 
     #[unstable(feature = "context_injection", issue = "none")]
-    type Context: ContextMarkerSet;
+    type Context: ContextItemSet;
 }
 
 // This blanket impl is safe to write alongside the tuple implementation because no tuple can
-// implement `ContextMarker`.
+// implement `ContextItem`.
 #[unstable(feature = "context_injection", issue = "none")]
-impl<T: ContextMarker> ContextMarkerSet for T {}
+impl<T: ContextItem> ContextItemSet for T {}
 
 #[unstable(feature = "context_injection", issue = "none")]
 impl<T: BundleItem> BundleItemSet for T {
@@ -56,7 +56,7 @@ impl<T: BundleItem> BundleItemSet for T {
 macro_rules! tuple {
     ($($para:ident)*) => {
         #[unstable(feature = "context_injection", issue = "none")]
-        impl<$($para: ContextMarkerSet,)*> ContextMarkerSet for ($($para,)*) {}
+        impl<$($para: ContextItemSet,)*> ContextItemSet for ($($para,)*) {}
 
         #[unstable(feature = "context_injection", issue = "none")]
         impl<$($para: BundleItemSet,)*> BundleItemSet for ($($para,)*) {
