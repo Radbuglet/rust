@@ -257,6 +257,15 @@ impl<'tcx> Cx<'tcx> {
                     self.adjust_context_mutabilities_block(else_block);
                 }
             }
+            StmtKind::LetContext {
+                remainder_scope: _,
+                bundle_scope: _,
+                bundle,
+                lint_level: _,
+                span: _,
+            } => {
+                self.adjust_context_mutabilities(*bundle, Mutability::Not);
+            }
         }
 
         self.thir.stmts[id] = stmt;

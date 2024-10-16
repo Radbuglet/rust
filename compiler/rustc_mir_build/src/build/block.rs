@@ -317,6 +317,43 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     }
                     last_remainder_scope = *remainder_scope;
                 }
+                StmtKind::LetContext { .. } => todo!(),
+                // StmtKind::LetContext {
+                //     remainder_scope,
+                //     bundle_scope,
+                //     bundle,
+                //     lint_level,
+                //     span: _,
+                // } => {
+                //     this.block_context.push(BlockFrame::Statement { ignores_expr_result: false });
+                // 
+                //     // Enter the remainder scope, i.e., the bindings' destruction scope.
+                //     this.push_scope((*remainder_scope, source_info));
+                //     let_scope_stack.push(remainder_scope);
+                // 
+                //     // Declare the bindings, which may create a source scope.
+                //     let remainder_span = remainder_scope.span(this.tcx, this.region_scope_tree);
+                // 
+                //     let visibility_scope =
+                //         Some(this.new_source_scope(remainder_span, LintLevel::Inherited));
+                // 
+                //     // Evaluate the bundle expression.
+                //     let bundle_span = this.thir[bundle].span;
+                //     let scope = (*bundle_span, source_info);
+                // 
+                //     block = this
+                //         .in_scope(scope, *lint_level, |this| {
+                //             // Transform the expression into an 
+                //             this.expr_into_pattern(block, init)
+                //         })
+                //         .into_block();
+                // 
+                //     // Enter the visibility scope, after binding the context.
+                //     if let Some(source_scope) = visibility_scope {
+                //         this.source_scope = source_scope;
+                //     }
+                //     last_remainder_scope = *remainder_scope;
+                // }
             }
 
             let popped = this.block_context.pop();

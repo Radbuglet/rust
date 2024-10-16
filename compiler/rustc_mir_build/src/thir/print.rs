@@ -176,6 +176,29 @@ impl<'a, 'tcx> ThirPrinter<'a, 'tcx> {
                 print_indented!(self, format!("span: {:?}", span), depth_lvl + 2);
                 print_indented!(self, "}", depth_lvl + 1);
             }
+            StmtKind::LetContext {
+                remainder_scope,
+                bundle_scope,
+                bundle,
+                lint_level,
+                span,
+            } => {
+                print_indented!(self, "kind: LetContext {", depth_lvl + 1);
+                print_indented!(
+                    self,
+                    format!("remainder_scope: {:?}", remainder_scope),
+                    depth_lvl + 2
+                );
+                print_indented!(self, format!("bundle_scope: {:?}", bundle_scope), depth_lvl + 2);
+
+                print_indented!(self, "bundle: ", depth_lvl + 2);
+                self.print_expr(*bundle, depth_lvl + 3);
+                print_indented!(self, ",", depth_lvl + 2);
+
+                print_indented!(self, format!("lint_level: {:?}", lint_level), depth_lvl + 2);
+                print_indented!(self, format!("span: {:?}", span), depth_lvl + 2);
+                print_indented!(self, "}", depth_lvl + 1);
+            }
         }
 
         print_indented!(self, "}", depth_lvl);

@@ -231,6 +231,25 @@ pub enum StmtKind<'tcx> {
         /// Span of the `let <PAT> = <INIT>` part.
         span: Span,
     },
+    /// A context binding.
+    LetContext {
+        /// The scope for variables bound in this `let`; it covers this and
+        /// all the remaining statements in the block.
+        remainder_scope: region::Scope,
+
+        /// The scope for the bundle initialization itself; might be used as
+        /// lifetime of temporaries.
+        bundle_scope: region::Scope,
+
+        /// The bundle being bound.
+        bundle: ExprId,
+
+        /// The lint level for this `let`.
+        lint_level: LintLevel,
+
+        /// Span of the `let <bundle>` part.
+        span: Span,
+    },
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, HashStable, TyEncodable, TyDecodable)]
