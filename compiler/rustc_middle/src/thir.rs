@@ -125,7 +125,7 @@ pub enum LintLevel {
     Explicit(HirId),
 }
 
-#[derive(Copy, Clone, Debug, HashStable)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, HashStable)]
 pub enum ContextBinder {
     FuncEnv,
     LocalBinder(StmtId),

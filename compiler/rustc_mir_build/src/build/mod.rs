@@ -219,6 +219,9 @@ struct Builder<'a, 'tcx> {
     /// Collects additional coverage information during MIR building.
     /// Only present if coverage is enabled and this function is eligible.
     coverage_info: Option<coverageinfo::CoverageInfoBuilder>,
+
+    /// Maps context binders to information about the locals to use for them while lowering.
+    context_binders: context::ContextBinderMap,
 }
 
 type CaptureMap<'tcx> = SortedIndexMultiMap<usize, HirId, Capture<'tcx>>;
@@ -778,6 +781,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             var_debug_info: vec![],
             lint_level_roots_cache: GrowableBitSet::new_empty(),
             coverage_info: coverageinfo::CoverageInfoBuilder::new_if_enabled(tcx, def),
+            context_binders: context::ContextBinderMap::default(),
         };
 
         assert_eq!(builder.cfg.start_new_block(), START_BLOCK);
@@ -980,6 +984,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             self.cfg.terminate(block, source_info, TerminatorKind::Unreachable);
             self.cfg.start_new_block().unit()
         } else {
+            self.define_context_locals(expr_id);
+            self.init_and_borrow_context_binder_locals(block, thir::ContextBinder::FuncEnv);
             self.expr_into_dest(Place::return_place(), block, expr_id)
         }
     }
@@ -1099,6 +1105,7 @@ pub(crate) fn parse_float_into_scalar(
 
 mod block;
 mod cfg;
+mod context;
 mod coverageinfo;
 mod custom;
 mod expr;

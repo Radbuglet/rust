@@ -523,6 +523,9 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 }
                 block.and(PlaceBuilder::from(temp))
             }
+            ExprKind::ContextRef { item, binder, .. } => {
+                block.and(PlaceBuilder::from(this.lookup_context_binder(item, binder).ref_local()))
+            }
 
             ExprKind::Array { .. }
             | ExprKind::Tuple { .. }
@@ -561,7 +564,6 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             | ExprKind::OffsetOf { .. }
             | ExprKind::Yield { .. }
             | ExprKind::ThreadLocalRef(_)
-            | ExprKind::ContextRef { .. }
             | ExprKind::Call { .. } => {
                 // these are not places, so we need to make a temporary.
                 debug_assert!(!matches!(Category::of(&expr.kind), Some(Category::Place)));

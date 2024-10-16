@@ -239,6 +239,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 })
             }
             ExprKind::Call { ty: _, fun, ref args, from_hir_call, fn_span } => {
+                // TODO: Ensure that this invalidates and reborrows all relevant bound context items.
+
                 let fun = unpack!(block = this.as_local_operand(block, fun));
                 let args: Box<[_]> = args
                     .into_iter()

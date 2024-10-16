@@ -41,6 +41,7 @@ impl Category {
             | ExprKind::UpvarRef { .. }
             | ExprKind::VarRef { .. }
             | ExprKind::PlaceTypeAscription { .. }
+            | ExprKind::ContextRef { .. }
             | ExprKind::ValueTypeAscription { .. } => Some(Category::Place),
 
             ExprKind::LogicalOp { .. }
@@ -68,7 +69,6 @@ impl Category {
             | ExprKind::Assign { .. }
             | ExprKind::AssignOp { .. }
             | ExprKind::ThreadLocalRef(_)
-            | ExprKind::ContextRef { .. }
             | ExprKind::OffsetOf { .. } => Some(Category::Rvalue(RvalueFunc::AsRvalue)),
 
             ExprKind::ConstBlock { .. }
