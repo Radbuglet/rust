@@ -1072,19 +1072,8 @@ impl<'tcx> Debug for Rvalue<'tcx> {
                 let muta = tcx.static_mutability(did).unwrap().prefix_str();
                 write!(fmt, "&/*tls*/ {}{}", muta, tcx.def_path_str(did))
             }),
-            ContextRef(re, did, muta) => ty::tls::with(|tcx| {
-                let print_region = tcx.sess.verbose_internals() || tcx.sess.opts.unstable_opts.identify_regions;
-                let re = if print_region {
-                    let mut re = re.to_string();
-                    if !re.is_empty() {
-                        re.push(' ');
-                    }
-                    re
-                } else {
-                    String::new()
-                };
-
-                write!(fmt, "&/*ctx*/ {}{}{}", re, muta.prefix_str(), tcx.def_path_str(did))
+            ContextRef(did) => ty::tls::with(|tcx| {
+                write!(fmt, "&/*ctx*/ {}", tcx.def_path_str(did))
             }),
             Ref(region, borrow_kind, ref place) => {
                 let kind_str = match borrow_kind {

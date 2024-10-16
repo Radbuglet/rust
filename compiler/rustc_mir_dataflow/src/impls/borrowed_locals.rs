@@ -106,7 +106,7 @@ where
             | Rvalue::ShallowInitBox(..)
             | Rvalue::Use(..)
             | Rvalue::ThreadLocalRef(..)
-            | Rvalue::ContextRef(_, _, _)
+            | Rvalue::ContextRef(_)
             | Rvalue::Repeat(..)
             | Rvalue::Len(..)
             | Rvalue::BinaryOp(..)

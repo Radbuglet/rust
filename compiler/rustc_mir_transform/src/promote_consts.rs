@@ -434,7 +434,7 @@ impl<'tcx> Validator<'_, 'tcx> {
                 self.validate_place(place.as_ref())?
             }
 
-            Rvalue::ThreadLocalRef(_) | Rvalue::ContextRef(_, _, _) => return Err(Unpromotable),
+            Rvalue::ThreadLocalRef(_) | Rvalue::ContextRef(_) => return Err(Unpromotable),
 
             // ptr-to-int casts are not possible in consts and thus not promotable
             Rvalue::Cast(CastKind::PointerExposeProvenance, _, _) => return Err(Unpromotable),

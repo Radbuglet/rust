@@ -2543,7 +2543,7 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
 
             Rvalue::RawPtr(..)
             | Rvalue::ThreadLocalRef(..)
-            | Rvalue::ContextRef(_, _, _)
+            | Rvalue::ContextRef(..)
             | Rvalue::Len(..)
             | Rvalue::Discriminant(..)
             | Rvalue::NullaryOp(NullOp::OffsetOf(..), _) => {}
@@ -2557,7 +2557,7 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
         match rvalue {
             Rvalue::Use(_)
             | Rvalue::ThreadLocalRef(_)
-            | Rvalue::ContextRef(_, _, _)
+            | Rvalue::ContextRef(_)
             | Rvalue::Repeat(..)
             | Rvalue::Ref(..)
             | Rvalue::RawPtr(..)

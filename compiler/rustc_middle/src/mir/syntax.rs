@@ -1295,7 +1295,7 @@ pub enum Rvalue<'tcx> {
     ThreadLocalRef(DefId),
 
     /// Fetches the given context item from context.
-    ContextRef(Region<'tcx>, DefId, Mutability),
+    ContextRef(DefId),
 
     /// Creates a raw pointer with the indicated mutability to the place.
     ///

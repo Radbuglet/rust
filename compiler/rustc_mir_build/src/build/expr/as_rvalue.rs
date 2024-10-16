@@ -52,42 +52,9 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
 
         match expr.kind {
             ExprKind::ThreadLocalRef(did) => block.and(Rvalue::ThreadLocalRef(did)),
-            ExprKind::ContextRef(did, muta) => {
-                // HACK: `MirBorrowckCtxt::check_context_ref_borrow` depends upon the invariant that
-                // `Rvalue::ContextRef` always be immediately reborrowed.
-
-                // TODO: Do we need `StorageLive` and `StorageDead`? If not, why??
-
-                // Define the temporary local
-                let expr_ty = expr.ty;
-                let mut local_decl = LocalDecl::new(expr_ty, expr_span);
-                **local_decl.local_info.as_mut().assert_crate_local() = LocalInfo::ContextRef {
-                    def_id: did,
-                    mutability: muta,
-                };
-
-                let temp = this.local_decls.push(local_decl);
-
-                // Initialize the temporary
-                this.cfg.push_assign(
-                    block,
-                    source_info,
-                    Place::from(temp),
-                    Rvalue::ContextRef(this.tcx.lifetimes.re_erased, did, muta),
-                );
-
-                // Create the rvalue borrowing the temporary
-                block.and(Rvalue::Ref(
-                    this.tcx.lifetimes.re_erased,
-                    match muta {
-                        Mutability::Mut => BorrowKind::Mut { kind: MutBorrowKind::Default },
-                        Mutability::Not => BorrowKind::Shared,
-                    },
-                    Place {
-                        local: temp,
-                        projection: this.tcx.mk_place_elems(&[PlaceElem::Deref]),
-                    },
-                ))
+            ExprKind::ContextRef(did, _muta) => {
+                // TODO: do lowering because this is considerably more complicated
+                block.and(Rvalue::ContextRef(did))
             },
             ExprKind::Scope { region_scope, lint_level, value } => {
                 let region_scope = (region_scope, source_info);

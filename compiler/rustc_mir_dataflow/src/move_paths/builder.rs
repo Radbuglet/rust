@@ -401,7 +401,7 @@ impl<'a, 'tcx, F: Fn(Ty<'tcx>) -> bool> MoveDataBuilder<'a, 'tcx, F> {
 
     fn gather_rvalue(&mut self, rvalue: &Rvalue<'tcx>) {
         match *rvalue {
-            Rvalue::ThreadLocalRef(_) | Rvalue::ContextRef(_, _, _) => {} // not-a-move
+            Rvalue::ThreadLocalRef(_) | Rvalue::ContextRef(_) => {} // not-a-move
             Rvalue::Use(ref operand)
             | Rvalue::Repeat(ref operand, _)
             | Rvalue::Cast(_, ref operand, _)

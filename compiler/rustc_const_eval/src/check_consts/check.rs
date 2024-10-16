@@ -381,7 +381,7 @@ impl<'tcx> Visitor<'tcx> for Checker<'_, 'tcx> {
 
         match rvalue {
             Rvalue::ThreadLocalRef(_) => self.check_op(ops::ThreadLocalAccess),
-            Rvalue::ContextRef(_, _, _) => todo!(),
+            Rvalue::ContextRef(_) => todo!(),
 
             Rvalue::Use(_)
             | Rvalue::CopyForDeref(..)

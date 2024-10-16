@@ -59,8 +59,6 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
 
             debug!("creating temp {:?} with block_context: {:?}", local_decl, this.block_context);
             let local_info = match expr.kind {
-                // We don't tag `ExprKind::ContextRef` as a `LocalInfo::ContextRef` because the
-                // `Rvalue` is actually a borrow of it!
                 ExprKind::StaticRef { def_id, .. } => {
                     assert!(!this.tcx.is_thread_local_static(def_id));
                     LocalInfo::StaticRef { def_id, is_thread_local: false }

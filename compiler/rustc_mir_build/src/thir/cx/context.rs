@@ -1,89 +1,3 @@
-//! By this point, we have full type information in our IR so there's no point deferring
-//! this discussion: we need to determine the mutability of our context borrow!
-//!
-//! That if, if we write:
-//!
-//! ```rust,ignore
-//! #[context]
-//! static MY_CX: Vec<u32>;
-//!
-//! fn demo() use MY_CX {
-//!     MY_CX.len();
-//!     MY_CX.clear();
-//! }
-//! ```
-//!
-//! ...the first line should reflect the fact that `MY_CX` is being immutably borrowed
-//! while the second line should reflect the fact that `MY_CX` is being mutably borrowed.
-//!
-//! If we treated context items as if they were `ExprKind::VarRef`s, we'd have to
-//! duplicate the logic used to invalid moves out of references. Instead, it's much
-//! nicer to desugar this as an expression producing some kind of reference to our
-//! context item (à la `ExprKind::ThreadLocalRef`) and dereference that.
-//!
-//! This then leaves an important question: what type do we give the "dereferencee?"
-//!
-//! We have two options:
-//!
-//! 1. We could determine the required mutability for the reference here and now like
-//!    we do when desugaring overloaded dereferences to their UFCS form.
-//!
-//! 2. We could produce a mutable raw pointer and create an exemption for immediate
-//!    dereferences of the pointer during THIR safety checking.
-//!
-//! The former has the advantage of making it really easy to detect which objects'
-//! lifetimes depend upon which borrows of which context items: just find the lifetimes
-//! of the references produced by these operations. However, to do this type of early
-//! detection, we'd have to modify the type checker or the THIR lowering logic.
-//!
-//! The latter makes THIR generation really easy. However, if we choose this strategy,
-//! we now get ourselves into a new and exciting issue: how will MIR passes learn
-//! about the contextual borrow? `expr_as_place` works expression by expression so we
-//! wouldn't know about the way in which the pointer is being borrowed until later.
-//! If `Context` path expressions were resolved as `ExprKind::ContextRef`s with type
-//! `*mut T`, the generated MIR would basically have to look something like this:
-//!
-//! ```rust,ignore
-//! #[context]
-//! static MY_CTX: Vec<u32>;
-//!
-//! fn my_demo() {
-//!     let borrow = unsafe { &mut MY_CTX };
-//! }
-//! ```
-//!
-//! ```rust,ignore
-//! // WARNING: This output format is intended for human consumers only
-//! // and is subject to change without notice. Knock yourself out.
-//! fn my_demo() -> () {
-//!     let mut _0: ();
-//!     let mut _1: &mut std::vec::Vec<u32>;
-//!     let mut _2: *mut std::vec::Vec<u32>;
-//!     scope 1 {
-//!         debug borrow => _1;
-//!     }
-//!
-//!     bb0: {
-//!         _2 = &/*ctx*/ mut MY_CTX;
-//!         _1 = &mut (*_2);
-//!         return;
-//!     }
-//! }
-//! ```
-//!
-//! Detecting that `_1` is actually borrowing a context item would require us to know
-//! that `_2`'s pointer actually came from an `Rvalue::ContextRef`, which is impossible
-//! to figure out generally without special-casing this exact codegen pattern or
-//! introducing a new kind of pointer. Yuck!
-//!
-//! Our only other option to avoid modifying the type checker is to treat `ExprKind::ContextRef`
-//! as an actual place. This would work elegantly because we'd wouldn't have to erase
-//! the place into a raw pointer during either THIR lowering or MIR lowering but, in
-//! order to accomplish this, we'd need to make the MIR's `Place` type accept context
-//! items as the place's base, which seems like an unnecessarily large refactor.
-//!
-//! Anyways, that's why we resolve the borrow kind of context places so early.
-
 use std::mem;
 
 use rustc_ast::Mutability;
@@ -103,7 +17,7 @@ impl<'tcx> Cx<'tcx> {
         id: DefId,
     ) -> ExprKind<'tcx> {
         let kind = ExprKind::ContextRef(id, Mutability::Not);
-        let ty = self.tcx.context_ptr_ty(id, Mutability::Not, self.tcx.lifetimes.re_erased);
+        let ty = self.tcx.context_ref_ty(id, Mutability::Not, self.tcx.lifetimes.re_erased);
         let temp_lifetime = self
             .rvalue_scopes
             .temporary_scope(self.region_scope_tree, expr.hir_id.local_id);
@@ -290,7 +204,7 @@ impl<'tcx> Cx<'tcx> {
             ContextRef(id, mutbl) => {
                 if rvalue_mut.is_mut() {
                     *mutbl = Mutability::Mut;
-                    expr.ty = self.tcx.context_ptr_ty(
+                    expr.ty = self.tcx.context_ref_ty(
                         *id,
                         Mutability::Mut,
                         self.tcx.lifetimes.re_erased,

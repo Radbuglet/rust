@@ -657,10 +657,7 @@ macro_rules! make_mir_visitor {
                         self.visit_ty_const($(&$mutability)? *ct, location);
                     }
 
-                    Rvalue::ThreadLocalRef(_) => {}
-                    Rvalue::ContextRef(r, _, _) => {
-                        self.visit_region($(& $mutability)? *r, location);
-                    }
+                    Rvalue::ThreadLocalRef(_) | Rvalue::ContextRef(_) => {}
 
                     Rvalue::Ref(r, bk, path) => {
                         self.visit_region($(& $mutability)? *r, location);

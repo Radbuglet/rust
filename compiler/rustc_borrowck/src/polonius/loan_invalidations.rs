@@ -284,8 +284,7 @@ impl<'a, 'tcx> LoanInvalidationsGenerator<'a, 'tcx> {
                 self.access_place(location, place, access_kind, LocalMutationIsAllowed::No);
             }
 
-            Rvalue::ThreadLocalRef(_) => {}
-            Rvalue::ContextRef(_, _, _) => {},
+            Rvalue::ThreadLocalRef(_) | Rvalue::ContextRef(_) => {}
 
             Rvalue::Use(operand)
             | Rvalue::Repeat(operand, _)
