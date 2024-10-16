@@ -19,6 +19,8 @@ use tracing::instrument;
 use crate::thir::pattern::pat_from_hir;
 use crate::thir::util::UserAnnotatedTyHelpers;
 
+use self::context::ContextBindTracker;
+
 pub(crate) fn thir_body(
     tcx: TyCtxt<'_>,
     owner_def: LocalDefId,
@@ -30,7 +32,7 @@ pub(crate) fn thir_body(
         return Err(reported);
     }
     let expr = cx.mirror_expr(body.value);
-    cx.adjust_context_mutabilities(expr, Mutability::Not);
+    cx.adjust_context(expr, Mutability::Not);
 
     let owner_id = tcx.local_def_id_to_hir_id(owner_def);
     if let Some(fn_decl) = hir.fn_decl_by_hir_id(owner_id) {
@@ -69,6 +71,9 @@ struct Cx<'tcx> {
 
     /// The `DefId` of the owner of this body.
     body_owner: DefId,
+
+    /// Used in [`context`].
+    context_binds: ContextBindTracker,
 }
 
 impl<'tcx> Cx<'tcx> {
@@ -108,6 +113,7 @@ impl<'tcx> Cx<'tcx> {
                 .attrs(hir_id)
                 .iter()
                 .all(|attr| attr.name_or_empty() != rustc_span::sym::custom_mir),
+            context_binds: ContextBindTracker::default(),
         }
     }
 

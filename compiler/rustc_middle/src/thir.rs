@@ -125,6 +125,12 @@ pub enum LintLevel {
     Explicit(HirId),
 }
 
+#[derive(Copy, Clone, Debug, HashStable)]
+pub enum ContextBinder {
+    FuncEnv,
+    LocalBinder(StmtId),
+}
+
 #[derive(Clone, Debug, HashStable)]
 pub struct Block {
     /// Whether the block itself has a label. Used by `label: {}`
@@ -529,7 +535,11 @@ pub enum ExprKind<'tcx> {
     /// An expression taking a reference to a thread local.
     ThreadLocalRef(DefId),
     /// A reference to a context item.
-    ContextRef(DefId, hir::Mutability),
+    ContextRef {
+        item: DefId,
+        muta: hir::Mutability,
+        binder: ContextBinder,
+    },
     /// A `yield` expression.
     Yield {
         value: ExprId,

@@ -575,7 +575,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             | ExprKind::ZstLiteral { .. }
             | ExprKind::ConstParam { .. }
             | ExprKind::ThreadLocalRef(_)
-            | ExprKind::ContextRef(_, _)
+            | ExprKind::ContextRef { .. }
             | ExprKind::StaticRef { .. }
             | ExprKind::OffsetOf { .. } => {
                 debug_assert!(match Category::of(&expr.kind).unwrap() {

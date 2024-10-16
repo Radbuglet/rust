@@ -267,7 +267,7 @@ fn recurse_build<'tcx>(
         | ExprKind::StaticRef { .. }
         | ExprKind::OffsetOf { .. }
         | ExprKind::ThreadLocalRef(_)
-        | ExprKind::ContextRef(_, _) => {
+        | ExprKind::ContextRef { .. } => {
             error(GenericConstantTooComplexSub::OperationNotSupported(node.span))?
         }
     })
