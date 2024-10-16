@@ -828,7 +828,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                             self.tcx.hir().name(hir_id),
                             callee_ty
                         )),
-                        Res::Def(kind, def_id) if kind.ns() == Some(Namespace::ValueNS) => {
+                        Res::Def(kind, def_id) if kind.primary_ns() == Some(Namespace::ValueNS) => {
                             Some(format!("`{}` defined here", self.tcx.def_path_str(def_id),))
                         }
                         _ => Some(format!("`{callee_ty}` defined here")),

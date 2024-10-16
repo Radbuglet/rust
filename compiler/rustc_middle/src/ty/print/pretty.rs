@@ -3243,7 +3243,7 @@ fn for_each_def(tcx: TyCtxt<'_>, mut collect_fn: impl for<'b> FnMut(&'b Ident, N
         }
 
         let def_id = item.owner_id.to_def_id();
-        let ns = tcx.def_kind(def_id).ns().unwrap_or(Namespace::TypeNS);
+        let ns = tcx.def_kind(def_id).primary_ns().unwrap_or(Namespace::TypeNS);
         collect_fn(&item.ident, ns, def_id);
     }
 
@@ -3276,7 +3276,7 @@ fn for_each_def(tcx: TyCtxt<'_>, mut collect_fn: impl for<'b> FnMut(&'b Ident, N
                 def::Res::Def(DefKind::AssocTy, _) => {}
                 def::Res::Def(DefKind::TyAlias, _) => {}
                 def::Res::Def(defkind, def_id) => {
-                    if let Some(ns) = defkind.ns() {
+                    if let Some(ns) = defkind.primary_ns() {
                         collect_fn(&child.ident, ns, def_id);
                     }
 

@@ -11,6 +11,8 @@ use rustc_span::def_id::{DefId, LocalDefId};
 use rustc_span::hygiene::MacroKind;
 use rustc_span::symbol::kw;
 
+use smallvec::{SmallVec, smallvec};
+
 use crate::definitions::DefPathData;
 use crate::hir;
 
@@ -208,7 +210,7 @@ impl DefKind {
         }
     }
 
-    pub fn ns(&self) -> Option<Namespace> {
+    pub fn ns(&self) -> Option<SmallVec<[Namespace; 2]>> {
         match self {
             DefKind::Mod
             | DefKind::Struct
@@ -220,7 +222,7 @@ impl DefKind {
             | DefKind::ForeignTy
             | DefKind::TraitAlias
             | DefKind::AssocTy
-            | DefKind::TyParam => Some(Namespace::TypeNS),
+            | DefKind::TyParam => Some(smallvec![Namespace::TypeNS]),
 
             DefKind::Fn
             | DefKind::Const
@@ -228,13 +230,12 @@ impl DefKind {
             | DefKind::Static { .. }
             | DefKind::Ctor(..)
             | DefKind::AssocFn
-            | DefKind::AssocConst => Some(Namespace::ValueNS),
+            | DefKind::AssocConst => Some(smallvec![Namespace::ValueNS]),
 
-            DefKind::Macro(..) => Some(Namespace::MacroNS),
+            DefKind::Macro(..) => Some(smallvec![Namespace::MacroNS]),
 
             // In both `TypeNS` and `ValueNS`.
-            // TODO: support that explicitly instead of relying on fallback handling
-            DefKind::Context => None,
+            DefKind::Context => Some(smallvec![Namespace::TypeNS, Namespace::ValueNS]),
 
             // Not namespaced.
             DefKind::AnonConst
@@ -250,6 +251,12 @@ impl DefKind {
             | DefKind::OpaqueTy
             | DefKind::SyntheticCoroutineBody => None,
         }
+    }
+
+    /// Returns the "primary namespace," which is just the namespace that pretty-printers and
+    /// diagnostics should use for the resolution.
+    pub fn primary_ns(&self) -> Option<Namespace> {
+        self.ns().map(|nss| nss[0])
     }
 
     pub fn def_path_data(self, name: Symbol) -> DefPathData {
@@ -782,21 +789,27 @@ impl<Id> Res<Id> {
     }
 
     /// Returns `None` if this is `Res::Err`
-    pub fn ns(&self) -> Option<Namespace> {
+    pub fn ns(&self) -> Option<SmallVec<[Namespace; 2]>> {
         match self {
             Res::Def(kind, ..) => kind.ns(),
             Res::PrimTy(..) | Res::SelfTyParam { .. } | Res::SelfTyAlias { .. } | Res::ToolMod => {
-                Some(Namespace::TypeNS)
+                Some(smallvec![Namespace::TypeNS])
             }
-            Res::SelfCtor(..) | Res::Local(..) => Some(Namespace::ValueNS),
-            Res::NonMacroAttr(..) => Some(Namespace::MacroNS),
+            Res::SelfCtor(..) | Res::Local(..) => Some(smallvec![Namespace::ValueNS]),
+            Res::NonMacroAttr(..) => Some(smallvec![Namespace::MacroNS]),
             Res::Err => None,
         }
     }
 
+    /// Returns the "primary namespace," which is just the namespace that pretty-printers and
+    /// diagnostics should use for the resolution.
+    pub fn primary_ns(&self) -> Option<Namespace> {
+        self.ns().map(|nss| nss[0])
+    }
+
     /// Always returns `true` if `self` is `Res::Err`
     pub fn matches_ns(&self, ns: Namespace) -> bool {
-        self.ns().map_or(true, |actual_ns| actual_ns == ns)
+        self.ns().map_or(true, |actual_nss| actual_nss.contains(&ns))
     }
 
     /// Returns whether such a resolved path can occur in a tuple struct/variant pattern

@@ -631,6 +631,11 @@ impl<'ra> Module<'ra> {
     {
         for (key, name_resolution) in resolver.as_mut().resolutions(self).borrow().iter() {
             if let Some(binding) = name_resolution.borrow().binding {
+                // Filter out duplicates for multi-namespace resolutions.
+                if Some(key.ns) != binding.res().primary_ns() {
+                    continue;
+                }
+
                 f(resolver, key.ident, key.ns, binding);
             }
         }

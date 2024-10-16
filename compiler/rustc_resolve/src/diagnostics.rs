@@ -1772,7 +1772,7 @@ impl<'ra, 'tcx> Resolver<'ra, 'tcx> {
         if let Some((this_res, outer_ident)) = outermost_res {
             let import_suggestions = self.lookup_import_candidates(
                 outer_ident,
-                this_res.ns().unwrap_or(Namespace::TypeNS),
+                this_res.primary_ns().unwrap_or(Namespace::TypeNS),
                 &parent_scope,
                 &|res: Res| res == this_res,
             );
