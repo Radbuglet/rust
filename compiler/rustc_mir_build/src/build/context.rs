@@ -64,13 +64,17 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         block: BasicBlock,
         binder: ContextBinder,
     ) {
+        let Some(binders) = self.context_binders.expect_init().get(&binder) else {
+            return;
+        };
+
         // Initialize the pointer locals
         let source_info = SourceInfo {  // TODO: Update this!
             span: DUMMY_SP,
             scope: self.source_scope,
         };
 
-        for (&item, &item_info) in &self.context_binders.expect_init()[&binder] {
+        for (&item, &item_info) in binders {
             self.cfg.push_assign(
                 block,
                 source_info,
@@ -87,13 +91,17 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
     }
 
     pub(crate) fn reborrow_context_binder_locals(&mut self, block: BasicBlock, binder: ContextBinder) {
+        let Some(binders) = self.context_binders.expect_init().get(&binder) else {
+            return;
+        };
+
         let source_info = SourceInfo {  // TODO: Update this!
             span: DUMMY_SP,
             scope: self.source_scope,
         };
         let deref_proj = self.tcx.mk_place_elems(&[mir::PlaceElem::Deref]);
 
-        for (&item, &item_info) in &self.context_binders.expect_init()[&binder] {
+        for (&item, &item_info) in binders {
             let kind = match item_info.muta() {
                 Mutability::Not => mir::BorrowKind::Shared,
                 Mutability::Mut => mir::BorrowKind::Mut {
