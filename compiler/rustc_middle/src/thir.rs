@@ -238,22 +238,19 @@ pub enum StmtKind<'tcx> {
         span: Span,
     },
     /// A context binding.
-    LetContext {
-        /// The scope for variables bound in this `let`; it covers this and
-        /// all the remaining statements in the block.
-        remainder_scope: region::Scope,
-
-        /// The scope for the bundle initialization itself; might be used as
-        /// lifetime of temporaries.
-        bundle_scope: region::Scope,
-
+    ///
+    /// Unlike `Let`, which could theoretically (although doesn't seem to yet at time of writing)
+    /// support `remainder_scopes` other than those that span the remainder of the parent block,
+    /// `BindContext` only supports these types of scopes and does so implicitly. This is done to
+    /// avoid surprises for users where their context binding scope lasts longer than they had
+    /// anticipated because context binds are more so supposed to reflect lexical name visibility
+    /// more than they are supposed to reflect the lifetime of some local. Enforcing this restriction
+    /// also has the benefit of simplifying analysis.
+    BindContext {
         /// The bundle being bound.
         bundle: ExprId,
 
-        /// The lint level for this `let`.
-        lint_level: LintLevel,
-
-        /// Span of the `let <bundle>` part.
+        /// Span of the `let static <bundle>` part.
         span: Span,
     },
 }

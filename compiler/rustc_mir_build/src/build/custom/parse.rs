@@ -87,7 +87,7 @@ impl<'a, 'tcx> ParseCtxt<'a, 'tcx> {
                 item_description: format!("{kind:?}"),
                 expected: "expression".to_string(),
             }),
-            kind @ StmtKind::LetContext { span, .. } => Err(ParseError {
+            kind @ StmtKind::BindContext { span, .. } => Err(ParseError {
                 span: *span,
                 item_description: format!("{kind:?}"),
                 expected: "expression".to_string(),
@@ -235,7 +235,7 @@ impl<'a, 'tcx> ParseCtxt<'a, 'tcx> {
         for stmt in stmts {
             let stmt = &self.thir[stmt];
             let expr = match stmt.kind {
-                StmtKind::Let { span, .. } | StmtKind::LetContext { span, .. } => {
+                StmtKind::Let { span, .. } | StmtKind::BindContext { span, .. } => {
                     return Err(ParseError {
                         span,
                         item_description: format!("{:?}", stmt),
@@ -281,7 +281,7 @@ impl<'a, 'tcx> ParseCtxt<'a, 'tcx> {
     fn parse_let_statement(&mut self, stmt_id: StmtId) -> PResult<(LocalVarId, Ty<'tcx>, Span)> {
         let pattern = match &self.thir[stmt_id].kind {
             StmtKind::Let { pattern, .. } => pattern,
-            kind @ StmtKind::LetContext { span, .. } => {
+            kind @ StmtKind::BindContext { span, .. } => {
                 return Err(ParseError {
                     span: *span,
                     item_description: format!("{:?}", kind),

@@ -164,7 +164,7 @@ impl<'a, 'tcx> ParseCtxt<'a, 'tcx> {
         let stmt = &self.thir[stmt];
         let span = match stmt.kind {
             StmtKind::Expr { expr, .. } => self.thir[expr].span,
-            StmtKind::Let { span, .. } | StmtKind::LetContext { span, .. } => span,
+            StmtKind::Let { span, .. } | StmtKind::BindContext { span, .. } => span,
         };
         ParseError {
             span,
