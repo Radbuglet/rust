@@ -199,11 +199,8 @@ pub fn walk_stmt<'thir, 'tcx: 'thir, V: Visitor<'thir, 'tcx>>(
                 visitor.visit_block(&visitor.thir()[*block])
             }
         }
-        StmtKind::LetContext {
-            remainder_scope: _,
-            bundle_scope: _,
+        StmtKind::BindContext {
             bundle,
-            lint_level: _,
             span: _,
         } => {
             visitor.visit_expr(&visitor.thir()[*bundle]);

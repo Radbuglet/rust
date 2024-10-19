@@ -13,8 +13,6 @@ use rustc_data_structures::fx::FxHashMap;
 
 use super::Cx;
 
-// We have two major of scopes: the regular `region::Scope` assigned to our `LetContext` statement
-// and the one we derived from this graph. We expect these to be the same.
 #[derive(Default)]
 pub(crate) struct ContextBindTracker {
     curr_local_binders: FxHashMap<DefId, StmtId>,
@@ -39,7 +37,7 @@ impl ContextBindTracker {
         }
     }
 
-    #[expect(unused)]  // TODO: We'll use this once `LetContext` is properly handled.``
+    #[expect(unused)]  // TODO: We'll use this once `BindContext` is properly handled.
     fn bind(&mut self, item: DefId, stmt: StmtId) {
         let old_binder = match self.curr_local_binders.entry(item) {
             Entry::Occupied(mut entry) => ContextBinder::LocalBinder(entry.insert(stmt)),
@@ -280,6 +278,8 @@ impl<'tcx> Cx<'tcx> {
     fn adjust_context_block(&mut self, id: BlockId) {
         let block = mem::replace(&mut self.thir.blocks[id], dummy_block());
 
+        let cx_bind_scope = self.context_binds.push_scope();
+
         for &stmt in &block.stmts {
             self.adjust_context_stmt(stmt);
         }
@@ -287,6 +287,8 @@ impl<'tcx> Cx<'tcx> {
         if let Some(expr) = block.expr {
             self.adjust_context(expr, Mutability::Not);
         }
+
+        self.context_binds.pop_scope(cx_bind_scope);
 
         self.thir.blocks[id] = block;
     }
@@ -315,17 +317,12 @@ impl<'tcx> Cx<'tcx> {
                     self.adjust_context_block(else_block);
                 }
             }
-            StmtKind::LetContext {
-                remainder_scope: _,
-                bundle_scope: _,
+            StmtKind::BindContext {
                 bundle,
-                lint_level: _,
                 span: _,
             } => {
-                let scope = self.context_binds.push_scope();
                 // TODO: Introduce binds
                 self.adjust_context(*bundle, Mutability::Not);
-                self.context_binds.pop_scope(scope);
             }
         }
 

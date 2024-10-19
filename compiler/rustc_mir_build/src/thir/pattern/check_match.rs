@@ -176,10 +176,8 @@ impl<'p, 'tcx> Visitor<'p, 'tcx> for MatchVisitor<'p, 'tcx> {
                     visit::walk_stmt(this, stmt);
                 });
             }
-            StmtKind::LetContext { lint_level, .. } => {
-                self.with_lint_level(lint_level, |this| {
-                    visit::walk_stmt(this, stmt);
-                });
+            StmtKind::BindContext { .. } => {
+                visit::walk_stmt(self, stmt);
             }
             StmtKind::Expr { .. } => {
                 visit::walk_stmt(self, stmt);
