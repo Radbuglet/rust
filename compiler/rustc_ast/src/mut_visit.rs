@@ -226,6 +226,10 @@ pub trait MutVisitor: Sized {
         walk_local(self, l);
     }
 
+    fn visit_bind_context(&mut self, b: &mut P<BindContext>) {
+        walk_bind_context(self, b);
+    }
+
     fn visit_mac_call(&mut self, mac: &mut MacCall) {
         walk_mac(self, mac);
     }
@@ -628,6 +632,24 @@ fn walk_local<T: MutVisitor>(vis: &mut T, local: &mut P<Local>) {
     visit_lazy_tts(vis, tokens);
     visit_opt(colon_sp, |sp| vis.visit_span(sp));
     vis.visit_span(span);
+}
+
+fn walk_bind_context<T: MutVisitor>(vis: &mut T, bind: &mut P<BindContext>) {
+    let BindContext { id, kind, span, attrs, tokens } = bind.deref_mut();
+    vis.visit_id(id);
+    match kind {
+        BindContextKind::Single(path_id, path, expr) => {
+            vis.visit_id(path_id);
+            vis.visit_path(path);
+            vis.visit_expr(expr);
+        }
+        BindContextKind::Bundle(expr) => {
+            vis.visit_expr(expr);
+        }
+    }
+    vis.visit_span(span);
+    visit_attrs(vis, attrs);
+    visit_lazy_tts(vis, tokens);
 }
 
 fn walk_attribute<T: MutVisitor>(vis: &mut T, attr: &mut Attribute) {
@@ -1653,6 +1675,10 @@ fn walk_flat_map_stmt_kind<T: MutVisitor>(vis: &mut T, kind: StmtKind) -> SmallV
         StmtKind::Let(mut local) => smallvec![StmtKind::Let({
             vis.visit_local(&mut local);
             local
+        })],
+        StmtKind::BindContext(mut bind) => smallvec![StmtKind::BindContext({
+            vis.visit_bind_context(&mut bind);
+            bind
         })],
         StmtKind::Item(item) => vis.flat_map_item(item).into_iter().map(StmtKind::Item).collect(),
         StmtKind::Expr(expr) => vis.filter_map_expr(expr).into_iter().map(StmtKind::Expr).collect(),

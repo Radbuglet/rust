@@ -40,6 +40,7 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                     let span = self.lower_span(s.span);
                     stmts.push(hir::Stmt { hir_id, kind, span });
                 }
+                StmtKind::BindContext(_bind) => todo!(),
                 StmtKind::Item(it) => {
                     stmts.extend(self.lower_item_ref(it).into_iter().enumerate().map(
                         |(i, item_id)| {

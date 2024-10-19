@@ -147,6 +147,9 @@ pub trait Visitor<'ast>: Sized {
     fn visit_local(&mut self, l: &'ast Local) -> Self::Result {
         walk_local(self, l)
     }
+    fn visit_bind_context(&mut self, b: &'ast BindContext) -> Self::Result {
+        walk_bind_context(self, b)
+    }
     fn visit_block(&mut self, b: &'ast Block) -> Self::Result {
         walk_block(self, b)
     }
@@ -312,6 +315,21 @@ pub fn walk_local<'a, V: Visitor<'a>>(visitor: &mut V, local: &'a Local) -> V::R
     if let Some((init, els)) = kind.init_else_opt() {
         try_visit!(visitor.visit_expr(init));
         visit_opt!(visitor, visit_block, els);
+    }
+    V::Result::output()
+}
+
+pub fn walk_bind_context<'a, V: Visitor<'a>>(visitor: &mut V, bind: &'a BindContext) -> V::Result {
+    let BindContext { id: _, kind, span: _, attrs, tokens: _ } = bind;
+    walk_list!(visitor, visit_attribute, attrs);
+    match kind {
+        BindContextKind::Single(path_id, path, expr) => {
+            try_visit!(visitor.visit_path(path, *path_id));
+            try_visit!(visitor.visit_expr(expr));
+        }
+        BindContextKind::Bundle(expr) => {
+            try_visit!(visitor.visit_expr(expr));
+        }
     }
     V::Result::output()
 }
@@ -952,6 +970,7 @@ pub fn walk_stmt<'a, V: Visitor<'a>>(visitor: &mut V, statement: &'a Stmt) -> V:
     let Stmt { id: _, kind, span: _ } = statement;
     match kind {
         StmtKind::Let(local) => try_visit!(visitor.visit_local(local)),
+        StmtKind::BindContext(bind) => try_visit!(visitor.visit_bind_context(bind)),
         StmtKind::Item(item) => try_visit!(visitor.visit_item(item)),
         StmtKind::Expr(expr) | StmtKind::Semi(expr) => try_visit!(visitor.visit_expr(expr)),
         StmtKind::Empty => {}

@@ -1035,6 +1035,8 @@ impl Stmt {
 pub enum StmtKind {
     /// A local (let) binding.
     Let(P<Local>),
+    /// A context (let static) binding.
+    BindContext(P<BindContext>),
     /// An item definition.
     Item(P<Item>),
     /// Expr without trailing semi-colon.
@@ -1109,6 +1111,28 @@ impl LocalKind {
             Self::InitElse(init, els) => Some((init, Some(els))),
         }
     }
+}
+
+/// `BindContext` represents a `let static` statement, e.g., `let static <bundle expr>;` or
+/// `let static <path> = <expr>;`.
+#[derive(Clone, Encodable, Decodable, Debug)]
+pub struct BindContext {
+    pub id: NodeId,
+    pub kind: BindContextKind,
+    pub span: Span,
+    pub attrs: AttrVec,
+    pub tokens: Option<LazyAttrTokenStream>,
+}
+
+#[derive(Clone, Encodable, Decodable, Debug)]
+pub enum BindContextKind {
+    /// Bind single.
+    /// Example: `let static path::to::ITEM = my_expr.here();`
+    Single(NodeId, P<Path>, P<Expr>),
+    /// Bind bundle.
+    /// Example: `let static my_expr.here();`
+    Bundle(P<Expr>),
+    
 }
 
 /// An arm of a 'match'.

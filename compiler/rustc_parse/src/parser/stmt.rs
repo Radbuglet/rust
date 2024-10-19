@@ -72,13 +72,27 @@ impl<'a> Parser<'a> {
         let stmt = if self.token.is_keyword(kw::Let) {
             self.collect_tokens(None, attrs, force_collect, |this, attrs| {
                 this.expect_keyword(kw::Let)?;
-                let local = this.parse_local(attrs)?;
-                let trailing = Trailing::from(capture_semi && this.token == token::Semi);
-                Ok((
-                    this.mk_stmt(lo.to(this.prev_token.span), StmtKind::Let(local)),
-                    trailing,
-                    UsePreAttrPos::No,
-                ))
+
+                if this.token.is_keyword(kw::Static) {
+                    this.expect_keyword(kw::Static)?;
+
+                    let bind = this.parse_context_bind(attrs)?;
+                    let trailing = Trailing::from(capture_semi && this.token == token::Semi);
+
+                    Ok((
+                        this.mk_stmt(lo.to(this.prev_token.span), StmtKind::BindContext(bind)),
+                        trailing,
+                        UsePreAttrPos::No,
+                    ))
+                } else {
+                    let local = this.parse_local(attrs)?;
+                    let trailing = Trailing::from(capture_semi && this.token == token::Semi);
+                    Ok((
+                        this.mk_stmt(lo.to(this.prev_token.span), StmtKind::Let(local)),
+                        trailing,
+                        UsePreAttrPos::No,
+                    ))
+                }
             })?
         } else if self.is_kw_followed_by_ident(kw::Mut) && self.may_recover() {
             self.recover_stmt_local_after_let(
@@ -397,6 +411,57 @@ impl<'a> Parser<'a> {
             attrs,
             tokens: None,
         }))
+    }
+
+    fn parse_context_bind(&mut self, attrs: AttrVec) -> PResult<'a, P<ast::BindContext>> {
+        let lo = self.prev_token.span;
+        let expr = self.parse_expr()?;
+        let hi = if self.token == token::Semi { self.token.span } else { self.prev_token.span };
+        let kind = self.determine_bind_context_kind(expr);
+
+        Ok(P(ast::BindContext {
+            id: DUMMY_NODE_ID,
+            kind,
+            span: lo.to(hi),
+            attrs,
+            tokens: None,
+        }))
+    }
+
+    fn determine_bind_context_kind(&mut self, expr: P<Expr>) -> ast::BindContextKind {
+        match &expr.kind {
+            ast::ExprKind::Assign(lhs, _rhs, _span) => {
+                // Ensure that LHS is a path.
+                match &lhs.kind {
+                    ast::ExprKind::Path(None, _path) => {},
+                    _ => {
+                        self.dcx().emit_err(errors::ContextBindBadAssignLhs {
+                            span: lhs.span,
+                        });
+
+                        // Treat as bundle and continue parsing.
+                        return ast::BindContextKind::Bundle(expr);
+                    },
+                };
+
+                // If so, produce a `BindContextKind::Single`.
+                let (path_id, path, rhs) = {
+                    let ast::ExprKind::Assign(lhs, rhs, _span) = expr.into_inner().kind else {
+                        unreachable!();
+                    };
+
+                    let lhs = lhs.into_inner();
+                    let ast::ExprKind::Path(None, path) = lhs.kind else {
+                        unreachable!();
+                    };
+
+                    (lhs.id, path, rhs)
+                };
+
+                ast::BindContextKind::Single(path_id, P(path), rhs)
+            }
+            _ => ast::BindContextKind::Bundle(expr),
+        }
     }
 
     fn check_let_else_init_bool_expr(&self, init: &ast::Expr) {
@@ -830,7 +895,11 @@ impl<'a> Parser<'a> {
                 }
                 eat_semi = false;
             }
-            StmtKind::Empty | StmtKind::Item(_) | StmtKind::Let(_) | StmtKind::Semi(_) => {
+            StmtKind::BindContext(_bind) if let Err(e) = self.expect_semi() => {
+                // TODO: Try to recover?
+                return Err(e);
+            }
+            StmtKind::Empty | StmtKind::Item(_) | StmtKind::Let(_) | StmtKind::BindContext(_) | StmtKind::Semi(_) => {
                 eat_semi = false
             }
         }

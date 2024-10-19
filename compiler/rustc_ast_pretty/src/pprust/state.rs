@@ -1294,6 +1294,29 @@ impl<'a> State<'a> {
                 self.word(";");
                 self.end(); // `let` ibox
             }
+            ast::StmtKind::BindContext(bind) => {
+                self.print_outer_attributes(&bind.attrs);
+                self.space_if_not_bol();
+                self.ibox(INDENT_UNIT);
+                self.word_nbsp("let");
+                self.word_space("static");
+
+                match &bind.kind {
+                    ast::BindContextKind::Single(_path_id, path, expr) => {
+                        self.ibox(INDENT_UNIT);
+                        self.print_path(path, false, 0);
+                        self.end();
+
+                        self.word_space("=");
+                        self.print_expr(expr, FixupContext::default());
+                    }
+                    ast::BindContextKind::Bundle(expr) => {
+                        self.print_expr(expr, FixupContext::default());
+                    }
+                }
+                self.word(";");
+                self.end(); // `let` ibox
+            }
             ast::StmtKind::Item(item) => self.print_item(item),
             ast::StmtKind::Expr(expr) => {
                 self.space_if_not_bol();

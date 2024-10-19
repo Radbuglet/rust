@@ -935,3 +935,5 @@ parse_where_generics = generic parameters on `where` clauses are reserved for fu
 
 parse_zero_chars = empty character literal
     .label = {parse_zero_chars}
+
+parse_context_bind_bad_assign_lhs = must be a path to a context item
