@@ -320,17 +320,10 @@ pub fn walk_local<'a, V: Visitor<'a>>(visitor: &mut V, local: &'a Local) -> V::R
 }
 
 pub fn walk_bind_context<'a, V: Visitor<'a>>(visitor: &mut V, bind: &'a BindContext) -> V::Result {
-    let BindContext { id: _, kind, span: _, attrs, tokens: _ } = bind;
+    let BindContext { id: _, ty, expr, span: _, attrs, tokens: _ } = bind;
     walk_list!(visitor, visit_attribute, attrs);
-    match kind {
-        BindContextKind::Single(path_id, path, expr) => {
-            try_visit!(visitor.visit_path(path, *path_id));
-            try_visit!(visitor.visit_expr(expr));
-        }
-        BindContextKind::Bundle(expr) => {
-            try_visit!(visitor.visit_expr(expr));
-        }
-    }
+    try_visit!(visitor.visit_ty(ty));
+    try_visit!(visitor.visit_expr(expr));
     V::Result::output()
 }
 

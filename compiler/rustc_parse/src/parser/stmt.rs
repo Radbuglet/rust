@@ -415,53 +415,23 @@ impl<'a> Parser<'a> {
 
     fn parse_context_bind(&mut self, attrs: AttrVec) -> PResult<'a, P<ast::BindContext>> {
         let lo = self.prev_token.span;
+        let ty = self.parse_ty()?;
+        self.expect(&TokenKind::Eq)?;
         let expr = self.parse_expr()?;
         let hi = if self.token == token::Semi { self.token.span } else { self.prev_token.span };
-        let kind = self.determine_bind_context_kind(expr);
+
+        let span = lo.to(hi);
+
+        self.psess.gated_spans.gate(sym::context_injection, span);
 
         Ok(P(ast::BindContext {
             id: DUMMY_NODE_ID,
-            kind,
-            span: lo.to(hi),
+            span,
+            ty,
+            expr,
             attrs,
             tokens: None,
         }))
-    }
-
-    fn determine_bind_context_kind(&mut self, expr: P<Expr>) -> ast::BindContextKind {
-        match &expr.kind {
-            ast::ExprKind::Assign(lhs, _rhs, _span) => {
-                // Ensure that LHS is a path.
-                match &lhs.kind {
-                    ast::ExprKind::Path(None, _path) => {},
-                    _ => {
-                        self.dcx().emit_err(errors::ContextBindBadAssignLhs {
-                            span: lhs.span,
-                        });
-
-                        // Treat as bundle and continue parsing.
-                        return ast::BindContextKind::Bundle(expr);
-                    },
-                };
-
-                // If so, produce a `BindContextKind::Single`.
-                let (path_id, path, rhs) = {
-                    let ast::ExprKind::Assign(lhs, rhs, _span) = expr.into_inner().kind else {
-                        unreachable!();
-                    };
-
-                    let lhs = lhs.into_inner();
-                    let ast::ExprKind::Path(None, path) = lhs.kind else {
-                        unreachable!();
-                    };
-
-                    (lhs.id, path, rhs)
-                };
-
-                ast::BindContextKind::Single(path_id, P(path), rhs)
-            }
-            _ => ast::BindContextKind::Bundle(expr),
-        }
     }
 
     fn check_let_else_init_bool_expr(&self, init: &ast::Expr) {

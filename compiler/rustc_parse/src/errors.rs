@@ -3156,13 +3156,6 @@ pub(crate) struct UnknownBuiltinConstruct {
 }
 
 #[derive(Diagnostic)]
-#[diag(parse_context_bind_bad_assign_lhs)]
-pub(crate) struct ContextBindBadAssignLhs {
-    #[primary_span]
-    pub span: Span,
-}
-
-#[derive(Diagnostic)]
 #[diag(parse_expected_builtin_ident)]
 pub(crate) struct ExpectedBuiltinIdent {
     #[primary_span]

@@ -1118,21 +1118,11 @@ impl LocalKind {
 #[derive(Clone, Encodable, Decodable, Debug)]
 pub struct BindContext {
     pub id: NodeId,
-    pub kind: BindContextKind,
     pub span: Span,
+    pub ty: P<Ty>,
+    pub expr: P<Expr>,
     pub attrs: AttrVec,
     pub tokens: Option<LazyAttrTokenStream>,
-}
-
-#[derive(Clone, Encodable, Decodable, Debug)]
-pub enum BindContextKind {
-    /// Bind single.
-    /// Example: `let static path::to::ITEM = my_expr.here();`
-    Single(NodeId, P<Path>, P<Expr>),
-    /// Bind bundle.
-    /// Example: `let static my_expr.here();`
-    Bundle(P<Expr>),
-    
 }
 
 /// An arm of a 'match'.

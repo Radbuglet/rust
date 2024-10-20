@@ -635,19 +635,11 @@ fn walk_local<T: MutVisitor>(vis: &mut T, local: &mut P<Local>) {
 }
 
 fn walk_bind_context<T: MutVisitor>(vis: &mut T, bind: &mut P<BindContext>) {
-    let BindContext { id, kind, span, attrs, tokens } = bind.deref_mut();
+    let BindContext { id, span, ty, expr, attrs, tokens } = bind.deref_mut();
     vis.visit_id(id);
-    match kind {
-        BindContextKind::Single(path_id, path, expr) => {
-            vis.visit_id(path_id);
-            vis.visit_path(path);
-            vis.visit_expr(expr);
-        }
-        BindContextKind::Bundle(expr) => {
-            vis.visit_expr(expr);
-        }
-    }
     vis.visit_span(span);
+    vis.visit_ty(ty);
+    vis.visit_expr(expr);
     visit_attrs(vis, attrs);
     visit_lazy_tts(vis, tokens);
 }
