@@ -193,6 +193,7 @@ impl<'a, 'tcx> LintVisitor<'a, 'tcx> {
         for stmt in block.stmts {
             match stmt.kind {
                 StmtKind::Let(let_stmt) => self.visit_local(let_stmt),
+                StmtKind::BindContext(_) => todo!(),
                 StmtKind::Item(_) => {}
                 StmtKind::Expr(e) | StmtKind::Semi(e) => self.visit_expr(e),
             }

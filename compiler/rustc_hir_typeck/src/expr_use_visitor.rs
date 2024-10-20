@@ -522,6 +522,8 @@ impl<'tcx, Cx: TypeInformationCtxt<'tcx>, D: Delegate<'tcx>> ExprUseVisitor<'tcx
 
             hir::StmtKind::Let(_) => {}
 
+            hir::StmtKind::BindContext(_) => todo!(),
+
             hir::StmtKind::Item(_) => {
                 // We don't visit nested items in this visitor,
                 // only the fn body we were given.

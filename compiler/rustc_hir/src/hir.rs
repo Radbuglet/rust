@@ -1355,6 +1355,9 @@ pub enum StmtKind<'hir> {
     /// A local (`let`) binding.
     Let(&'hir LetStmt<'hir>),
 
+    /// A context (`let static`) binding.
+    BindContext(&'hir BindContextStmt<'hir>),
+
     /// An item binding.
     Item(ItemId),
 
@@ -1381,6 +1384,15 @@ pub struct LetStmt<'hir> {
     /// desugaring, or `AssignDesugar` if it is the result of a complex
     /// assignment desugaring. Otherwise will be `Normal`.
     pub source: LocalSource,
+}
+
+/// Represents a `let static` statement (i.e., `let static <ty> = <expr>;`).
+#[derive(Debug, Clone, Copy, HashStable_Generic)]
+pub struct BindContextStmt<'hir> {
+    pub ty: &'hir Ty<'hir>,
+    pub expr: &'hir Expr<'hir>,
+    pub hir_id: HirId,
+    pub span: Span,
 }
 
 /// Represents a single arm of a `match` expression, e.g.

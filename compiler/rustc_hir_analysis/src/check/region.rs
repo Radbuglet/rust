@@ -163,7 +163,7 @@ fn resolve_block<'tcx>(visitor: &mut RegionResolutionVisitor<'tcx>, blk: &'tcx h
                     // Don't create scopes for items, since they won't be
                     // lowered to THIR and MIR.
                 }
-                hir::StmtKind::Expr(..) | hir::StmtKind::Semi(..) => visitor.visit_stmt(statement),
+                hir::StmtKind::Expr(..) | hir::StmtKind::Semi(..) | hir::StmtKind::BindContext(..) => visitor.visit_stmt(statement),
             }
         }
         if let Some(tail_expr) = blk.expr {

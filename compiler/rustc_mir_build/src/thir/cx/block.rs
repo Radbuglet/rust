@@ -120,6 +120,7 @@ impl<'tcx> Cx<'tcx> {
                         };
                         Some(self.thir.stmts.push(stmt))
                     }
+                    hir::StmtKind::BindContext(_) => todo!(),
                 }
             })
             .collect()

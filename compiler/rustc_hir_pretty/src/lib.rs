@@ -885,11 +885,30 @@ impl<'a> State<'a> {
         self.end()
     }
 
+    fn print_bind_context(&mut self, bind: &hir::BindContextStmt<'_>) {
+        self.space_if_not_bol();
+        self.ibox(INDENT_UNIT);
+        self.word_nbsp("let");
+        self.word_space("static");
+
+        self.print_type(&bind.ty);
+
+        self.ibox(INDENT_UNIT);
+        self.word_space("=");
+        self.print_expr(&bind.expr);
+        self.end();
+
+        self.end();
+    }
+
     fn print_stmt(&mut self, st: &hir::Stmt<'_>) {
         self.maybe_print_comment(st.span.lo());
         match st.kind {
             hir::StmtKind::Let(loc) => {
                 self.print_local(loc.init, loc.els, |this| this.print_local_decl(loc));
+            }
+            hir::StmtKind::BindContext(bind) => {
+                self.print_bind_context(bind);
             }
             hir::StmtKind::Item(item) => self.ann.nested(self, Nested::Item(item)),
             hir::StmtKind::Expr(expr) => {
@@ -2333,6 +2352,7 @@ fn expr_requires_semi_to_be_stmt(e: &hir::Expr<'_>) -> bool {
 fn stmt_ends_with_semi(stmt: &hir::StmtKind<'_>) -> bool {
     match *stmt {
         hir::StmtKind::Let(_) => true,
+        hir::StmtKind::BindContext(_) => true,
         hir::StmtKind::Item(_) => false,
         hir::StmtKind::Expr(e) => expr_requires_semi_to_be_stmt(e),
         hir::StmtKind::Semi(..) => false,

@@ -324,6 +324,9 @@ pub trait Visitor<'v>: Sized {
     fn visit_local(&mut self, l: &'v LetStmt<'v>) -> Self::Result {
         walk_local(self, l)
     }
+    fn visit_bind_context(&mut self, b: &'v BindContextStmt<'v>) -> Self::Result {
+        walk_bind_context(self, b)
+    }
     fn visit_block(&mut self, b: &'v Block<'v>) -> Self::Result {
         walk_block(self, b)
     }
@@ -638,6 +641,13 @@ pub fn walk_local<'v, V: Visitor<'v>>(visitor: &mut V, local: &'v LetStmt<'v>) -
     V::Result::output()
 }
 
+pub fn walk_bind_context<'v, V: Visitor<'v>>(visitor: &mut V, bind: &'v BindContextStmt<'v>) -> V::Result {
+    try_visit!(visitor.visit_expr(bind.expr));
+    try_visit!(visitor.visit_ty(bind.ty));
+    try_visit!(visitor.visit_id(bind.hir_id));
+    V::Result::output()
+}
+
 pub fn walk_block<'v, V: Visitor<'v>>(visitor: &mut V, block: &'v Block<'v>) -> V::Result {
     try_visit!(visitor.visit_id(block.hir_id));
     walk_list!(visitor, visit_stmt, block.stmts);
@@ -649,6 +659,7 @@ pub fn walk_stmt<'v, V: Visitor<'v>>(visitor: &mut V, statement: &'v Stmt<'v>) -
     try_visit!(visitor.visit_id(statement.hir_id));
     match statement.kind {
         StmtKind::Let(ref local) => visitor.visit_local(local),
+        StmtKind::BindContext(ref bind) => visitor.visit_bind_context(bind),
         StmtKind::Item(item) => visitor.visit_nested_item(item),
         StmtKind::Expr(ref expression) | StmtKind::Semi(ref expression) => {
             visitor.visit_expr(expression)

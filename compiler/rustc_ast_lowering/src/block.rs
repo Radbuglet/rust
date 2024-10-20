@@ -40,7 +40,22 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                     let span = self.lower_span(s.span);
                     stmts.push(hir::Stmt { hir_id, kind, span });
                 }
-                StmtKind::BindContext(_bind) => todo!(),
+                StmtKind::BindContext(bind) => {
+                    let hir_id = self.lower_node_id(bind.id);
+                    let expr = self.lower_expr(&bind.expr);
+                    let ty = self.lower_ty(
+                        &bind.ty,
+                        ImplTraitContext::Disallowed(ImplTraitPosition::Variable),
+                    );
+                    let span = self.lower_span(bind.span);
+                    let kind = hir::StmtKind::BindContext(self.arena.alloc(hir::BindContextStmt {
+                        hir_id,
+                        expr,
+                        ty,
+                        span,
+                    }));
+                    stmts.push(hir::Stmt { hir_id, kind, span });
+                },
                 StmtKind::Item(it) => {
                     stmts.extend(self.lower_item_ref(it).into_iter().enumerate().map(
                         |(i, item_id)| {

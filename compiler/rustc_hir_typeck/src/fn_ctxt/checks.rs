@@ -1747,11 +1747,15 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         }
     }
 
+    fn check_bind_context(&self, _bind: &'tcx hir::BindContextStmt<'tcx>) {
+        todo!();
+    }
+
     fn check_stmt(&self, stmt: &'tcx hir::Stmt<'tcx>) {
         // Don't do all the complex logic below for `DeclItem`.
         match stmt.kind {
             hir::StmtKind::Item(..) => return,
-            hir::StmtKind::Let(..) | hir::StmtKind::Expr(..) | hir::StmtKind::Semi(..) => {}
+            hir::StmtKind::Let(..) | hir::StmtKind::Expr(..) | hir::StmtKind::Semi(..) | hir::StmtKind::BindContext(..) => {}
         }
 
         self.warn_if_unreachable(stmt.hir_id, stmt.span, "statement");
@@ -1763,6 +1767,9 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             hir::StmtKind::Let(l) => {
                 self.check_decl_local(l);
             }
+            hir::StmtKind::BindContext(b) => {
+                self.check_bind_context(b);
+            },
             // Ignore for now.
             hir::StmtKind::Item(_) => {}
             hir::StmtKind::Expr(ref expr) => {
