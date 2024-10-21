@@ -415,9 +415,19 @@ impl<'a> Parser<'a> {
 
     fn parse_context_bind(&mut self, attrs: AttrVec) -> PResult<'a, P<ast::BindContext>> {
         let lo = self.prev_token.span;
-        let ty = self.parse_ty()?;
-        self.expect(&TokenKind::Eq)?;
-        let expr = self.parse_expr()?;
+        let kind = if self.token.is_range_separator() {
+            self.expect(&TokenKind::DotDot)?;
+            let expr = self.parse_expr()?;
+
+            ast::BindContextKind::Bundle(expr)
+        } else {
+            let ty = self.parse_ty()?;
+            self.expect(&TokenKind::Eq)?;
+            let expr = self.parse_expr()?;
+
+            ast::BindContextKind::Single(ty, expr)
+        };
+
         let hi = if self.token == token::Semi { self.token.span } else { self.prev_token.span };
 
         let span = lo.to(hi);
@@ -427,8 +437,7 @@ impl<'a> Parser<'a> {
         Ok(P(ast::BindContext {
             id: DUMMY_NODE_ID,
             span,
-            ty,
-            expr,
+            kind,
             attrs,
             tokens: None,
         }))

@@ -1,4 +1,4 @@
-use rustc_ast::{Block, BlockCheckMode, Local, LocalKind, Stmt, StmtKind};
+use rustc_ast::{BindContextKind, Block, BlockCheckMode, Local, LocalKind, Stmt, StmtKind};
 use rustc_hir as hir;
 use smallvec::SmallVec;
 
@@ -42,18 +42,30 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                 }
                 StmtKind::BindContext(bind) => {
                     let hir_id = self.lower_node_id(bind.id);
-                    let expr = self.lower_expr(&bind.expr);
-                    let ty = self.lower_ty(
-                        &bind.ty,
-                        ImplTraitContext::Disallowed(ImplTraitPosition::Variable),
-                    );
+
+                    let kind = match &bind.kind {
+                        BindContextKind::Single(ty, expr) => {
+                            let ty = self.lower_ty(ty,
+                                ImplTraitContext::Disallowed(ImplTraitPosition::Variable),
+                            );
+                            let expr = self.lower_expr(expr);
+
+                            hir::BindContextStmtKind::Single(ty, expr)
+                        }
+                        BindContextKind::Bundle(expr) => {
+                            let expr = self.lower_expr(expr);
+
+                            hir::BindContextStmtKind::Bundle(expr)
+                        }
+                    };
+
                     let span = self.lower_span(bind.span);
                     let kind = hir::StmtKind::BindContext(self.arena.alloc(hir::BindContextStmt {
                         hir_id,
-                        expr,
-                        ty,
+                        kind,
                         span,
                     }));
+
                     stmts.push(hir::Stmt { hir_id, kind, span });
                 },
                 StmtKind::Item(it) => {

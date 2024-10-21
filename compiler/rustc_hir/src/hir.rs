@@ -1389,10 +1389,16 @@ pub struct LetStmt<'hir> {
 /// Represents a `let static` statement (i.e., `let static <ty> = <expr>;`).
 #[derive(Debug, Clone, Copy, HashStable_Generic)]
 pub struct BindContextStmt<'hir> {
-    pub ty: &'hir Ty<'hir>,
-    pub expr: &'hir Expr<'hir>,
     pub hir_id: HirId,
     pub span: Span,
+    pub kind: BindContextStmtKind<'hir>,
+}
+
+/// Represents a `let static` statement (i.e., `let static <ty> = <expr>;`).
+#[derive(Debug, Clone, Copy, HashStable_Generic)]
+pub enum BindContextStmtKind<'hir> {
+    Single(&'hir Ty<'hir>, &'hir Expr<'hir>),
+    Bundle(&'hir Expr<'hir>),
 }
 
 /// Represents a single arm of a `match` expression, e.g.

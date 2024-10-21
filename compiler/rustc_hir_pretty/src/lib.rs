@@ -891,12 +891,19 @@ impl<'a> State<'a> {
         self.word_nbsp("let");
         self.word_space("static");
 
-        self.print_type(&bind.ty);
-
-        self.ibox(INDENT_UNIT);
-        self.word_space("=");
-        self.print_expr(&bind.expr);
-        self.end();
+        match bind.kind {
+            hir::BindContextStmtKind::Single(ty, expr) => {
+                self.print_type(ty);
+                self.ibox(INDENT_UNIT);
+                self.word_space("=");
+                self.print_expr(expr);
+                self.end();
+            }
+            hir::BindContextStmtKind::Bundle(expr) => {
+                self.word("..");
+                self.print_expr(expr);
+            }
+        }
 
         self.end();
     }

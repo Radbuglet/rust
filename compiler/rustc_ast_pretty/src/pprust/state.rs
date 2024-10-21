@@ -1300,9 +1300,18 @@ impl<'a> State<'a> {
                 self.ibox(INDENT_UNIT);
                 self.word_nbsp("let");
                 self.word_space("static");
-                self.print_type(&bind.ty);
-                self.word_space("=");
-                self.print_expr(&bind.expr, FixupContext::default());
+
+                match &bind.kind {
+                    ast::BindContextKind::Single(ty, expr) => {
+                        self.print_type(ty);
+                        self.word_space("=");
+                        self.print_expr(expr, FixupContext::default());
+                    }
+                    ast::BindContextKind::Bundle(expr) => {
+                        self.word("..");
+                        self.print_expr(expr, FixupContext::default());
+                    }
+                }
                 self.word(";");
                 self.end(); // `let` ibox
             }

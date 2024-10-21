@@ -1119,10 +1119,15 @@ impl LocalKind {
 pub struct BindContext {
     pub id: NodeId,
     pub span: Span,
-    pub ty: P<Ty>,
-    pub expr: P<Expr>,
+    pub kind: BindContextKind,
     pub attrs: AttrVec,
     pub tokens: Option<LazyAttrTokenStream>,
+}
+
+#[derive(Clone, Encodable, Decodable, Debug)]
+pub enum BindContextKind {
+    Single(P<Ty>, P<Expr>),
+    Bundle(P<Expr>),
 }
 
 /// An arm of a 'match'.
