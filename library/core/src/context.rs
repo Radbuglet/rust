@@ -3,51 +3,36 @@
 
 #[lang = "context_item"]
 #[rustc_deny_explicit_impl(implement_via_object = false)]
-#[unstable(feature = "context_injection", issue = "none")]
-pub trait ContextItem {
-    #[unstable(feature = "context_injection", issue = "none")]
-    type Item: ?Sized;
+pub trait ContextItem: Sized + 'static {
+    type Item: ?Sized + 'static;
 }
 
-#[unstable(feature = "context_injection", issue = "none")]
 pub trait BundleItem {
-    #[unstable(feature = "context_injection", issue = "none")]
     type Item;
-
-    #[unstable(feature = "context_injection", issue = "none")]
     type Context: ContextItem;
 }
 
-#[unstable(feature = "context_injection", issue = "none")]
 impl<'a, T: ContextItem> BundleItem for &'a T {
     type Item = &'a T::Item;
     type Context = T;
 }
 
-#[unstable(feature = "context_injection", issue = "none")]
 impl<'a, T: ContextItem> BundleItem for &'a mut T {
     type Item = &'a mut T::Item;
     type Context = T;
 }
 
-#[unstable(feature = "context_injection", issue = "none")]
 pub trait ContextItemSet {}
 
-#[unstable(feature = "context_injection", issue = "none")]
 pub trait BundleItemSet {
-    #[unstable(feature = "context_injection", issue = "none")]
     type ItemSet;
-
-    #[unstable(feature = "context_injection", issue = "none")]
     type Context: ContextItemSet;
 }
 
 // This blanket impl is safe to write alongside the tuple implementation because no tuple can
 // implement `ContextItem`.
-#[unstable(feature = "context_injection", issue = "none")]
 impl<T: ContextItem> ContextItemSet for T {}
 
-#[unstable(feature = "context_injection", issue = "none")]
 impl<T: BundleItem> BundleItemSet for T {
     type ItemSet = T::Item;
     type Context = T::Context;
@@ -55,10 +40,8 @@ impl<T: BundleItem> BundleItemSet for T {
 
 macro_rules! tuple {
     ($($para:ident)*) => {
-        #[unstable(feature = "context_injection", issue = "none")]
         impl<$($para: ContextItemSet,)*> ContextItemSet for ($($para,)*) {}
 
-        #[unstable(feature = "context_injection", issue = "none")]
         impl<$($para: BundleItemSet,)*> BundleItemSet for ($($para,)*) {
             type ItemSet = ($($para::ItemSet,)*);
             type Context = ($($para::Context,)*);
@@ -74,6 +57,12 @@ macro_rules! tuple {
 
 tuple!(A B C D E F G H I J K L);
 
+#[lang = "bundle"]
 #[derive(Debug)]
-#[unstable(feature = "context_injection", issue = "none")]
 pub struct Bundle<T: BundleItemSet>(T::ItemSet);
+
+impl<T: BundleItemSet> Bundle<T> {
+    pub const fn new(items: T::ItemSet) -> Self {
+        Self(items)
+    }
+}

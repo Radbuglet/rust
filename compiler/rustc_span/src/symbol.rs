@@ -519,6 +519,7 @@ symbols! {
         btreemap_insert,
         btreeset_iter,
         builtin_syntax,
+        bundle,
         c,
         c_str,
         c_str_literals,

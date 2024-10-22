@@ -120,7 +120,23 @@ impl<'tcx> Cx<'tcx> {
                         };
                         Some(self.thir.stmts.push(stmt))
                     }
-                    hir::StmtKind::BindContext(_) => todo!(),
+                    hir::StmtKind::BindContext(bind) => {
+                        let bundle = match bind.kind {
+                            hir::BindContextStmtKind::Single(_ty, _expr) => {
+                                todo!();
+                            }
+                            hir::BindContextStmtKind::Bundle(expr) => {
+                                self.mirror_expr(expr)
+                            }
+                        };
+                        let stmt = Stmt {
+                            kind: StmtKind::BindContext {
+                                bundle,
+                                span: bind.span,
+                            },
+                        };
+                        Some(self.thir.stmts.push(stmt))
+                    },
                 }
             })
             .collect()
