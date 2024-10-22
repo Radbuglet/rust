@@ -1748,57 +1748,22 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     }
 
     fn check_bind_context(&self, bind: &'tcx hir::BindContextStmt<'tcx>) {
-        match &bind.kind {
-            hir::BindContextStmtKind::Single(ty, expr) => {
-                let expr_ty = self.check_expr_with_needs(expr, Needs::None);
+        let expr = bind.bundle;
+        let expr_ty = self.check_expr_with_needs(expr, Needs::None);
 
-                // TODO: We would like to type-check something equivalent to...
-                //
-                // ```
-                // const fn make_single_item_bundle<Anno, Ref>(val: Ref) -> Bundle<Ref::BundleItem>
-                // where
-                //     Anno: ContextItem,
-                //     Ref: BundleRef,
-                // {
-                //     Bundle::new(val)
-                // }
-                //
-                // trait BundleRef<Ctx: ContextItem> {
-                //     type BundleItem: BundleItem;
-                // }
-                //
-                // impl<'a, Ctx: ContextItem> BundleRef<Ctx> for &'a Ctx::Item {
-                //     type BundleItem = &'a Ctx;
-                // }
-                //
-                // impl<'a, Ctx: ContextItem> BundleRef<Ctx> for &'a mut Ctx::Item {
-                //     type BundleItem = &'a mut Ctx;
-                // }
-                //
-                // // This!
-                // make_single_item_bundle::<ty, _>(expr);
-                // ```
-                let _ = ty;
-                let _ = expr_ty;
-            }
-            hir::BindContextStmtKind::Bundle(expr) => {
-                let expr_ty = self.check_expr_with_needs(expr, Needs::None);
+        let Some(bundle_adt) = self.tcx.lang_items().bundle() else {
+            return;  // TODO: What to do?
+        };
+        let bundle_adt = self.tcx.adt_def(bundle_adt);
 
-                let Some(bundle_adt) = self.tcx.lang_items().bundle() else {
-                    return;  // TODO: What to do?
-                };
-                let bundle_adt = self.tcx.adt_def(bundle_adt);
+        let inf_var = self.next_ty_var(expr.span);
+        let expected_ty = Ty::new_adt(
+            self.tcx,
+            bundle_adt,
+            self.tcx.mk_args(&[inf_var.into()]),
+        );
 
-                let inf_var = self.next_ty_var(expr.span);
-                let expected_ty = Ty::new_adt(
-                    self.tcx,
-                    bundle_adt,
-                    self.tcx.mk_args(&[inf_var.into()]),
-                );
-
-                self.demand_eqtype(expr.span, expected_ty, expr_ty);
-            }
-        }
+        self.demand_eqtype(expr.span, expected_ty, expr_ty);
     }
 
     fn check_stmt(&self, stmt: &'tcx hir::Stmt<'tcx>) {

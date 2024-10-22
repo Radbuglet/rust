@@ -1850,6 +1850,7 @@ symbols! {
         sinf16,
         sinf32,
         sinf64,
+        single_item_bundle_ctor,
         size,
         size_of,
         size_of_val,

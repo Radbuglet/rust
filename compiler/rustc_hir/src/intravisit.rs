@@ -642,15 +642,7 @@ pub fn walk_local<'v, V: Visitor<'v>>(visitor: &mut V, local: &'v LetStmt<'v>) -
 }
 
 pub fn walk_bind_context<'v, V: Visitor<'v>>(visitor: &mut V, bind: &'v BindContextStmt<'v>) -> V::Result {
-    match bind.kind {
-        BindContextStmtKind::Single(ty, expr) => {
-            try_visit!(visitor.visit_expr(expr));
-            try_visit!(visitor.visit_ty(ty));
-        }
-        BindContextStmtKind::Bundle(expr) => {
-            try_visit!(visitor.visit_expr(expr));
-        }
-    }
+    try_visit!(visitor.visit_expr(bind.bundle));
     try_visit!(visitor.visit_id(bind.hir_id));
     V::Result::output()
 }

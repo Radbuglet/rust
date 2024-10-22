@@ -66,3 +66,28 @@ impl<T: BundleItemSet> Bundle<T> {
         Self(items)
     }
 }
+
+mod make_single_item_bundle {
+    use super::*;
+
+    #[lang = "single_item_bundle_ctor"]
+    const fn make_single_item_bundle<Anno, Ref>(val: Ref) -> Bundle<Ref::BundleItem>
+    where
+        Anno: ContextItem,
+        Ref: BundleRef<Anno>,
+    {
+        Bundle::new(val)
+    }
+
+    trait BundleRef<Ctx: ContextItem> {
+        type BundleItem: BundleItem<Item = Self>;
+    }
+
+    impl<'a, Ctx: ContextItem> BundleRef<Ctx> for &'a Ctx::Item {
+        type BundleItem = &'a Ctx;
+    }
+
+    impl<'a, Ctx: ContextItem> BundleRef<Ctx> for &'a mut Ctx::Item {
+        type BundleItem = &'a mut Ctx;
+    }
+}

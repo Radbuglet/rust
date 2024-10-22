@@ -43,26 +43,50 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                 StmtKind::BindContext(bind) => {
                     let hir_id = self.lower_node_id(bind.id);
 
-                    let kind = match &bind.kind {
+                    let bundle = match &bind.kind {
                         BindContextKind::Single(ty, expr) => {
-                            let ty = self.lower_ty(ty,
+                            let ty = self.lower_ty(
+                                ty,
                                 ImplTraitContext::Disallowed(ImplTraitPosition::Variable),
                             );
-                            let expr = self.lower_expr(expr);
+                            let expr = self.lower_expr_mut(expr);
+                            let expr_span = self.lower_span(expr.span);
 
-                            hir::BindContextStmtKind::Single(ty, expr)
-                        }
-                        BindContextKind::Bundle(expr) => {
-                            let expr = self.lower_expr(expr);
+                            let infer_hir_id = self.next_id();
+                            let bundle_ctor = self.make_lang_item_path(
+                                hir::LangItem::SingleItemBundleCtor,
+                                bind.span,
+                                Some(self.arena.alloc(hir::GenericArgs {
+                                    args: self.arena.alloc_from_iter([
+                                        hir::GenericArg::Type(ty),
+                                        hir::GenericArg::Infer(hir::InferArg {
+                                            hir_id: infer_hir_id,
+                                            span: expr_span,
+                                        })
+                                    ]),
+                                    constraints: self.arena.alloc_from_iter([]),
+                                    parenthesized: hir::GenericArgsParentheses::No,
+                                    span_ext: expr_span,
+                                })),
+                            );
 
-                            hir::BindContextStmtKind::Bundle(expr)
+                            let bundle_ctor = self.arena.alloc(self.expr(
+                                expr_span,
+                                hir::ExprKind::Path(hir::QPath::Resolved(None, bundle_ctor)),
+                            ));
+
+                            self.arena.alloc(self.expr(expr_span, hir::ExprKind::Call(
+                                bundle_ctor,
+                                self.arena.alloc_from_iter([expr]),
+                            )))
                         }
+                        BindContextKind::Bundle(expr) => self.lower_expr(expr),
                     };
 
                     let span = self.lower_span(bind.span);
                     let kind = hir::StmtKind::BindContext(self.arena.alloc(hir::BindContextStmt {
                         hir_id,
-                        kind,
+                        bundle,
                         span,
                     }));
 
