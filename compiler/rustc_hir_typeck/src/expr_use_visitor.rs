@@ -522,7 +522,9 @@ impl<'tcx, Cx: TypeInformationCtxt<'tcx>, D: Delegate<'tcx>> ExprUseVisitor<'tcx
 
             hir::StmtKind::Let(_) => {}
 
-            hir::StmtKind::BindContext(_) => todo!(),
+            hir::StmtKind::BindContext(bind) => {
+                self.consume_expr(bind.bundle)?;
+            },
 
             hir::StmtKind::Item(_) => {
                 // We don't visit nested items in this visitor,

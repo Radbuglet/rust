@@ -822,7 +822,9 @@ impl<'a, 'tcx> Liveness<'a, 'tcx> {
                 }
             }
             hir::StmtKind::Item(..) => succ,
-            hir::StmtKind::BindContext(..) => todo!(),
+            hir::StmtKind::BindContext(ref bind) => {
+                self.propagate_through_expr(&bind.bundle, succ)
+            },
             hir::StmtKind::Expr(ref expr) | hir::StmtKind::Semi(ref expr) => {
                 self.propagate_through_expr(expr, succ)
             }
