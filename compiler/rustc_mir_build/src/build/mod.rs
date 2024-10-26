@@ -984,8 +984,17 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             self.cfg.terminate(block, source_info, TerminatorKind::Unreachable);
             self.cfg.start_new_block().unit()
         } else {
-            self.define_context_locals(expr_id);
-            self.init_and_borrow_context_binder_locals(block, thir::ContextBinder::FuncEnv);
+            let source_info = self.source_info(rustc_span::DUMMY_SP);
+            self.define_context_locals(source_info, expr_id);
+
+            let lt_limiter = self.new_lt_limiter(block, source_info);
+            self.init_and_borrow_context_binder_locals(
+                block,
+                source_info,
+                thir::ContextBinder::FuncEnv,
+                lt_limiter,
+            );
+
             self.expr_into_dest(Place::return_place(), block, expr_id)
         }
     }

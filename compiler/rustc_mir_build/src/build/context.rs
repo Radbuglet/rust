@@ -3,10 +3,12 @@
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap, IndexEntry};
 use rustc_hir::def_id::DefId;
 use rustc_hir::Mutability;
-use rustc_index::Idx;
-use rustc_middle::mir::{self, BasicBlock, Local, Place, Rvalue, SourceInfo};
+use rustc_index::{Idx as _, IndexVec};
+use rustc_middle::mir::{self, BasicBlock, Local, Operand, Place, Rvalue, SourceInfo};
 use rustc_middle::thir::{self, ContextBinder, visit::{self as thir_visit, Visitor as _}};
+use rustc_middle::ty::{self, Ty};
 use rustc_span::DUMMY_SP;
+use rustc_target::abi::FieldIdx;
 
 use thir_visit::Visitor as _;
 
@@ -47,13 +49,18 @@ impl ContextBinderItemInfo {
 }
 
 impl<'a, 'tcx> Builder<'a, 'tcx> {
-    pub(crate) fn define_context_locals(&mut self, root_expr: thir::ExprId) {
+    pub(crate) fn define_context_locals(
+        &mut self,
+        source_info: SourceInfo,
+        root_expr: thir::ExprId,
+    ) {
         assert!(self.context_binders.0.is_none(), "`define_context_locals` called twice");
 
         let root_expr = &self.thir.exprs[root_expr];
         let mut visitor = BinderUseVisitor {
             builder: self,
             map: BinderMap::default(),
+            source_info,
         };
         visitor.visit_expr(root_expr);
         self.context_binders.0 = Some(visitor.map);
@@ -62,16 +69,12 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
     pub(crate) fn init_and_borrow_context_binder_locals(
         &mut self,
         block: BasicBlock,
+        source_info: SourceInfo,
         binder: ContextBinder,
+        lt_limiter: Place<'tcx>,
     ) {
         let Some(binders) = self.context_binders.expect_init().get(&binder) else {
             return;
-        };
-
-        // Initialize the pointer locals
-        let source_info = SourceInfo {  // TODO: Update this!
-            span: DUMMY_SP,
-            scope: self.source_scope,
         };
 
         for (&item, &item_info) in binders {
@@ -84,21 +87,28 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         }
 
         // Reborrow them
-        self.reborrow_context_binder_locals(block, binder);
+        self.reborrow_context_binder_locals(block, source_info, binder);
 
         // Limit their lifetimes to the scope of the bind
-        // TODO: Do this!
+        // (reborrow needed because `self` borrowed by `reborrow_context_binder_locals`)
+        let binders = &self.context_binders.expect_init()[&binder];
+        let equate_refs = [lt_limiter].into_iter()
+            .chain(binders.values().map(|item_info| Place::from(item_info.ref_local())))
+            .collect::<Vec<_>>();
+
+        self.equate_ref_lifetimes(block, source_info, &equate_refs);
     }
 
-    pub(crate) fn reborrow_context_binder_locals(&mut self, block: BasicBlock, binder: ContextBinder) {
+    pub(crate) fn reborrow_context_binder_locals(
+        &mut self,
+        block: BasicBlock,
+        source_info: SourceInfo,
+        binder: ContextBinder,
+    ) {
         let Some(binders) = self.context_binders.expect_init().get(&binder) else {
             return;
         };
 
-        let source_info = SourceInfo {  // TODO: Update this!
-            span: DUMMY_SP,
-            scope: self.source_scope,
-        };
         let deref_proj = self.tcx.mk_place_elems(&[mir::PlaceElem::Deref]);
 
         for (&item, &item_info) in binders {
@@ -131,22 +141,146 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             .and_then(|v| v.get(&item))
             .unwrap_or_else(|| panic!("unknown context item {item:?} under binder {binder:?}"))
     }
+
+    pub(crate) fn equate_ref_lifetimes(
+        &mut self,
+        block: BasicBlock,
+        source_info: SourceInfo,
+        refs: &[Place<'tcx>],
+    ) {
+        // Create `ascribe_temp` temporary and give it the type...
+        // `(&'erased {refs[0].muta} {refs[0].pointee}, ...)`
+        let ascribe_temp_ty = refs.iter().map(|&ref_| ref_.ty(&self.local_decls, self.tcx).ty);
+        let ascribe_temp_ty = Ty::new_tup_from_iter(self.tcx, ascribe_temp_ty);
+        let refs_tys = match ascribe_temp_ty.kind() {
+            ty::Tuple(tys) => tys,
+            _ => unreachable!(),
+        };
+        let ascribe_temp = self.local_decls.push(mir::LocalDecl::new(
+            ascribe_temp_ty,
+            source_info.span,
+        ));
+
+        // Pack the various reborrows into `ascribe_temp`
+        let mut assign_fields = IndexVec::new();
+
+        for &ref_ in refs {
+            assign_fields.push(mir::Operand::Move(ref_));
+        }
+
+        self.cfg.push_assign(
+            block,
+            source_info,
+            ascribe_temp.into(),
+            Rvalue::Aggregate(
+                Box::new(mir::AggregateKind::Tuple),
+                assign_fields,
+            ),
+        );
+
+        // Ascribe the appropriate type of `ascribe_temp`
+        let ascribe_temp_var_ty = refs.iter()
+            .zip(refs_tys.iter())
+            .map(|(&ref_, ref_ty)| {
+                let (muta, pointee) = match ref_ty.kind() {
+                    &ty::Ref(_re, muta, pointee) => (muta, pointee),
+                    _ => unreachable!(),
+                };
+
+                let re = ty::Region::new_bound(
+                    self.tcx,
+                    ty::DebruijnIndex::ZERO,
+                    ty::BoundRegion {
+                        var: ty::BoundVar::ZERO,
+                        kind: ty::BoundRegionKind::BrAnon,
+                    }
+                );
+
+                Ty::new_ref(self.tcx, re, muta, pointee)
+            });
+        let ascribe_temp_var_ty = Ty::new_tup_from_iter(self.tcx, ascribe_temp_var_ty);
+
+        let ascribe_variables = self.tcx.mk_canonical_var_infos(&[
+            ty::CanonicalVarInfo {
+                kind: ty::CanonicalVarKind::Region(ty::UniverseIndex::ROOT)
+            },
+        ]);
+
+        let ascribe_idx =
+            self.canonical_user_type_annotations.push(ty::CanonicalUserTypeAnnotation {
+                span: source_info.span,
+                user_ty: Box::new(ty::CanonicalUserType {
+                    value: ty::UserType::Ty(ascribe_temp_var_ty),
+                    max_universe: ty::UniverseIndex::ROOT,
+                    defining_opaque_types: ty::List::empty(),
+                    variables: ascribe_variables,
+                }),
+                inferred_ty: ascribe_temp_ty,
+            });
+
+        self.cfg.push(block, mir::Statement {
+            source_info,
+            kind: mir::StatementKind::AscribeUserType(
+                Box::new((ascribe_temp.into(), mir::UserTypeProjection {
+                    base: ascribe_idx,
+                    projs: Vec::new(),
+                })),
+                ty::Variance::Invariant,
+            ),
+        });
+
+        // Move the borrows back into the locals.
+        for (i, &ref_) in refs.iter().enumerate() {
+            self.cfg.push_assign(
+                block,
+                source_info,
+                ref_,
+                Rvalue::Use(Operand::Move(Place {
+                    local: ascribe_temp,
+                    projection: self.tcx.mk_place_elems(&[mir::PlaceElem::Field(
+                        FieldIdx::from_usize(i),
+                        refs_tys[i],
+                    )]),
+                })),
+            );
+        }
+    }
+
+    pub(crate) fn new_lt_limiter(&mut self, block: BasicBlock, source_info: SourceInfo) -> Place<'tcx> {
+        let lt_limiter = self.temp(self.tcx.types.unit, source_info.span);
+        self.cfg.push_assign_unit(block, source_info, lt_limiter, self.tcx);
+
+        let lt_limiter_ref = self.temp(
+            Ty::new_mut_ref(self.tcx, self.tcx.lifetimes.re_erased, self.tcx.types.unit),
+            source_info.span,
+        );
+        self.cfg.push_assign(
+            block,
+            source_info,
+            lt_limiter_ref,
+            Rvalue::Ref(
+                self.tcx.lifetimes.re_erased,
+                mir::BorrowKind::Mut {
+                    kind: mir::MutBorrowKind::Default,
+                },
+                lt_limiter,
+            ),
+        );
+
+        lt_limiter_ref
+    }
 }
 
 struct BinderUseVisitor<'a, 'thir, 'tcx> {
     builder: &'a mut Builder<'thir, 'tcx>,
     map: BinderMap,
+    source_info: SourceInfo,
 }
 
 impl<'a, 'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for BinderUseVisitor<'a, 'thir, 'tcx> {
     fn visit_expr(&mut self, expr: &'thir thir::Expr<'tcx>) {
         if let &thir::ExprKind::ContextRef { item, muta, binder, .. } = &expr.kind {
             let tcx = self.builder.tcx;
-
-            let source_info = SourceInfo {  // TODO: Update this!
-                span: DUMMY_SP,
-                scope: self.builder.source_scope,
-            };
 
             let item_entry = self.map.entry(binder)
                 .or_default()
@@ -158,14 +292,14 @@ impl<'a, 'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for BinderUseVisitor<'a, 
                     let first_local = self.builder.local_decls
                         .push(mir::LocalDecl::with_source_info(
                             tcx.context_ptr_ty(item),
-                            source_info,
+                            self.source_info,
                         ));
 
                     // ref_local
                     let _ = self.builder.local_decls
                         .push(mir::LocalDecl::with_source_info(
                             tcx.context_ref_ty(item, muta, tcx.lifetimes.re_erased),
-                            source_info,
+                            self.source_info,
                         ));
 
                     entry.insert(ContextBinderItemInfo {

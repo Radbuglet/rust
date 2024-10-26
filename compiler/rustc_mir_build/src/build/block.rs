@@ -317,12 +317,29 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     }
                     last_remainder_scope = *remainder_scope;
                 }
-                StmtKind::BindContext { .. } => {
-                    // TODO: Bind the value.
+                &StmtKind::BindContext { bundle, .. } => {
                     this.block_context.push(BlockFrame::Statement { ignores_expr_result: true });
+
+                    let bundle_ty = this.thir.exprs[bundle].ty;
+                    let _bundle_reified = this.tcx.reified_bundle(bundle_ty);
+
+                    // Lower bundle expression
+                    let bundle_out = this.temp(bundle_ty, source_info.span);
+                    let _ = unpack!(block = this.expr_into_dest(bundle_out, block, bundle));
+
+                    // Limit lifetimes
+                    let lt_limiter = this.new_lt_limiter(block, source_info);
+                    // TODO: Equate lifetimes
+
+                    // Bind bundle values to context pointers
+                    // TODO
+
+                    // Prepare context
                     this.init_and_borrow_context_binder_locals(
                         block,
+                        source_info,
                         ContextBinder::LocalBinder(*stmt),
+                        lt_limiter,
                     );
                 },
             }
