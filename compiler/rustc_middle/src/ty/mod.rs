@@ -120,6 +120,7 @@ use crate::ty::util::Discr;
 
 pub mod abstract_const;
 pub mod adjustment;
+pub mod bundle;
 pub mod cast;
 pub mod codec;
 pub mod error;
@@ -2106,6 +2107,7 @@ pub fn ast_uint_ty(uty: UintTy) -> ast::UintTy {
 }
 
 pub fn provide(providers: &mut Providers) {
+    bundle::provide(providers);
     closure::provide(providers);
     context::provide(providers);
     erase_regions::provide(providers);

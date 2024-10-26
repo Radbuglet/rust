@@ -520,6 +520,7 @@ symbols! {
         btreeset_iter,
         builtin_syntax,
         bundle,
+        bundle_item_set_values,
         c,
         c_str,
         c_str_literals,

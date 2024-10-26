@@ -428,6 +428,7 @@ language_item_table! {
     ContextItemTrait,        sym::context_item,            context_item,            Target::Trait,         GenericRequirement::None;
     Bundle,                  sym::bundle,                  bundle,                  Target::Struct,        GenericRequirement::Exact(1);
     SingleItemBundleCtor,    sym::single_item_bundle_ctor, single_item_bundle_ctor, Target::Fn,            GenericRequirement::Exact(2);
+    BundleItemSetValues,     sym::bundle_item_set_values,  bundle_item_set_values,  Target::AssocTy,       GenericRequirement::None;
 }
 
 pub enum GenericRequirement {

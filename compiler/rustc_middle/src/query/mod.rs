@@ -2280,6 +2280,11 @@ rustc_queries! {
         desc { "whether the item should be made inlinable across crates" }
         separate_provide_extern
     }
+
+    query reified_bundle(ty: Ty<'tcx>) -> &'tcx ty::bundle::ReifiedBundle<'tcx> {
+        desc { "computing a reified bundle" }
+        no_hash
+    }
 }
 
 rustc_query_append! { define_callbacks! }

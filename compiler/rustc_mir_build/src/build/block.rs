@@ -318,7 +318,12 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     last_remainder_scope = *remainder_scope;
                 }
                 StmtKind::BindContext { .. } => {
-                    todo!()
+                    // TODO: Bind the value.
+                    this.block_context.push(BlockFrame::Statement { ignores_expr_result: true });
+                    this.init_and_borrow_context_binder_locals(
+                        block,
+                        ContextBinder::LocalBinder(*stmt),
+                    );
                 },
             }
 

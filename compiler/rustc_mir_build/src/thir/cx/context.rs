@@ -37,7 +37,6 @@ impl ContextBindTracker {
         }
     }
 
-    #[expect(unused)]  // TODO: We'll use this once `BindContext` is properly handled.
     fn bind(&mut self, item: DefId, stmt: StmtId) {
         let old_binder = match self.curr_local_binders.entry(item) {
             Entry::Occupied(mut entry) => ContextBinder::LocalBinder(entry.insert(stmt)),
@@ -321,7 +320,12 @@ impl<'tcx> Cx<'tcx> {
                 bundle,
                 span: _,
             } => {
-                // TODO: Introduce binds
+                let reified = self.tcx.reified_bundle(self.thir.exprs[*bundle].ty);
+
+                for &key in reified.fields.keys() {
+                    self.context_binds.bind(key, id);
+                }
+
                 self.adjust_context(*bundle, Mutability::Not);
             }
         }
