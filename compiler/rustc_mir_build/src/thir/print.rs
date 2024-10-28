@@ -177,10 +177,18 @@ impl<'a, 'tcx> ThirPrinter<'a, 'tcx> {
                 print_indented!(self, "}", depth_lvl + 1);
             }
             StmtKind::BindContext {
+                remainder_scope,
+                init_scope,
                 bundle,
                 span,
             } => {
                 print_indented!(self, "kind: BindContext {", depth_lvl + 1);
+                print_indented!(
+                    self,
+                    format!("remainder_scope: {:?}", remainder_scope),
+                    depth_lvl + 2
+                );
+                print_indented!(self, format!("init_scope: {:?}", init_scope), depth_lvl + 2);
                 print_indented!(self, "bundle: ", depth_lvl + 2);
                 self.print_expr(*bundle, depth_lvl + 3);
                 print_indented!(self, ",", depth_lvl + 2);

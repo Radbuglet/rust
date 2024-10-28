@@ -317,30 +317,66 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     }
                     last_remainder_scope = *remainder_scope;
                 }
-                &StmtKind::BindContext { bundle, .. } => {
-                    this.block_context.push(BlockFrame::Statement { ignores_expr_result: true });
+                StmtKind::BindContext { remainder_scope, init_scope, bundle, span: _ } => {
+                    this.block_context.push(BlockFrame::Statement { ignores_expr_result: false });
 
-                    let bundle_ty = this.thir.exprs[bundle].ty;
-                    let _bundle_reified = this.tcx.reified_bundle(bundle_ty);
+                    // Enter the remainder scope, i.e., the bindings' destruction scope.
+                    this.push_scope((*remainder_scope, source_info));
+                    let_scope_stack.push(remainder_scope);
 
-                    // Lower bundle expression
-                    let bundle_out = this.temp(bundle_ty, source_info.span);
-                    let _ = unpack!(block = this.expr_into_dest(bundle_out, block, bundle));
+                    // Declare the bindings, which may create a source scope.
+                    let remainder_span = remainder_scope.span(this.tcx, this.region_scope_tree);
+                    let visibility_scope =
+                        Some(this.new_source_scope(remainder_span, LintLevel::Inherited));
 
-                    // Limit lifetimes
-                    let lt_limiter = this.new_lt_limiter(block, source_info);
-                    // TODO: Equate lifetimes
+                    // Evaluate the initializer, if present.
+                    let bundle_span = this.thir[*bundle].span;
+                    let scope = (*init_scope, source_info);
 
-                    // Bind bundle values to context pointers
-                    // TODO
+                    block = this
+                        .in_scope(scope, LintLevel::Inherited, |this| {
+                            let mut block = block;
 
-                    // Prepare context
-                    this.init_and_borrow_context_binder_locals(
-                        block,
-                        source_info,
-                        ContextBinder::LocalBinder(*stmt),
-                        lt_limiter,
-                    );
+                            let bundle_ty = this.thir.exprs[*bundle].ty;
+                            let bundle_reified = this.tcx.reified_bundle(bundle_ty);
+
+                            // Lower bundle expression
+                            let bundle_out = this.temp(bundle_ty, bundle_span);
+                            let _ = unpack!(block = this.expr_into_dest(bundle_out, block, *bundle));
+
+                            // Limit lifetimes
+                            let lt_limiter = this.new_lt_limiter(block, source_info);
+                            let equated_places = [lt_limiter].into_iter()
+                                .chain(bundle_reified.fields.values().flat_map(|fields| {
+                                    fields.iter().map(|field| {
+                                        bundle_reified.project_place(
+                                            this.tcx,
+                                            field,
+                                            bundle_out,
+                                        )
+                                    })
+                                }))
+                                .collect::<Vec<_>>();
+
+                            this.equate_ref_lifetimes(block, source_info, &equated_places);
+
+                            // Prepare context
+                            this.init_and_borrow_context_binder_locals(
+                                block,
+                                source_info,
+                                ContextBinder::LocalBinder(*stmt),
+                                lt_limiter,
+                            );
+
+                            block.unit()
+                        })
+                        .into_block();
+
+                    // Enter the visibility scope, after evaluating the initializer.
+                    if let Some(source_scope) = visibility_scope {
+                        this.source_scope = source_scope;
+                    }
+                    last_remainder_scope = *remainder_scope;
                 },
             }
 

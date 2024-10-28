@@ -121,8 +121,22 @@ impl<'tcx> Cx<'tcx> {
                         Some(self.thir.stmts.push(stmt))
                     }
                     hir::StmtKind::BindContext(bind) => {
+                        let remainder_scope = region::Scope {
+                            id: block_id,
+                            data: region::ScopeData::Remainder(region::FirstStatementIndex::new(
+                                index,
+                            )),
+                        };
+
+                        let init_scope = region::Scope {
+                            id: hir_id.local_id,
+                            data: region::ScopeData::Node,
+                        };
+
                         let stmt = Stmt {
                             kind: StmtKind::BindContext {
+                                remainder_scope,
+                                init_scope,
                                 bundle: self.mirror_expr(bind.bundle),
                                 span: bind.span,
                             },

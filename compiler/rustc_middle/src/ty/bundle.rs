@@ -2,7 +2,7 @@ use smallvec::SmallVec;
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
 use rustc_hir::def_id::DefId;
 
-use crate::hir::place::Place;
+use crate::mir;
 use crate::ty::{self, Mutability, list::RawList, Ty, TyCtxt};
 use crate::query::Providers;
 
@@ -36,23 +36,24 @@ pub struct ReifiedBundleProj<'tcx> {
 }
 
 impl<'tcx> ReifiedBundle<'tcx> {
-    pub fn place_of(
+    pub fn project_place(
         &self,
         tcx: TyCtxt<'tcx>,
-        id: DefId,
-        place: Place<'tcx>,
-        min_muta: Mutability,
-    ) -> Result<Place<'tcx>, BundlePlaceError> {
-        let _ = (tcx, id, place, min_muta);
-        todo!()
-    }
-}
+        member: &ReifiedBundleMember<'tcx>,
+        place: mir::Place<'tcx>,
+    ) -> mir::Place<'tcx> {
+        let projection = place.projection
+            .iter()
+            .chain([mir::PlaceElem::Field(ty::FieldIdx::ZERO, self.inner_ty)])
+            .chain(member.location.iter().map(|elem| {
+                mir::PlaceElem::Field(elem.field, elem.ty)
+            }));
 
-#[derive(Debug, Copy, Clone)]
-pub enum BundlePlaceError {
-    Ambiguous,
-    BadMutability,
-    Missing,
+        mir::Place {
+            local: place.local,
+            projection: tcx.mk_place_elems_from_iter(projection)
+        }
+    }
 }
 
 fn reified_bundle<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> &'tcx ReifiedBundle<'tcx> {

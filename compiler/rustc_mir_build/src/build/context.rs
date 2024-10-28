@@ -184,7 +184,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             .map(|(&ref_, ref_ty)| {
                 let (muta, pointee) = match ref_ty.kind() {
                     &ty::Ref(_re, muta, pointee) => (muta, pointee),
-                    _ => unreachable!(),
+                    _ => unreachable!("expected reference, got {ref_ty}"),
                 };
 
                 let re = ty::Region::new_bound(

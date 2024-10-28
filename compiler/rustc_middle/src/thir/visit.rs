@@ -200,6 +200,8 @@ pub fn walk_stmt<'thir, 'tcx: 'thir, V: Visitor<'thir, 'tcx>>(
             }
         }
         StmtKind::BindContext {
+            remainder_scope: _,
+            init_scope: _,
             bundle,
             span: _,
         } => {

@@ -317,6 +317,8 @@ impl<'tcx> Cx<'tcx> {
                 }
             }
             StmtKind::BindContext {
+                remainder_scope: _,
+                init_scope: _,
                 bundle,
                 span: _,
             } => {
