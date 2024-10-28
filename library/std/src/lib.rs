@@ -492,6 +492,9 @@ pub use core::char;
 pub use core::clone;
 #[stable(feature = "rust1", since = "1.0.0")]
 pub use core::cmp;
+#[cfg(not(bootstrap))]
+#[unstable(feature = "context_injection", issue = "none")]  // TODO: Fill in tracking issue
+pub use core::context;
 #[stable(feature = "rust1", since = "1.0.0")]
 pub use core::convert;
 #[stable(feature = "rust1", since = "1.0.0")]

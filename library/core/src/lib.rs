@@ -468,6 +468,7 @@ pub mod simd {
     pub use crate::core_simd::simd::*;
 }
 
+#[cfg(not(bootstrap))]
 #[unstable(feature = "context_injection", issue = "none")]  // TODO: Fill in tracking issue
 pub mod context;
 

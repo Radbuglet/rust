@@ -1,5 +1,4 @@
 #![allow(missing_docs)]  // TODO
-#![cfg(not(bootstrap))]
 
 #[lang = "context_item"]
 #[rustc_deny_explicit_impl(implement_via_object = false)]

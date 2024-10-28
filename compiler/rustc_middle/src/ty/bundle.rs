@@ -62,7 +62,7 @@ fn reified_bundle<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> &'tcx ReifiedBundle<
         bug!("`bundle` lang item not defined");
     };
 
-    let inner_ty = match ty.kind() {
+    let bundle_arg = match ty.kind() {
         ty::Adt(def, args) if def.did() == bundle_did => {
             args[0].expect_ty()
         }
@@ -77,11 +77,11 @@ fn reified_bundle<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> &'tcx ReifiedBundle<
         fields: FxIndexMap::default(),
         generic_types: Vec::new(),
     };
-    walker.collect_fields_in_bundle_item_set(inner_ty);
+    walker.collect_fields_in_bundle_item_set(bundle_arg);
 
     tcx.arena.alloc(ReifiedBundle {
         original_bundle: ty,
-        inner_ty,
+        inner_ty: walker.bundle_item_set_to_value(bundle_arg),
         fields: walker.fields,
         generic_types: walker.generic_types,
     })
