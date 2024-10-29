@@ -322,8 +322,37 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 self.demand_eqtype(e.span, ascribed_ty, ty);
                 ascribed_ty
             }
-            ExprKind::Pack(_e, _t) => {
-                todo!()
+            ExprKind::Pack(exprs, hir_ty) => {
+                let Some(bundle_adt) = self.tcx.lang_items().bundle() else {
+                    bug!("`bundle` lang-item not defined");
+                };
+                let bundle_adt = self.tcx.adt_def(bundle_adt);
+
+                let mk_infer = || -> Ty<'tcx> {
+                    let inf_var = self.next_ty_var(expr.span);
+                    Ty::new_adt(
+                        self.tcx,
+                        bundle_adt,
+                        self.tcx.mk_args(&[inf_var.into()]),
+                    )
+                };
+
+                let ty = match hir_ty {
+                    Some(hir_ty) => {
+                        let ty = self.lower_ty_saving_user_provided_ty(hir_ty);
+                        self.demand_eqtype(hir_ty.span, mk_infer(), ty);
+                        ty
+                    }
+                    None => {
+                        mk_infer()
+                    }
+                };
+
+                for expr in exprs {
+                    self.check_expr_has_type_or_error(expr, mk_infer(), |_| {});
+                }
+
+                ty
             }
             ExprKind::If(cond, then_expr, opt_else_expr) => {
                 self.check_then_else(cond, then_expr, opt_else_expr, expr.span, expected)

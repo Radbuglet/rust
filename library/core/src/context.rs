@@ -94,10 +94,13 @@ mod make_single_item_bundle {
 
 #[allow_internal_unstable(builtin_syntax)]
 pub macro pack {
-    ($($src:expr),+$(,)? $(=> $ty:ty)?) => {
-        {builtin # pack($($src),* $(=> $ty)?) }
-    },
     (.. $(=> $ty:ty)?) => {
         {builtin # pack($(=> $ty)?) }
+    },
+    (... $(=> $ty:ty)?) => {
+        crate::compile_error!("expected `..`, got `...`");
+    },
+    ($($src:expr),+$(,)? $(=> $ty:ty)?) => {
+        {builtin # pack($($src),* $(=> $ty)?) }
     },
 }

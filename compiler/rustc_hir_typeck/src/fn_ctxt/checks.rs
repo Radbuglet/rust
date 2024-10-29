@@ -1752,7 +1752,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         let expr_ty = self.check_expr_with_needs(expr, Needs::None);
 
         let Some(bundle_adt) = self.tcx.lang_items().bundle() else {
-            return;  // TODO: What to do?
+            bug!("`bundle` lang-item not defined");
         };
         let bundle_adt = self.tcx.adt_def(bundle_adt);
 
