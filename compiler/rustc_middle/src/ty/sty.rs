@@ -1489,8 +1489,7 @@ impl<'tcx> Ty<'tcx> {
             tcx.associated_item_def_ids(context_item_trait_def_id)[0];
 
         match self.kind() {
-            // The binder doesn't bind anything for context marker definitions so we can skip it.
-            ty::ContextMarker(did) => tcx.type_of(did).skip_binder(),
+            ty::ContextMarker(did) => tcx.context_ty(*did),
 
             ty::Param(_) | ty::Alias(..) | ty::Placeholder(..) | ty::Infer(ty::TyVar(_)) => {
                 Ty::new_projection(tcx, item_assoc_para_def_id, [self])

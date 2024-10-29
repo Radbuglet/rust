@@ -6,7 +6,7 @@ use rustc_hir::Mutability;
 use rustc_index::{Idx as _, IndexVec};
 use rustc_middle::mir::{self, BasicBlock, Local, Operand, Place, Rvalue, SourceInfo};
 use rustc_middle::thir::{self, ContextBinder, visit::{self as thir_visit, Visitor as _}};
-use rustc_middle::ty::{self, Ty};
+use rustc_middle::ty::{self, Ty, TypeFoldable as _};
 use rustc_span::DUMMY_SP;
 use rustc_target::abi::FieldIdx;
 
@@ -179,11 +179,12 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         );
 
         // Ascribe the appropriate type of `ascribe_temp`
+        let mut var_count = 1;
         let ascribe_temp_var_ty = refs.iter()
             .zip(refs_tys.iter())
             .map(|(&ref_, ref_ty)| {
-                let (muta, pointee) = match ref_ty.kind() {
-                    &ty::Ref(_re, muta, pointee) => (muta, pointee),
+                let (pointee, muta) = match ref_ty.kind() {
+                    &ty::Ref(_re, pointee, muta) => (pointee, muta),
                     _ => unreachable!("expected reference, got {ref_ty}"),
                 };
 
@@ -196,15 +197,31 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     }
                 );
 
-                Ty::new_ref(self.tcx, re, muta, pointee)
+                // N.B. This old folds *free* regions.
+                let pointee = pointee.fold_with(&mut ty::fold::RegionFolder::new(
+                    self.tcx,
+                    &mut |_, debrujin| {
+                        let re = ty::Region::new_bound(
+                            self.tcx,
+                            debrujin,
+                            ty::BoundRegion {
+                                var: ty::BoundVar::from_u32(var_count),
+                                kind: ty::BoundRegionKind::BrAnon,
+                            },
+                        );
+                        var_count += 1;
+                        re
+                    },
+                ));
+
+                Ty::new_ref(self.tcx, re, pointee, muta)
             });
         let ascribe_temp_var_ty = Ty::new_tup_from_iter(self.tcx, ascribe_temp_var_ty);
 
-        let ascribe_variables = self.tcx.mk_canonical_var_infos(&[
-            ty::CanonicalVarInfo {
-                kind: ty::CanonicalVarKind::Region(ty::UniverseIndex::ROOT)
-            },
-        ]);
+        let ascribe_variables = (0..var_count).map(|_| ty::CanonicalVarInfo {
+            kind: ty::CanonicalVarKind::Region(ty::UniverseIndex::ROOT)
+        });
+        let ascribe_variables = self.tcx.mk_canonical_var_infos_from_iter(ascribe_variables);
 
         let ascribe_idx =
             self.canonical_user_type_annotations.push(ty::CanonicalUserTypeAnnotation {

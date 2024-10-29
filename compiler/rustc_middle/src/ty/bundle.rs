@@ -110,7 +110,7 @@ impl<'tcx> ReifiedBundleWalker<'tcx> {
                 Ty::new_ref(
                     self.tcx,
                     re,
-                    self.tcx.type_of(did).skip_binder(),
+                    self.tcx.context_ty(did),
                     muta,
                 )
             }

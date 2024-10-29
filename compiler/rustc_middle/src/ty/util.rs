@@ -684,25 +684,27 @@ impl<'tcx> TyCtxt<'tcx> {
         }
     }
 
-    /// Get the type of the reference to the context item.
-    pub fn context_ref_ty(self, def_id: DefId, muta: Mutability, lt: ty::Region<'tcx>) -> Ty<'tcx> {
-        // Make sure that any constants in the context's type are evaluated.
+    pub fn context_ty(self, def_id: DefId) -> Ty<'tcx> {
         let context_ty = self.normalize_erasing_regions(
             ty::ParamEnv::empty(),
             self.type_of(def_id).instantiate_identity(),
         );
 
+        context_ty.fold_with(&mut ty::fold::RegionFolder::new(
+            self,
+            &mut |_, _| self.lifetimes.re_static,
+        ))
+    }
+
+    /// Get the type of the reference to the context item.
+    pub fn context_ref_ty(self, def_id: DefId, muta: Mutability, lt: ty::Region<'tcx>) -> Ty<'tcx> {
+        let context_ty = self.context_ty(def_id);
         Ty::new_ref(self, lt, context_ty, muta)
     }
 
     /// Get the type of the pointer to the context item.
     pub fn context_ptr_ty(self, def_id: DefId) -> Ty<'tcx> {
-        // Make sure that any constants in the context's type are evaluated.
-        let context_ty = self.normalize_erasing_regions(
-            ty::ParamEnv::empty(),
-            self.type_of(def_id).instantiate_identity(),
-        );
-
+        let context_ty = self.context_ty(def_id);
         Ty::new_mut_ptr(self, context_ty)
     }
 
