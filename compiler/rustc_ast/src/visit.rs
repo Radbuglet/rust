@@ -1195,6 +1195,10 @@ pub fn walk_expr<'a, V: Visitor<'a>>(visitor: &mut V, expression: &'a Expr) -> V
             try_visit!(visitor.visit_ty(container));
             walk_list!(visitor, visit_ident, fields.iter().copied());
         }
+        ExprKind::Pack(exprs, ty) => {
+            walk_list!(visitor, visit_expr, exprs.iter());
+            visit_opt!(visitor, visit_ty, ty);
+        }
         ExprKind::Yield(optional_expression) => {
             visit_opt!(visitor, visit_expr, optional_expression);
         }

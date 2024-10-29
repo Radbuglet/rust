@@ -242,7 +242,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     base: ascribe_idx,
                     projs: Vec::new(),
                 })),
-                ty::Variance::Invariant,
+                ty::Variance::Covariant,
             ),
         });
 

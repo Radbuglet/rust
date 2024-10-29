@@ -447,6 +447,7 @@ impl<'tcx> Visitor<'tcx> for IrMaps<'tcx> {
             | hir::ExprKind::InlineAsm(..)
             | hir::ExprKind::OffsetOf(..)
             | hir::ExprKind::Type(..)
+            | hir::ExprKind::Pack(..)
             | hir::ExprKind::Err(_)
             | hir::ExprKind::Path(hir::QPath::TypeRelative(..))
             | hir::ExprKind::Path(hir::QPath::LangItem(..)) => {}
@@ -1028,7 +1029,8 @@ impl<'a, 'tcx> Liveness<'a, 'tcx> {
                 self.propagate_through_expr(receiver, succ)
             }
 
-            hir::ExprKind::Tup(exprs) => self.propagate_through_exprs(exprs, succ),
+            hir::ExprKind::Tup(exprs) | hir::ExprKind::Pack(exprs, _) =>
+                self.propagate_through_exprs(exprs, succ),
 
             hir::ExprKind::Binary(op, ref l, ref r) if op.node.is_lazy() => {
                 let r_succ = self.propagate_through_expr(r, succ);
@@ -1420,6 +1422,7 @@ fn check_expr<'tcx>(this: &mut Liveness<'_, 'tcx>, expr: &'tcx Expr<'tcx>) {
         | hir::ExprKind::Field(..)
         | hir::ExprKind::Array(..)
         | hir::ExprKind::Tup(..)
+        | hir::ExprKind::Pack(..)
         | hir::ExprKind::Binary(..)
         | hir::ExprKind::Cast(..)
         | hir::ExprKind::If(..)

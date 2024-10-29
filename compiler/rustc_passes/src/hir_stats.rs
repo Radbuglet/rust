@@ -312,7 +312,7 @@ impl<'v> hir_visit::Visitor<'v> for StatCollector<'v> {
         record_variants!((self, e, e.kind, Id::Node(e.hir_id), hir, Expr, ExprKind), [
             ConstBlock, Array, Call, MethodCall, Tup, Binary, Unary, Lit, Cast, Type, DropTemps,
             Let, If, Loop, Match, Closure, Block, Assign, AssignOp, Field, Index, Path, AddrOf,
-            Break, Continue, Ret, Become, InlineAsm, OffsetOf, Struct, Repeat, Yield, Err
+            Break, Continue, Ret, Become, InlineAsm, OffsetOf, Struct, Repeat, Pack, Yield, Err
         ]);
         hir_visit::walk_expr(self, e)
     }
@@ -569,7 +569,7 @@ impl<'v> ast_visit::Visitor<'v> for StatCollector<'v> {
                 If, While, ForLoop, Loop, Match, Closure, Block, Await, TryBlock, Assign,
                 AssignOp, Field, Index, Range, Underscore, Path, AddrOf, Break, Continue, Ret,
                 InlineAsm, FormatArgs, OffsetOf, MacCall, Struct, Repeat, Paren, Try, Yield, Yeet,
-                Become, IncludedBytes, Gen, Err, Dummy
+                Become, IncludedBytes, Gen, Pack, Err, Dummy
             ]
         );
         ast_visit::walk_expr(self, e)

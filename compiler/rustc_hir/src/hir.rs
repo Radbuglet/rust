@@ -1766,7 +1766,7 @@ impl Expr<'_> {
             ExprKind::Struct(..) => ExprPrecedence::Struct,
             ExprKind::Repeat(..) => ExprPrecedence::Repeat,
             ExprKind::Yield(..) => ExprPrecedence::Yield,
-            ExprKind::Type(..) | ExprKind::InlineAsm(..) | ExprKind::OffsetOf(..) => {
+            ExprKind::Type(..) | ExprKind::Pack(..) | ExprKind::InlineAsm(..) | ExprKind::OffsetOf(..) => {
                 ExprPrecedence::Mac
             }
             ExprKind::Err(_) => ExprPrecedence::Err,
@@ -1835,6 +1835,7 @@ impl Expr<'_> {
             | ExprKind::Binary(..)
             | ExprKind::Yield(..)
             | ExprKind::Cast(..)
+            | ExprKind::Pack(..)
             | ExprKind::DropTemps(..)
             | ExprKind::Err(_) => false,
         }
@@ -1889,6 +1890,7 @@ impl Expr<'_> {
 
             ExprKind::Array(args)
             | ExprKind::Tup(args)
+            | ExprKind::Pack(args, _)
             | ExprKind::Call(
                 Expr {
                     kind:
@@ -2133,6 +2135,9 @@ pub enum ExprKind<'hir> {
 
     /// A suspension point for coroutines (i.e., `yield <expr>`).
     Yield(&'hir Expr<'hir>, YieldSource),
+
+    /// A pack directive (i.e. `pack!(expr1, expr2, ... => ty)`).
+    Pack(&'hir [Expr<'hir>], Option<&'hir Ty<'hir>>),
 
     /// A placeholder for an expression that wasn't syntactically well formed in some way.
     Err(rustc_span::ErrorGuaranteed),

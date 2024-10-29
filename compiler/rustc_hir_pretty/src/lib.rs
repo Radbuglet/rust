@@ -1385,6 +1385,18 @@ impl<'a> State<'a> {
                 self.end();
                 self.word(")");
             }
+            hir::ExprKind::Pack(exprs, ty) => {
+                self.word("pack!(");
+                self.ibox(0);
+                self.commasep_exprs(Inconsistent, exprs);
+                if let Some(ty) = ty {
+                    self.word_space("=>");
+                    self.print_type(ty);
+                }
+
+                self.end();
+                self.word(")");
+            }
             hir::ExprKind::DropTemps(init) => {
                 // Print `{`:
                 self.cbox(INDENT_UNIT);

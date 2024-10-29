@@ -1927,6 +1927,7 @@ impl<'a> Parser<'a> {
             Ok(match ident.name {
                 sym::offset_of => Some(this.parse_expr_offset_of(lo)?),
                 sym::type_ascribe => Some(this.parse_expr_type_ascribe(lo)?),
+                sym::pack => Some(this.parse_expr_pack(lo)?),
                 _ => None,
             })
         })
@@ -2000,6 +2001,33 @@ impl<'a> Parser<'a> {
         let ty = self.parse_ty()?;
         let span = lo.to(self.token.span);
         Ok(self.mk_expr(span, ExprKind::Type(expr, ty)))
+    }
+
+    /// Built-in macro for type ascription expressions.
+    pub(crate) fn parse_expr_pack(&mut self, lo: Span) -> PResult<'a, P<Expr>> {
+        let mut exprs = ThinVec::new();
+        loop {
+            let Some(expr) = self.parse_expr_opt()? else {
+                break;
+            };
+            exprs.push(expr);
+
+            if !self.check(&token::Comma) {
+                break;
+            }
+
+            self.expect(&token::Comma)?;
+        }
+
+        let ty = if self.check(&token::FatArrow) {
+            self.expect(&token::FatArrow)?;
+            Some(self.parse_ty()?)
+        } else {
+            None
+        };
+
+        let span = lo.to(self.token.span);
+        Ok(self.mk_expr(span, ExprKind::Pack(exprs, ty)))
     }
 
     /// Returns a string literal if the next token is a string literal.
@@ -4029,6 +4057,7 @@ impl MutVisitor for CondChecker<'_> {
             | ExprKind::Ret(_)
             | ExprKind::InlineAsm(_)
             | ExprKind::OffsetOf(_, _)
+            | ExprKind::Pack(_, _)
             | ExprKind::MacCall(_)
             | ExprKind::Struct(_)
             | ExprKind::Repeat(_, _)

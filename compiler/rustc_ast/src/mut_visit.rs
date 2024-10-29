@@ -1614,6 +1614,15 @@ pub fn walk_expr<T: MutVisitor>(vis: &mut T, Expr { kind, id, span, attrs, token
                 vis.visit_ident(field);
             }
         }
+        ExprKind::Pack(exprs, ty) => {
+            for expr in exprs.iter_mut() {
+                vis.visit_expr(expr);
+            }
+
+            if let Some(ty) = ty {
+                vis.visit_ty(ty);
+            }
+        }
         ExprKind::MacCall(mac) => vis.visit_mac_call(mac),
         ExprKind::Struct(se) => {
             let StructExpr { qself, path, fields, rest } = se.deref_mut();

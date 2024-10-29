@@ -734,6 +734,10 @@ impl<'tcx> Cx<'tcx> {
                 ExprKind::OffsetOf { container, fields }
             }
 
+            hir::ExprKind::Pack(_, _) => {
+                todo!()
+            }
+
             hir::ExprKind::ConstBlock(ref anon_const) => {
                 let ty = self.typeck_results().node_type(anon_const.hir_id);
                 let did = anon_const.def_id.to_def_id();

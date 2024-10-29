@@ -1347,6 +1347,7 @@ impl Expr {
             ExprKind::InlineAsm(..)
             | ExprKind::Type(..)
             | ExprKind::OffsetOf(..)
+            | ExprKind::Pack(..)
             | ExprKind::FormatArgs(..)
             | ExprKind::MacCall(..) => ExprPrecedence::Mac,
             ExprKind::Err(_) | ExprKind::Dummy => ExprPrecedence::Err,
@@ -1578,6 +1579,9 @@ pub enum ExprKind {
 
     /// A `format_args!()` expression.
     FormatArgs(P<FormatArgs>),
+
+    /// A `pack!()` expression.
+    Pack(ThinVec<P<Expr>>, Option<P<Ty>>),
 
     /// Placeholder for an expression that wasn't syntactically well formed in some way.
     Err(ErrorGuaranteed),

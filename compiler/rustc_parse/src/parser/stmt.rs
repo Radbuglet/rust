@@ -415,7 +415,7 @@ impl<'a> Parser<'a> {
 
     fn parse_context_bind(&mut self, attrs: AttrVec) -> PResult<'a, P<ast::BindContext>> {
         let lo = self.prev_token.span;
-        let kind = if self.token.is_range_separator() {
+        let kind = if self.check(&TokenKind::DotDot) {
             self.expect(&TokenKind::DotDot)?;
             let expr = self.parse_expr()?;
 

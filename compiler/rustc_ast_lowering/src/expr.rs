@@ -314,6 +314,13 @@ impl<'hir> LoweringContext<'_, 'hir> {
                     ),
                     self.arena.alloc_from_iter(fields.iter().map(|&ident| self.lower_ident(ident))),
                 ),
+                ExprKind::Pack(exprs, ty) => hir::ExprKind::Pack(
+                    self.lower_exprs(exprs),
+                    ty.as_ref().map(|ty| self.lower_ty(
+                        ty,
+                        ImplTraitContext::Disallowed(ImplTraitPosition::Pack),
+                    )),
+                ),
                 ExprKind::Struct(se) => {
                     let rest = match &se.rest {
                         StructRest::Base(e) => Some(self.lower_expr(e)),

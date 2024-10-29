@@ -200,6 +200,7 @@ impl<'tcx> CheckInlineAssembly<'tcx> {
             | ExprKind::Become(..)
             | ExprKind::Struct(..)
             | ExprKind::Repeat(..)
+            | ExprKind::Pack(..)
             | ExprKind::Yield(..) => {
                 self.items.push((ItemKind::NonAsm, span));
             }

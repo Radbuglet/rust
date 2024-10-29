@@ -322,6 +322,9 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 self.demand_eqtype(e.span, ascribed_ty, ty);
                 ascribed_ty
             }
+            ExprKind::Pack(_e, _t) => {
+                todo!()
+            }
             ExprKind::If(cond, then_expr, opt_else_expr) => {
                 self.check_then_else(cond, then_expr, opt_else_expr, expr.span, expected)
             }

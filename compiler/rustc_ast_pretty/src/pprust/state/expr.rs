@@ -435,6 +435,20 @@ impl<'a> State<'a> {
                 self.end();
                 self.pclose();
             }
+            ast::ExprKind::Pack(exprs, ty) => {
+                self.word("builtin # pack");
+                self.popen();
+                self.ibox(0);
+                self.commasep_exprs(Inconsistent, exprs);
+
+                if let Some(ty) = ty {
+                    self.word_space("=>");
+                    self.print_type(ty);
+                }
+
+                self.end();
+                self.pclose();
+            }
             ast::ExprKind::Let(pat, scrutinee, _, _) => {
                 self.print_let(pat, scrutinee, fixup);
             }
