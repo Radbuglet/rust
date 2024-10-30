@@ -1,6 +1,7 @@
 use smallvec::SmallVec;
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
 use rustc_hir::def_id::DefId;
+use rustc_macros::HashStable;
 
 use crate::mir;
 use crate::ty::{self, Mutability, list::RawList, Ty, TyCtxt};
@@ -25,11 +26,13 @@ pub struct ReifiedBundle<'tcx> {
 
 #[derive(Debug, Clone)]
 pub struct ReifiedBundleMember<'tcx> {
-    pub location: Vec<ReifiedBundleProj<'tcx>>,
+    pub location: ReifiedBundleProjs<'tcx>,
     pub mutability: Mutability,
 }
 
-#[derive(Debug, Copy, Clone)]
+pub type ReifiedBundleProjs<'tcx> = &'tcx [ReifiedBundleProj<'tcx>];
+
+#[derive(Debug, Copy, Clone, HashStable)]
 pub struct ReifiedBundleProj<'tcx> {
     pub field: ty::FieldIdx,
     pub ty: Ty<'tcx>,
@@ -39,13 +42,13 @@ impl<'tcx> ReifiedBundle<'tcx> {
     pub fn project_place(
         &self,
         tcx: TyCtxt<'tcx>,
-        member: &ReifiedBundleMember<'tcx>,
+        location: ReifiedBundleProjs<'tcx>,
         place: mir::Place<'tcx>,
     ) -> mir::Place<'tcx> {
         let projection = place.projection
             .iter()
             .chain([mir::PlaceElem::Field(ty::FieldIdx::ZERO, self.inner_ty)])
-            .chain(member.location.iter().map(|elem| {
+            .chain(location.iter().map(|elem| {
                 mir::PlaceElem::Field(elem.field, elem.ty)
             }));
 
@@ -144,7 +147,7 @@ impl<'tcx> ReifiedBundleWalker<'tcx> {
         match ReifiedBundleItemSet::decode(ty) {
             ReifiedBundleItemSet::Ref(_re, muta, did) => {
                 self.fields.entry(did).or_default().push(ReifiedBundleMember {
-                    location: self.proj_stack.clone(),
+                    location: self.tcx.arena.alloc_from_iter(self.proj_stack.iter().copied()),
                     mutability: muta,
                 });
             }
@@ -168,7 +171,7 @@ impl<'tcx> ReifiedBundleWalker<'tcx> {
 }
 
 #[derive(Copy, Clone)]
-enum ReifiedBundleItemSet<'tcx> {
+pub enum ReifiedBundleItemSet<'tcx> {
     Ref(ty::Region<'tcx>, Mutability, DefId),
     Tuple(&'tcx RawList<(), Ty<'tcx>>),
     Generic(Ty<'tcx>),
@@ -176,7 +179,7 @@ enum ReifiedBundleItemSet<'tcx> {
 }
 
 impl<'tcx> ReifiedBundleItemSet<'tcx> {
-    fn decode(ty: Ty<'tcx>) -> Self {
+    pub fn decode(ty: Ty<'tcx>) -> Self {
         match ty.kind() {
             &ty::Ref(re, inner, muta) => {
                 match ReifiedContextItem::decode(inner) {
@@ -229,14 +232,14 @@ impl<'tcx> ReifiedBundleItemSet<'tcx> {
 }
 
 #[derive(Copy, Clone)]
-enum ReifiedContextItem<'tcx> {
+pub enum ReifiedContextItem<'tcx> {
     Reified(DefId),
     Generic(Ty<'tcx>),
     Error(ty::ErrorGuaranteed),
 }
 
 impl<'tcx> ReifiedContextItem<'tcx> {
-    fn decode(ty: Ty<'tcx>) -> Self {
+    pub fn decode(ty: Ty<'tcx>) -> Self {
         match ty.kind() {
             &ty::ContextMarker(did) => {
                 Self::Reified(did)

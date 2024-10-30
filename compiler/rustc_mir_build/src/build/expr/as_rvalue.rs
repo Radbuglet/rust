@@ -543,6 +543,10 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 );
                 block.and(Rvalue::Use(operand))
             }
+
+            ExprKind::Pack { .. } => {
+                todo!()
+            }
         }
     }
 

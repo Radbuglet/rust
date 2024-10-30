@@ -567,6 +567,9 @@ impl<'a, 'tcx> ThirPrinter<'a, 'tcx> {
                 print_indented!(self, format!("binder: {:?}", binder), depth_lvl + 1);
                 print_indented!(self, "}", depth_lvl);
             }
+            Pack { .. } => {
+                todo!()
+            }
             Yield { value } => {
                 print_indented!(self, "Yield {", depth_lvl);
                 print_indented!(self, "value:", depth_lvl + 1);

@@ -596,6 +596,10 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 this.cfg.push_assign(block, source_info, destination, rvalue);
                 block.unit()
             }
+
+            ExprKind::Pack { .. } => {
+                todo!()
+            }
         };
 
         if !expr_is_block_or_scope {

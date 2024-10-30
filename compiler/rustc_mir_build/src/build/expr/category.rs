@@ -90,6 +90,10 @@ impl Category {
             {
                 Some(Category::Rvalue(RvalueFunc::Into))
             }
+
+            ExprKind::Pack { .. } => {
+                todo!()
+            }
         }
     }
 }

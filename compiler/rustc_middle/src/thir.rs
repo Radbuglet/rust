@@ -544,10 +544,22 @@ pub enum ExprKind<'tcx> {
         muta: hir::Mutability,
         binder: ContextBinder,
     },
+    /// A `pack!` expression.
+    Pack {
+        exprs: Box<[ExprId]>,
+        shape: Box<PackShape<'tcx>>,
+    },
     /// A `yield` expression.
     Yield {
         value: ExprId,
     },
+}
+
+#[derive(Clone, Debug, HashStable)]
+pub enum PackShape<'tcx> {
+    Context(hir::Mutability, DefId, ContextBinder),
+    Extract(hir::Mutability, usize, ty::ReifiedBundleProjs<'tcx>),
+    Tuple(Box<[PackShape<'tcx>]>),
 }
 
 /// Represents the association of a field identifier and an expression.

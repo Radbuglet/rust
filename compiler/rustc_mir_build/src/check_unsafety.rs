@@ -452,6 +452,10 @@ impl<'a, 'tcx> Visitor<'a, 'tcx> for UnsafetyVisitor<'a, 'tcx> {
                 // than one child.
                 self.assignment_info = None;
             }
+
+            ExprKind::Pack { .. } => {
+                todo!()
+            }
         };
         match expr.kind {
             ExprKind::Scope { value, lint_level: LintLevel::Explicit(hir_id), region_scope: _ } => {

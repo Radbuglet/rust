@@ -266,6 +266,9 @@ impl<'tcx> Cx<'tcx> {
 
                 *binder = self.context_binds.resolve(*item);
             },
+            Pack { .. } => {
+                todo!()
+            }
             &mut Yield { value } => {
                 self.adjust_context(value, Mutability::Not);
             },

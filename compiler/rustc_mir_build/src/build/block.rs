@@ -351,7 +351,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                                     fields.iter().map(|field| {
                                         bundle_reified.project_place(
                                             this.tcx,
-                                            field,
+                                            field.location,
                                             bundle_out,
                                         )
                                     })

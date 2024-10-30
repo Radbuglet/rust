@@ -63,6 +63,7 @@ use {rustc_ast as ast, rustc_attr as attr, rustc_hir as hir};
 pub use self::AssocItemContainer::*;
 pub use self::BorrowKind::*;
 pub use self::IntVarValue::*;
+pub use self::bundle::*;
 pub use self::closure::{
     BorrowKind, CAPTURE_STRUCT_LOCAL, CaptureInfo, CapturedPlace, ClosureTypeInfo,
     MinCaptureInformationMap, MinCaptureList, RootVariableMinCaptureList, UpvarCapture, UpvarId,
@@ -120,7 +121,6 @@ use crate::ty::util::Discr;
 
 pub mod abstract_const;
 pub mod adjustment;
-pub mod bundle;
 pub mod cast;
 pub mod codec;
 pub mod error;
@@ -141,6 +141,7 @@ pub mod walk;
 
 mod adt;
 mod assoc;
+mod bundle;
 mod closure;
 mod consts;
 mod context;

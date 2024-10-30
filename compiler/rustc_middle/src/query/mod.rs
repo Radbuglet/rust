@@ -2281,7 +2281,7 @@ rustc_queries! {
         separate_provide_extern
     }
 
-    query reified_bundle(ty: Ty<'tcx>) -> &'tcx ty::bundle::ReifiedBundle<'tcx> {
+    query reified_bundle(ty: Ty<'tcx>) -> &'tcx ty::ReifiedBundle<'tcx> {
         desc { "computing a reified bundle" }
         no_hash
     }

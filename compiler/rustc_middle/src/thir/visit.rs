@@ -111,7 +111,7 @@ pub fn walk_expr<'thir, 'tcx: 'thir, V: Visitor<'thir, 'tcx>>(
         Repeat { value, count: _ } => {
             visitor.visit_expr(&visitor.thir()[value]);
         }
-        Array { ref fields } | Tuple { ref fields } => {
+        Array { ref fields } | Tuple { ref fields } | Pack { exprs: ref fields, .. } => {
             for &field in &**fields {
                 visitor.visit_expr(&visitor.thir()[field]);
             }

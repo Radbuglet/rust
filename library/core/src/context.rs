@@ -65,6 +65,10 @@ impl<T: BundleItemSet> Bundle<T> {
     pub const fn new(items: T::Values) -> Self {
         Self(items)
     }
+
+    pub const fn unwrap(self) -> T::Values {
+        self.0
+    }
 }
 
 mod make_single_item_bundle {
@@ -94,13 +98,19 @@ mod make_single_item_bundle {
 
 #[allow_internal_unstable(builtin_syntax)]
 pub macro pack {
-    (.. $(=> $ty:ty)?) => {
+    (@env $(=> $ty:ty)?) => {
         {builtin # pack($(=> $ty)?) }
-    },
-    (... $(=> $ty:ty)?) => {
-        crate::compile_error!("expected `..`, got `...`");
     },
     ($($src:expr),+$(,)? $(=> $ty:ty)?) => {
         {builtin # pack($($src),* $(=> $ty)?) }
+    },
+}
+
+pub macro unpack {
+    (@env => $ty:ty) => {
+        pack!(@env => Bundle<$ty>).unwrap()
+    },
+    ($($src:expr),+$(,)? => $ty:ty) => {
+        pack!($($src),* => Bundle<$ty>).unwrap()
     },
 }

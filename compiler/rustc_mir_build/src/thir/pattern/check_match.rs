@@ -296,7 +296,7 @@ impl<'p, 'tcx> MatchVisitor<'p, 'tcx> {
             Deref { .. } => false,
 
             // TODO: What to do?
-            ContextRef { .. } => false,
+            ContextRef { .. } | Pack { .. } => false,
 
             // Inherit validity of the parent place, unless the parent is an union.
             Field { lhs, .. } => {
