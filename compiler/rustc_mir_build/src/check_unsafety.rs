@@ -446,15 +446,12 @@ impl<'a, 'tcx> Visitor<'a, 'tcx> for UnsafetyVisitor<'a, 'tcx> {
             | ExprKind::InlineAsm { .. }
             | ExprKind::OffsetOf { .. }
             | ExprKind::LogicalOp { .. }
+            | ExprKind::Pack { .. }
             | ExprKind::Use { .. } => {
                 // We don't need to save the old value and restore it
                 // because all the place expressions can't have more
                 // than one child.
                 self.assignment_info = None;
-            }
-
-            ExprKind::Pack { .. } => {
-                todo!()
             }
         };
         match expr.kind {

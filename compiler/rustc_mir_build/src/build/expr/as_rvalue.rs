@@ -560,11 +560,12 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     .collect::<Vec<Place<'tcx>>>();
 
                 let inner_ty = expr.ty.bundle_item_set(this.tcx);
+                let value_ty = this.tcx.reified_bundle(expr.ty).value_ty;
                 let inner_operand = unpack!(block = this.build_pack_bundle_value(
                     block,
                     expr.span,
                     &exprs,
-                    inner_ty,
+                    value_ty,
                     &shape,
                 ));
 
@@ -593,11 +594,36 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         let place = Place::from(self.local_decls.push(LocalDecl::new(ty, span)));
 
         let rv = match shape {
-            PackShape::ExtractEnv(_muta, _def_id, _binder) => {
-                todo!()
+            &PackShape::ExtractEnv(muta, item, binder) => {
+                Rvalue::Ref(
+                    self.tcx.lifetimes.re_erased,
+                    match muta {
+                        Mutability::Not => BorrowKind::Shared,
+                        Mutability::Mut => BorrowKind::Mut {
+                            kind: MutBorrowKind::Default,
+                        },
+                    },
+                    Place {
+                        local: self.lookup_context_binder(item, binder).ref_local(),
+                        projection: self.tcx.mk_place_elems(&[PlaceElem::Deref]),
+                    },
+                )
             }
-            PackShape::ExtractLocal(_muta, _expr_idx, _location) => {
-                todo!()
+            PackShape::ExtractLocal(muta, expr_idx, location) => {
+                Rvalue::Ref(
+                    self.tcx.lifetimes.re_erased,
+                    match muta {
+                        Mutability::Not => BorrowKind::Shared,
+                        Mutability::Mut => BorrowKind::Mut {
+                            kind: MutBorrowKind::Default,
+                        },
+                    },
+                    location.project_place(
+                        self.tcx,
+                        exprs[*expr_idx],
+                        [PlaceElem::Deref],
+                    ),
+                )
             }
             PackShape::Tuple(fields) => {
                 let fields = fields.iter()

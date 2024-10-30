@@ -19,7 +19,7 @@ pub fn provide(providers: &mut Providers) {
 #[derive(Debug, Clone)]
 pub struct ReifiedBundle<'tcx> {
     pub original_bundle: Ty<'tcx>,
-    pub inner_ty: Ty<'tcx>,
+    pub value_ty: Ty<'tcx>,
     pub fields: FxIndexMap<DefId, SmallVec<[ReifiedBundleMember<'tcx>; 1]>>,
     pub generic_types: Vec<Ty<'tcx>>,
 }
@@ -30,7 +30,8 @@ pub struct ReifiedBundleMember<'tcx> {
     pub mutability: Mutability,
 }
 
-pub type ReifiedBundleProjs<'tcx> = &'tcx [ReifiedBundleProj<'tcx>];
+#[derive(Debug, Copy, Clone, HashStable)]
+pub struct ReifiedBundleProjs<'tcx>(pub &'tcx [ReifiedBundleProj<'tcx>]);
 
 #[derive(Debug, Copy, Clone, HashStable)]
 pub struct ReifiedBundleProj<'tcx> {
@@ -38,19 +39,19 @@ pub struct ReifiedBundleProj<'tcx> {
     pub ty: Ty<'tcx>,
 }
 
-impl<'tcx> ReifiedBundle<'tcx> {
+impl<'tcx> ReifiedBundleProjs<'tcx> {
     pub fn project_place(
         &self,
         tcx: TyCtxt<'tcx>,
-        location: ReifiedBundleProjs<'tcx>,
         place: mir::Place<'tcx>,
+        deeper: impl IntoIterator<Item = mir::PlaceElem<'tcx>>,
     ) -> mir::Place<'tcx> {
         let projection = place.projection
             .iter()
-            .chain([mir::PlaceElem::Field(ty::FieldIdx::ZERO, self.inner_ty)])
-            .chain(location.iter().map(|elem| {
+            .chain(self.0.iter().map(|elem| {
                 mir::PlaceElem::Field(elem.field, elem.ty)
-            }));
+            }))
+            .chain(deeper);
 
         mir::Place {
             local: place.local,
@@ -71,11 +72,16 @@ fn reified_bundle<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> &'tcx ReifiedBundle<
         fields: FxIndexMap::default(),
         generic_types: Vec::new(),
     };
+    let value_ty = walker.bundle_item_set_to_value(bundle_arg);
+    walker.proj_stack.push(ReifiedBundleProj {
+        field: ty::FieldIdx::ZERO,
+        ty: value_ty,
+    });
     walker.collect_fields_in_bundle_item_set(bundle_arg);
 
     tcx.arena.alloc(ReifiedBundle {
         original_bundle: ty,
-        inner_ty: walker.bundle_item_set_to_value(bundle_arg),
+        value_ty,
         fields: walker.fields,
         generic_types: walker.generic_types,
     })
@@ -138,7 +144,9 @@ impl<'tcx> ReifiedBundleWalker<'tcx> {
         match ReifiedBundleItemSet::decode(ty) {
             ReifiedBundleItemSet::Ref(_re, muta, did) => {
                 self.fields.entry(did).or_default().push(ReifiedBundleMember {
-                    location: self.tcx.arena.alloc_from_iter(self.proj_stack.iter().copied()),
+                    location: ReifiedBundleProjs(self.tcx.arena.alloc_from_iter(
+                        self.proj_stack.iter().copied(),
+                    )),
                     mutability: muta,
                 });
             }

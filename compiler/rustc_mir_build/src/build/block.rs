@@ -349,10 +349,10 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                             let equated_places = [lt_limiter].into_iter()
                                 .chain(bundle_reified.fields.values().flat_map(|fields| {
                                     fields.iter().map(|field| {
-                                        bundle_reified.project_place(
+                                        field.location.project_place(
                                             this.tcx,
-                                            field.location,
                                             bundle_out,
+                                            [],
                                         )
                                     })
                                 }))

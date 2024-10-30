@@ -294,49 +294,127 @@ struct BinderUseVisitor<'a, 'thir, 'tcx> {
     source_info: SourceInfo,
 }
 
+impl<'a, 'thir, 'tcx> BinderUseVisitor<'a, 'thir, 'tcx> {
+    fn introduce_use(&mut self, item: DefId, muta: Mutability, binder: ContextBinder) {
+        let tcx = self.builder.tcx;
+
+        let item_entry = self.map.entry(binder)
+            .or_default()
+            .entry(item);
+
+        match item_entry {
+            IndexEntry::Vacant(entry) => {
+                // ptr_local
+                let first_local = self.builder.local_decls
+                    .push(mir::LocalDecl::with_source_info(
+                        tcx.context_ptr_ty(item),
+                        self.source_info,
+                    ));
+
+                // ref_local
+                let _ = self.builder.local_decls
+                    .push(mir::LocalDecl::with_source_info(
+                        tcx.context_ref_ty(item, muta, tcx.lifetimes.re_erased),
+                        self.source_info,
+                    ));
+
+                entry.insert(ContextBinderItemInfo {
+                    first_local,
+                    muta,
+                });
+            }
+            IndexEntry::Occupied(mut entry) => {
+                let entry = entry.get_mut();
+                if muta.is_mut() && entry.muta.is_not() {
+                    entry.muta = Mutability::Mut;
+
+                    self.builder.local_decls[entry.ref_local()].ty =
+                        tcx.context_ref_ty(
+                            item,
+                            Mutability::Mut,
+                            tcx.lifetimes.re_erased,
+                        );
+                }
+            }
+        }
+    }
+
+    fn walk_pack_shape(&mut self, shape: &'thir thir::PackShape<'tcx>) {
+        match shape {
+            &thir::PackShape::ExtractEnv(muta, item, binder) => {
+                self.introduce_use(item, muta, binder);
+            }
+            thir::PackShape::Tuple(fields) => {
+                for field in fields {
+                    self.walk_pack_shape(field);
+                }
+            }
+            thir::PackShape::ExtractLocal(..) | thir::PackShape::Error(..) => {
+                // (does not introduce context uses)
+            }
+        }
+    }
+}
+
 impl<'a, 'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for BinderUseVisitor<'a, 'thir, 'tcx> {
     fn visit_expr(&mut self, expr: &'thir thir::Expr<'tcx>) {
-        if let &thir::ExprKind::ContextRef { item, muta, binder, .. } = &expr.kind {
-            let tcx = self.builder.tcx;
+        use thir::ExprKind::*;
 
-            let item_entry = self.map.entry(binder)
-                .or_default()
-                .entry(item);
+        match &expr.kind {
+            &ContextRef { item, muta, binder, .. } => {
+                self.introduce_use(item, muta, binder);
+            }
+            Pack { shape, .. } => {
+                self.walk_pack_shape(shape);
+            }
 
-            match item_entry {
-                IndexEntry::Vacant(entry) => {
-                    // ptr_local
-                    let first_local = self.builder.local_decls
-                        .push(mir::LocalDecl::with_source_info(
-                            tcx.context_ptr_ty(item),
-                            self.source_info,
-                        ));
-
-                    // ref_local
-                    let _ = self.builder.local_decls
-                        .push(mir::LocalDecl::with_source_info(
-                            tcx.context_ref_ty(item, muta, tcx.lifetimes.re_erased),
-                            self.source_info,
-                        ));
-
-                    entry.insert(ContextBinderItemInfo {
-                        first_local,
-                        muta,
-                    });
-                }
-                IndexEntry::Occupied(mut entry) => {
-                    let entry = entry.get_mut();
-                    if muta.is_mut() && entry.muta.is_not() {
-                        entry.muta = Mutability::Mut;
-
-                        self.builder.local_decls[entry.ref_local()].ty =
-                            tcx.context_ref_ty(
-                                item,
-                                Mutability::Mut,
-                                tcx.lifetimes.re_erased,
-                            );
-                    }
-                }
+            Scope { .. }
+            | Box { .. }
+            | If { .. }
+            | Call { .. }
+            | Deref { .. }
+            | Binary { .. }
+            | LogicalOp { .. }
+            | Unary { .. }
+            | Cast { .. }
+            | Use { .. }
+            | NeverToAny { .. }
+            | PointerCoercion { .. }
+            | Loop { .. }
+            | Let { .. }
+            | Match { .. }
+            | Block { .. }
+            | Assign { .. }
+            | AssignOp { .. }
+            | Field { .. }
+            | Index { .. }
+            | VarRef { .. }
+            | UpvarRef { .. }
+            | Borrow { .. }
+            | RawBorrow { .. }
+            | Break { .. }
+            | Continue { .. }
+            | Return { .. }
+            | Become { .. }
+            | ConstBlock { .. }
+            | Repeat { .. }
+            | Array { .. }
+            | Tuple { .. }
+            | Adt { .. }
+            | PlaceTypeAscription { .. }
+            | ValueTypeAscription { .. }
+            | Closure { .. }
+            | Literal { .. }
+            | NonHirLiteral { .. }
+            | ZstLiteral { .. }
+            | NamedConst { .. }
+            | ConstParam { .. }
+            | StaticRef { .. }
+            | InlineAsm { .. }
+            | OffsetOf { .. }
+            | ThreadLocalRef { .. }
+            | Yield { .. } => {
+                // (no context users directly introduced by expression)
             }
         }
 
