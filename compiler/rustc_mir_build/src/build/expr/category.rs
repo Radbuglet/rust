@@ -69,6 +69,7 @@ impl Category {
             | ExprKind::Assign { .. }
             | ExprKind::AssignOp { .. }
             | ExprKind::ThreadLocalRef(_)
+            | ExprKind::Pack { .. }
             | ExprKind::OffsetOf { .. } => Some(Category::Rvalue(RvalueFunc::AsRvalue)),
 
             ExprKind::ConstBlock { .. }
@@ -89,10 +90,6 @@ impl Category {
             // category, like "nonterminating"
             {
                 Some(Category::Rvalue(RvalueFunc::Into))
-            }
-
-            ExprKind::Pack { .. } => {
-                todo!()
             }
         }
     }

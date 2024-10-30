@@ -579,7 +579,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             | ExprKind::ThreadLocalRef(_)
             | ExprKind::ContextRef { .. }
             | ExprKind::StaticRef { .. }
-            | ExprKind::OffsetOf { .. } => {
+            | ExprKind::OffsetOf { .. }
+            | ExprKind::Pack { .. } => {
                 debug_assert!(match Category::of(&expr.kind).unwrap() {
                     // should be handled above
                     Category::Rvalue(RvalueFunc::Into) => false,
@@ -595,10 +596,6 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 let rvalue = unpack!(block = this.as_local_rvalue(block, expr_id));
                 this.cfg.push_assign(block, source_info, destination, rvalue);
                 block.unit()
-            }
-
-            ExprKind::Pack { .. } => {
-                todo!()
             }
         };
 

@@ -61,16 +61,7 @@ impl<'tcx> ReifiedBundle<'tcx> {
 
 fn reified_bundle<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> &'tcx ReifiedBundle<'tcx> {
     // Extract the inner type.
-    let Some(bundle_did) = tcx.lang_items().bundle() else {
-        bug!("`bundle` lang item not defined");
-    };
-
-    let bundle_arg = match ty.kind() {
-        ty::Adt(def, args) if def.did() == bundle_did => {
-            args[0].expect_ty()
-        }
-        _ => bug!("reified_bundle expected bundle type, got {ty}"),
-    };
+    let bundle_arg = ty.bundle_item_set(tcx);
 
     // Extract the fields.
     let mut walker = ReifiedBundleWalker {

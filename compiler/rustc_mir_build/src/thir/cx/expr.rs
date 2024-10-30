@@ -13,8 +13,8 @@ use rustc_middle::ty::adjustment::{
     Adjust, Adjustment, AutoBorrow, AutoBorrowMutability, PointerCoercion,
 };
 use rustc_middle::ty::{
-    self, AdtKind, GenericArgs, InlineConstArgs, InlineConstArgsParts, ScalarInt, Ty, UpvarArgs,
-    UserType,
+    self, AdtKind, GenericArgs, InlineConstArgs, InlineConstArgsParts, ScalarInt, Ty, TyCtxt,
+    UpvarArgs, UserType,
 };
 use rustc_middle::{bug, span_bug};
 use rustc_span::{Span, sym};
@@ -734,8 +734,26 @@ impl<'tcx> Cx<'tcx> {
                 ExprKind::OffsetOf { container, fields }
             }
 
-            hir::ExprKind::Pack(_, _) => {
-                todo!()
+            hir::ExprKind::Pack(exprs, _) => {
+                let exprs = exprs.iter()
+                    .map(|expr| self.mirror_expr(expr))
+                    .collect::<Box<_>>();
+
+                let reified = exprs.iter()
+                    .map(|&expr| self.tcx.reified_bundle(self.thir.exprs[expr].ty))
+                    .collect::<Box<_>>();
+
+                let shape = Self::make_bundle_pack_shape(
+                    self.tcx,
+                    &reified,
+                    reified.is_empty(),
+                    expr_ty.bundle_item_set(self.tcx),
+                );
+
+                ExprKind::Pack {
+                    exprs,
+                    shape: Box::new(shape),
+                }
             }
 
             hir::ExprKind::ConstBlock(ref anon_const) => {
@@ -963,6 +981,53 @@ impl<'tcx> Cx<'tcx> {
             span: arm.span,
         };
         self.thir.arms.push(arm)
+    }
+
+    fn make_bundle_pack_shape(
+        tcx: TyCtxt<'tcx>,
+        bundles: &[&'tcx ty::ReifiedBundle<'tcx>],
+        allow_env: bool,
+        ty: Ty<'tcx>,
+    ) -> PackShape<'tcx> {
+        match ty::ReifiedBundleItemSet::decode(ty) {
+            ty::ReifiedBundleItemSet::Ref(_re, muta, def_id) => {
+                for (i, bundle) in bundles.iter().enumerate() {
+                    let Some(member) = bundle.fields.get(&def_id) else {
+                        continue;
+                    };
+
+                    if member.len() > 1 {
+                        todo!();
+                    }
+
+                    let Some(member) = member.get(0) else {
+                        todo!();
+                    };
+
+                    if member.mutability < muta {
+                        todo!();
+                    }
+
+                    return PackShape::ExtractLocal(muta, i, member.location);
+                }
+
+                if allow_env {
+                    // This binder will be updated by the context adjustment pass.
+                    return PackShape::ExtractEnv(muta, def_id, ContextBinder::FuncEnv)
+                }
+
+                todo!();
+            }
+            ty::ReifiedBundleItemSet::Tuple(items) => {
+                let items = items.iter()
+                    .map(|item| Self::make_bundle_pack_shape(tcx, bundles, allow_env, item))
+                    .collect();
+
+                PackShape::Tuple(items)
+            }
+            ty::ReifiedBundleItemSet::Generic(_ty) => todo!(),
+            ty::ReifiedBundleItemSet::Error(err) => PackShape::Error(err),
+        }
     }
 
     fn convert_path_expr(&mut self, expr: &'tcx hir::Expr<'tcx>, res: Res) -> ExprKind<'tcx> {

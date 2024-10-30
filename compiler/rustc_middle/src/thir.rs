@@ -557,9 +557,10 @@ pub enum ExprKind<'tcx> {
 
 #[derive(Clone, Debug, HashStable)]
 pub enum PackShape<'tcx> {
-    Context(hir::Mutability, DefId, ContextBinder),
-    Extract(hir::Mutability, usize, ty::ReifiedBundleProjs<'tcx>),
+    ExtractEnv(hir::Mutability, DefId, ContextBinder),
+    ExtractLocal(hir::Mutability, usize, ty::ReifiedBundleProjs<'tcx>),
     Tuple(Box<[PackShape<'tcx>]>),
+    Error(ErrorGuaranteed),
 }
 
 /// Represents the association of a field identifier and an expression.

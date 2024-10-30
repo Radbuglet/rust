@@ -1398,6 +1398,19 @@ impl<'tcx> Ty<'tcx> {
         }
     }
 
+    pub fn bundle_item_set(self, tcx: TyCtxt<'tcx>) -> Ty<'tcx> {
+        let Some(bundle_did) = tcx.lang_items().bundle() else {
+            bug!("`bundle` lang item not defined");
+        };
+
+        match self.kind() {
+            ty::Adt(def, args) if def.did() == bundle_did => {
+                args[0].expect_ty()
+            }
+            _ => bug!("reified_bundle expected bundle type, got {self}"),
+        }
+    }
+
     /// If the type contains variants, returns the valid range of variant indices.
     //
     // FIXME: This requires the optimized MIR in the case of coroutines.

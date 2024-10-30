@@ -13,7 +13,7 @@ use rustc_middle::ty::util::IntTypeExt;
 use rustc_middle::ty::{self, Ty, UpvarArgs};
 use rustc_span::source_map::Spanned;
 use rustc_span::{DUMMY_SP, Span};
-use rustc_target::abi::{Abi, FieldIdx, Primitive};
+use rustc_target::abi::{Abi, FieldIdx, Primitive, VariantIdx};
 use tracing::debug;
 
 use crate::build::expr::as_place::PlaceBase;
@@ -543,11 +543,91 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 );
                 block.and(Rvalue::Use(operand))
             }
+            ExprKind::Pack { ref exprs, ref shape } => {
+                let Some(bundle_did) = this.tcx.lang_items().bundle() else {
+                    bug!("missing `bundle` lang-item");
+                };
 
-            ExprKind::Pack { .. } => {
-                todo!()
+                let exprs = exprs
+                    .into_iter()
+                    .copied()
+                    .map(|expr| {
+                        unpack!(block = this.as_place(
+                            block,
+                            expr,
+                        ))
+                    })
+                    .collect::<Vec<Place<'tcx>>>();
+
+                let inner_ty = expr.ty.bundle_item_set(this.tcx);
+                let inner_operand = unpack!(block = this.build_pack_bundle_value(
+                    block,
+                    expr.span,
+                    &exprs,
+                    inner_ty,
+                    &shape,
+                ));
+
+                block.and(Rvalue::Aggregate(
+                    Box::new(AggregateKind::Adt(
+                        bundle_did,
+                        VariantIdx::ZERO,
+                        this.tcx.mk_args(&[inner_ty.into()]),
+                        None,
+                        None,
+                    )),
+                    IndexVec::from_raw(vec![inner_operand]),
+                ))
             }
         }
+    }
+
+    fn build_pack_bundle_value(
+        &mut self,
+        mut block: BasicBlock,
+        span: Span,
+        exprs: &[Place<'tcx>],
+        ty: Ty<'tcx>,
+        shape: &PackShape<'tcx>,
+    ) -> BlockAnd<Operand<'tcx>> {
+        let place = Place::from(self.local_decls.push(LocalDecl::new(ty, span)));
+
+        let rv = match shape {
+            PackShape::ExtractEnv(_muta, _def_id, _binder) => {
+                todo!()
+            }
+            PackShape::ExtractLocal(_muta, _expr_idx, _location) => {
+                todo!()
+            }
+            PackShape::Tuple(fields) => {
+                let fields = fields.iter()
+                    .zip(ty.tuple_fields())
+                    .map(|(shape, ty)| {
+                        unpack!(block = self.build_pack_bundle_value(
+                            block,
+                            span,
+                            exprs,
+                            ty,
+                            shape,
+                        ))
+                    })
+                    .collect::<IndexVec<FieldIdx, _>>();
+
+                Rvalue::Aggregate(Box::new(AggregateKind::Tuple), fields)
+            }
+            PackShape::Error(_err) => {
+                todo!()
+            }
+        };
+
+        self.cfg.push_assign(
+            block,
+            self.source_info(span),
+            place,
+            rv,
+        );
+
+        block.and(Operand::Move(place))
     }
 
     pub(crate) fn build_binary_op(

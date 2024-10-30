@@ -266,8 +266,12 @@ impl<'tcx> Cx<'tcx> {
 
                 *binder = self.context_binds.resolve(*item);
             },
-            Pack { .. } => {
-                todo!()
+            Pack { exprs, shape } => {
+                for &mut expr in exprs {
+                    self.adjust_context(expr, Mutability::Not);
+                }
+
+                Self::adjust_pack_shape(&self.context_binds, shape);
             }
             &mut Yield { value } => {
                 self.adjust_context(value, Mutability::Not);
@@ -275,6 +279,22 @@ impl<'tcx> Cx<'tcx> {
         }
 
         self.thir.exprs[id] = expr;
+    }
+
+    fn adjust_pack_shape(tracker: &ContextBindTracker, shape: &mut PackShape<'tcx>) {
+        match shape {
+            PackShape::ExtractEnv(_muta, def_id, binder) => {
+                *binder = tracker.resolve(*def_id);
+            }
+            PackShape::Tuple(fields) => {
+                for field in fields {
+                    Self::adjust_pack_shape(tracker, field);
+                }
+            }
+            PackShape::ExtractLocal(..) | PackShape::Error(..) => {
+                // (nothing to adjust)
+            }
+        }
     }
 
     fn adjust_context_block(&mut self, id: BlockId) {
