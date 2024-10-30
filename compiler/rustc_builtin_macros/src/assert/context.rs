@@ -319,7 +319,7 @@ impl<'cx, 'a> Context<'cx, 'a> {
             | ExprKind::Try(_)
             | ExprKind::TryBlock(_)
             | ExprKind::Type(_, _)
-            | ExprKind::Pack(_, _)
+            | ExprKind::Pack(_, _, _)
             | ExprKind::Underscore
             | ExprKind::While(_, _, _)
             | ExprKind::Yeet(_)

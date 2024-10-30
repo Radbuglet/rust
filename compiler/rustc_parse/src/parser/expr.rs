@@ -2005,6 +2005,13 @@ impl<'a> Parser<'a> {
 
     /// Built-in macro for type ascription expressions.
     pub(crate) fn parse_expr_pack(&mut self, lo: Span) -> PResult<'a, P<Expr>> {
+        let mode = self.parse_ident()?;
+        let mode = match mode.name {
+            sym::allow_env => ast::PackMode::AllowEnv,
+            sym::deny_env => ast::PackMode::DenyEnv,
+            _ => unreachable!(),
+        };
+
         let mut exprs = ThinVec::new();
         loop {
             let Some(expr) = self.parse_expr_opt()? else {
@@ -2027,7 +2034,7 @@ impl<'a> Parser<'a> {
         };
 
         let span = lo.to(self.token.span);
-        Ok(self.mk_expr(span, ExprKind::Pack(exprs, ty)))
+        Ok(self.mk_expr(span, ExprKind::Pack(mode, exprs, ty)))
     }
 
     /// Returns a string literal if the next token is a string literal.
@@ -4057,7 +4064,7 @@ impl MutVisitor for CondChecker<'_> {
             | ExprKind::Ret(_)
             | ExprKind::InlineAsm(_)
             | ExprKind::OffsetOf(_, _)
-            | ExprKind::Pack(_, _)
+            | ExprKind::Pack(_, _, _)
             | ExprKind::MacCall(_)
             | ExprKind::Struct(_)
             | ExprKind::Repeat(_, _)

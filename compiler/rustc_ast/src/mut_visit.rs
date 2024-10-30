@@ -1614,7 +1614,7 @@ pub fn walk_expr<T: MutVisitor>(vis: &mut T, Expr { kind, id, span, attrs, token
                 vis.visit_ident(field);
             }
         }
-        ExprKind::Pack(exprs, ty) => {
+        ExprKind::Pack(_mode, exprs, ty) => {
             for expr in exprs.iter_mut() {
                 vis.visit_expr(expr);
             }

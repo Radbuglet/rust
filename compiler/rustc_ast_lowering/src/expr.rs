@@ -314,7 +314,8 @@ impl<'hir> LoweringContext<'_, 'hir> {
                     ),
                     self.arena.alloc_from_iter(fields.iter().map(|&ident| self.lower_ident(ident))),
                 ),
-                ExprKind::Pack(exprs, ty) => hir::ExprKind::Pack(
+                ExprKind::Pack(mode, exprs, ty) => hir::ExprKind::Pack(
+                    *mode,
                     self.lower_exprs(exprs),
                     ty.as_ref().map(|ty| self.lower_ty(
                         ty,

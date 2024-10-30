@@ -223,7 +223,7 @@ pub fn expr_trailing_brace(mut expr: &ast::Expr) -> Option<TrailingBrace<'_>> {
             | Tup(_)
             | Lit(_)
             | Type(_, _)
-            | Pack(_, _)  // TODO?
+            | Pack(_, _, _)  // TODO?
             | Await(_, _)
             | Field(_, _)
             | Index(_, _, _)

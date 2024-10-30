@@ -435,10 +435,11 @@ impl<'a> State<'a> {
                 self.end();
                 self.pclose();
             }
-            ast::ExprKind::Pack(exprs, ty) => {
+            ast::ExprKind::Pack(mode, exprs, ty) => {
                 self.word("builtin # pack");
                 self.popen();
                 self.ibox(0);
+                self.word_space(mode.as_str());
                 self.commasep_exprs(Inconsistent, exprs);
 
                 if let Some(ty) = ty {

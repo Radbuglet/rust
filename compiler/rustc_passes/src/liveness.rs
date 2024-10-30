@@ -1029,7 +1029,7 @@ impl<'a, 'tcx> Liveness<'a, 'tcx> {
                 self.propagate_through_expr(receiver, succ)
             }
 
-            hir::ExprKind::Tup(exprs) | hir::ExprKind::Pack(exprs, _) =>
+            hir::ExprKind::Tup(exprs) | hir::ExprKind::Pack(_, exprs, _) =>
                 self.propagate_through_exprs(exprs, succ),
 
             hir::ExprKind::Binary(op, ref l, ref r) if op.node.is_lazy() => {

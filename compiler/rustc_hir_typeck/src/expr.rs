@@ -322,7 +322,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 self.demand_eqtype(e.span, ascribed_ty, ty);
                 ascribed_ty
             }
-            ExprKind::Pack(exprs, hir_ty) => {
+            ExprKind::Pack(_mode, exprs, hir_ty) => {
                 let Some(bundle_adt) = self.tcx.lang_items().bundle() else {
                     bug!("`bundle` lang-item not defined");
                 };

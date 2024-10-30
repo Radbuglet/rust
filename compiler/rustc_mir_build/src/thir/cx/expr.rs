@@ -734,7 +734,7 @@ impl<'tcx> Cx<'tcx> {
                 ExprKind::OffsetOf { container, fields }
             }
 
-            hir::ExprKind::Pack(exprs, _) => {
+            hir::ExprKind::Pack(mode, exprs, _) => {
                 let exprs = exprs.iter()
                     .map(|expr| self.mirror_expr(expr))
                     .collect::<Box<_>>();
@@ -746,7 +746,7 @@ impl<'tcx> Cx<'tcx> {
                 let shape = Self::make_bundle_pack_shape(
                     self.tcx,
                     &reified,
-                    reified.is_empty(),
+                    mode.allows_env(),
                     expr_ty.bundle_item_set(self.tcx),
                 );
 

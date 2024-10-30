@@ -79,3 +79,23 @@ impl Mutability {
         matches!(self, Self::Not)
     }
 }
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Copy)]
+#[cfg_attr(feature = "nightly", derive(Encodable, Decodable, HashStable_NoContext))]
+pub enum PackMode {
+    AllowEnv,
+    DenyEnv,
+}
+
+impl PackMode {
+    pub fn allows_env(self) -> bool {
+        self == PackMode::AllowEnv
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PackMode::AllowEnv => "allow_env",
+            PackMode::DenyEnv => "deny_env",
+        }
+    }
+}

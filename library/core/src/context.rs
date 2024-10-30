@@ -98,17 +98,17 @@ mod make_single_item_bundle {
 
 #[allow_internal_unstable(builtin_syntax)]
 pub macro pack {
-    (@env $(=> $ty:ty)?) => {
-        {builtin # pack($(=> $ty)?) }
+    (@env $(,$src:expr)* $(,)? $(=> $ty:ty)?) => {
+        {builtin # pack(allow_env $($src),* $(=> $ty)?) }
     },
     ($($src:expr),+$(,)? $(=> $ty:ty)?) => {
-        {builtin # pack($($src),* $(=> $ty)?) }
+        {builtin # pack(deny_env $($src),* $(=> $ty)?) }
     },
 }
 
 pub macro unpack {
-    (@env => $ty:ty) => {
-        pack!(@env => Bundle<$ty>).unwrap()
+    (@env $(,$src:expr)* $(,)? => $ty:ty) => {
+        pack!(@env $(,$src)* => Bundle<$ty>).unwrap()
     },
     ($($src:expr),+$(,)? => $ty:ty) => {
         pack!($($src),* => Bundle<$ty>).unwrap()

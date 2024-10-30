@@ -8,7 +8,7 @@ use rustc_ast::{
 };
 pub use rustc_ast::{
     BinOp, BinOpKind, BindingMode, BorrowKind, ByRef, CaptureBy, ImplPolarity, IsAuto, Movability,
-    Mutability, UnOp,
+    Mutability, PackMode, UnOp,
 };
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::sorted_map::SortedMap;
@@ -1890,7 +1890,7 @@ impl Expr<'_> {
 
             ExprKind::Array(args)
             | ExprKind::Tup(args)
-            | ExprKind::Pack(args, _)
+            | ExprKind::Pack(_, args, _)
             | ExprKind::Call(
                 Expr {
                     kind:
@@ -2137,7 +2137,7 @@ pub enum ExprKind<'hir> {
     Yield(&'hir Expr<'hir>, YieldSource),
 
     /// A pack directive (i.e. `pack!(expr1, expr2, ... => ty)`).
-    Pack(&'hir [Expr<'hir>], Option<&'hir Ty<'hir>>),
+    Pack(PackMode, &'hir [Expr<'hir>], Option<&'hir Ty<'hir>>),
 
     /// A placeholder for an expression that wasn't syntactically well formed in some way.
     Err(rustc_span::ErrorGuaranteed),

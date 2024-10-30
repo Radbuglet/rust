@@ -278,7 +278,7 @@ impl<'a, 'tcx> Visitor<'tcx> for LintTailExpr<'a, 'tcx> {
             | ExprKind::Call(_, _)
             | ExprKind::Type(_, _)
             | ExprKind::Tup(_)
-            | ExprKind::Pack(_, _)
+            | ExprKind::Pack(_, _, _)
             | ExprKind::Binary(_, _, _)
             | ExprKind::Unary(_, _)
             | ExprKind::Path(_)

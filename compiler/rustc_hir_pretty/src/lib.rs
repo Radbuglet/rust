@@ -1385,9 +1385,10 @@ impl<'a> State<'a> {
                 self.end();
                 self.word(")");
             }
-            hir::ExprKind::Pack(exprs, ty) => {
+            hir::ExprKind::Pack(mode, exprs, ty) => {
                 self.word("pack!(");
                 self.ibox(0);
+                self.word_space(mode.as_str());
                 self.commasep_exprs(Inconsistent, exprs);
                 if let Some(ty) = ty {
                     self.word_space("=>");

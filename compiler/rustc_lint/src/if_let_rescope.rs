@@ -367,7 +367,7 @@ impl<'tcx, 'a> Visitor<'tcx> for FindSignificantDropper<'tcx, 'a> {
             | hir::ExprKind::DropTemps(_)
             | hir::ExprKind::Loop(_, _, _, _) => ControlFlow::Continue(()),
 
-            hir::ExprKind::Tup(exprs) | hir::ExprKind::Pack(exprs, _) | hir::ExprKind::Array(exprs) => {
+            hir::ExprKind::Tup(exprs) | hir::ExprKind::Pack(_, exprs, _) | hir::ExprKind::Array(exprs) => {
                 for expr in exprs {
                     self.visit_expr(expr)?;
                 }

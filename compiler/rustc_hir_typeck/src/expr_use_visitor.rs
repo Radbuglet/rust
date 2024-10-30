@@ -374,7 +374,7 @@ impl<'tcx, Cx: TypeInformationCtxt<'tcx>, D: Delegate<'tcx>> ExprUseVisitor<'tcx
                 self.walk_struct_expr(fields, opt_with)?;
             }
 
-            hir::ExprKind::Tup(exprs) | hir::ExprKind::Pack(exprs, _) => {
+            hir::ExprKind::Tup(exprs) | hir::ExprKind::Pack(_, exprs, _) => {
                 self.consume_exprs(exprs)?;
             }
 
