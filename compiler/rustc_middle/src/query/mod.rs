@@ -2285,6 +2285,21 @@ rustc_queries! {
         desc { "computing a reified bundle" }
         no_hash
     }
+
+    query components_borrowed_local(def_id: LocalDefId) -> &'tcx ty::ContextBorrowsLocal<'tcx> {
+        desc { "determining the components locally borrowed by a function" }
+    }
+
+    query components_borrowed_graph(_: ()) -> &'tcx LocalDefIdMap<&'tcx ty::ContextSet> {
+        desc { "determining the components borrowed by all local functions" }
+        no_hash
+    }
+
+    query components_borrowed(def_id: DefId) -> &'tcx ty::ContextSet {
+        desc { "determining the components borrowed by a function" }
+        cache_on_disk_if { def_id.is_local() }
+        separate_provide_extern
+    }
 }
 
 rustc_query_append! { define_callbacks! }

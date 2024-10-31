@@ -339,14 +339,14 @@ impl<'a, 'thir, 'tcx> BinderUseVisitor<'a, 'thir, 'tcx> {
         }
     }
 
-    fn walk_pack_shape(&mut self, shape: &'thir thir::PackShape<'tcx>) {
+    fn visit_pack_shape(&mut self, shape: &'thir thir::PackShape<'tcx>) {
         match shape {
             &thir::PackShape::ExtractEnv(muta, item, binder) => {
                 self.introduce_use(item, muta, binder);
             }
             thir::PackShape::Tuple(fields) => {
                 for field in fields {
-                    self.walk_pack_shape(field);
+                    self.visit_pack_shape(field);
                 }
             }
             thir::PackShape::ExtractLocal(..) | thir::PackShape::Error(..) => {
@@ -365,7 +365,7 @@ impl<'a, 'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for BinderUseVisitor<'a, 
                 self.introduce_use(item, muta, binder);
             }
             Pack { shape, .. } => {
-                self.walk_pack_shape(shape);
+                self.visit_pack_shape(shape);
             }
 
             Scope { .. }

@@ -1,15 +1,26 @@
-use smallvec::SmallVec;
+#![expect(unused)]  // TODO
+
+use std::collections::hash_map::Entry;
+
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
-use rustc_hir::def_id::DefId;
-use rustc_macros::HashStable;
+use rustc_data_structures::unord::UnordMap;
+use rustc_hir::def_id::{DefId, LocalDefId, LocalDefIdMap};
+use rustc_macros::{HashStable, Encodable, Decodable};
+use smallvec::SmallVec;
 
 use crate::mir;
+use crate::thir::{self, visit as thir_visit};
 use crate::ty::{self, Mutability, list::RawList, Ty, TyCtxt};
 use crate::query::Providers;
+
+use thir_visit::Visitor as _;
 
 pub fn provide(providers: &mut Providers) {
     *providers = Providers {
         reified_bundle,
+        components_borrowed_local,
+        components_borrowed_graph,
+        components_borrowed,
         ..*providers
     };
 }
@@ -287,4 +298,261 @@ impl<'tcx> ReifiedContextItem<'tcx> {
 
 // === Context Graph === //
 
-// TODO
+#[derive(Debug, Default, HashStable, Eq, PartialEq, Clone, Encodable, Decodable)]
+pub struct ContextSet(pub UnordMap<DefId, Mutability>);
+
+impl ContextSet {
+    pub fn add(&mut self, id: DefId, muta: Mutability) -> bool {
+        match self.0.entry(id) {
+            Entry::Vacant(mut entry) => {
+                entry.insert(muta);
+                true
+            }
+            Entry::Occupied(mut entry) => {
+                let entry = entry.get_mut();
+
+                if *entry < muta {
+                    *entry = muta;
+                    true
+                } else {
+                    false
+                }
+
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ContextBorrowsLocal<'tcx> {
+    direct: ContextSet,
+    indirect: Vec<IndirectContextCall<'tcx>>,
+}
+
+#[derive(Debug)]
+struct IndirectContextCall<'tcx> {
+    target: DefId,
+    absorbs: &'tcx ContextSet,
+}
+
+fn components_borrowed_local<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    def_id: LocalDefId,
+) -> &'tcx ty::ContextBorrowsLocal<'tcx> {
+    let empty_set = tcx.arena.alloc(ContextSet::default());
+
+    let Ok((thir, entry)) = tcx.thir_body(def_id) else {
+        return tcx.arena.alloc(ContextBorrowsLocal {
+            direct: ContextSet::default(),
+            indirect: Vec::new(),
+        });
+    };
+
+    let thir = thir.borrow();
+    let thir = &thir;
+
+    let mut visitor = ComponentsBorrowedLocalVisitor {
+        tcx,
+        thir,
+        direct: ContextSet::default(),
+        indirect: Vec::new(),
+        curr_absorb: empty_set,
+    };
+    visitor.visit_expr(&visitor.thir.exprs[entry]);
+
+    tcx.arena.alloc(ContextBorrowsLocal {
+        direct: visitor.direct,
+        indirect: visitor.indirect,
+    })
+}
+
+struct ComponentsBorrowedLocalVisitor<'thir, 'tcx> {
+    tcx: TyCtxt<'tcx>,
+    thir: &'thir thir::Thir<'tcx>,
+    direct: ContextSet,
+    indirect: Vec<IndirectContextCall<'tcx>>,
+    curr_absorb: &'tcx ContextSet,
+}
+
+impl<'thir, 'tcx> ComponentsBorrowedLocalVisitor<'thir, 'tcx> {
+    fn visit_pack_shape(&mut self, shape: &'thir thir::PackShape<'tcx>) {
+        match shape {
+            &thir::PackShape::ExtractEnv(muta, item, binder) => {
+                if binder.is_env() {
+                    self.direct.add(item, muta);
+                }
+            }
+            thir::PackShape::Tuple(fields) => {
+                for field in fields {
+                    self.visit_pack_shape(field);
+                }
+            }
+            thir::PackShape::ExtractLocal(..) | thir::PackShape::Error(..) => {
+                // (does not introduce context uses)
+            }
+        }
+    }
+}
+
+impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVisitor<'thir, 'tcx> {
+    fn thir(&self) -> &'thir thir::Thir<'tcx> {
+        self.thir
+    }
+
+    fn visit_block(&mut self, block: &'thir thir::Block) {
+        let old_absorb = self.curr_absorb;
+        thir_visit::walk_block(self, block);
+        self.curr_absorb = old_absorb;
+    }
+
+    fn visit_stmt(&mut self, stmt: &'thir thir::Stmt<'tcx>) {
+        use thir::StmtKind::*;
+
+        match &stmt.kind {
+            &BindContext { bundle, .. } => {
+                let bundle_ty = self.thir.exprs[bundle].ty;
+                let reified = self.tcx.reified_bundle(bundle_ty);
+
+                let mut set = self.curr_absorb.clone();
+                let mut changed = false;
+
+                for (def_id, members) in &reified.fields {
+                    for member in members {
+                        changed |= set.add(*def_id, member.mutability);
+                    }
+                }
+
+                if changed {
+                    self.curr_absorb = self.tcx.arena.alloc(set);
+                }
+            }
+            Expr { .. } | Let { .. } => {
+                thir_visit::walk_stmt(self, stmt);
+            }
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &'thir thir::Expr<'tcx>) {
+        use thir::ExprKind::*;
+
+        match &expr.kind {
+            &ContextRef { item, muta, binder, .. } => {
+                if binder.is_env() {
+                    self.direct.add(item, muta);
+                }
+            }
+            Pack { shape, .. } => {
+                self.visit_pack_shape(shape);
+            }
+            Call { ty, .. } => {
+                match ty.kind() {
+                    &ty::FnDef(def_id, ..) => {
+                        self.indirect.push(IndirectContextCall {
+                            target: def_id,
+                            absorbs: self.curr_absorb,
+                        });
+                    }
+                    ty::Bool
+                    | ty::Char
+                    | ty::Int(..)
+                    | ty::Uint(..)
+                    | ty::Float(..)
+                    | ty::Adt(..)
+                    | ty::Foreign(..)
+                    | ty::Str
+                    | ty::Array(..)
+                    | ty::Pat(..)
+                    | ty::Slice(..)
+                    | ty::RawPtr(..)
+                    | ty::Ref(..)
+                    | ty::FnPtr(..)
+                    | ty::Dynamic(..)
+                    | ty::Closure(..)
+                    | ty::CoroutineClosure(..)
+                    | ty::Coroutine(..)
+                    | ty::CoroutineWitness(..)
+                    | ty::Never
+                    | ty::Tuple(..)
+                    | ty::Alias(..)
+                    | ty::Param(..)
+                    | ty::Bound(..)
+                    | ty::Placeholder(..)
+                    | ty::Infer(..)
+                    | ty::ContextMarker(..)
+                    | ty::Error(..) => {
+                        // (no statically known function type)
+                    }
+                }
+            }
+
+            Scope { .. }
+            | Box { .. }
+            | If { .. }
+            | Deref { .. }
+            | Binary { .. }
+            | LogicalOp { .. }
+            | Unary { .. }
+            | Cast { .. }
+            | Use { .. }
+            | NeverToAny { .. }
+            | PointerCoercion { .. }
+            | Loop { .. }
+            | Let { .. }
+            | Match { .. }
+            | Block { .. }
+            | Assign { .. }
+            | AssignOp { .. }
+            | Field { .. }
+            | Index { .. }
+            | VarRef { .. }
+            | UpvarRef { .. }
+            | Borrow { .. }
+            | RawBorrow { .. }
+            | Break { .. }
+            | Continue { .. }
+            | Return { .. }
+            | Become { .. }
+            | ConstBlock { .. }
+            | Repeat { .. }
+            | Array { .. }
+            | Tuple { .. }
+            | Adt { .. }
+            | PlaceTypeAscription { .. }
+            | ValueTypeAscription { .. }
+            | Closure { .. }
+            | Literal { .. }
+            | NonHirLiteral { .. }
+            | ZstLiteral { .. }
+            | NamedConst { .. }
+            | ConstParam { .. }
+            | StaticRef { .. }
+            | InlineAsm { .. }
+            | OffsetOf { .. }
+            | ThreadLocalRef { .. }
+            | Yield { .. } => {
+                // (no context users directly introduced by expression)
+            }
+        }
+
+        thir_visit::walk_expr(self, expr);
+    }
+}
+
+fn components_borrowed_graph<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    _: (),
+) -> &'tcx LocalDefIdMap<&'tcx ty::ContextSet> {
+    let mut map = LocalDefIdMap::default();
+
+    // TODO: Actually implement the graph algorithm
+    for def_id in tcx.hir().body_owners() {
+        let info = tcx.components_borrowed_local(def_id);
+        map.insert(def_id, &info.direct);
+    }
+
+    tcx.arena.alloc(map)
+}
+
+fn components_borrowed<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> &'tcx ty::ContextSet {
+    tcx.components_borrowed_graph(())[&def_id]
+}

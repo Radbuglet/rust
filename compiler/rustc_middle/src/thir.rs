@@ -131,6 +131,12 @@ pub enum ContextBinder {
     LocalBinder(StmtId),
 }
 
+impl ContextBinder {
+    pub fn is_env(self) -> bool {
+        self == ContextBinder::FuncEnv
+    }
+}
+
 #[derive(Clone, Debug, HashStable)]
 pub struct Block {
     /// Whether the block itself has a label. Used by `label: {}`
@@ -252,7 +258,7 @@ pub enum StmtKind<'tcx> {
         remainder_scope: region::Scope,
 
         /// The scope for the initialization itself; might be used as lifetime of temporaries.
-        init_scope:region::Scope,
+        init_scope: region::Scope,
 
         /// The bundle being bound.
         bundle: ExprId,
