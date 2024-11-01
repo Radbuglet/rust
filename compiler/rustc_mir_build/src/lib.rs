@@ -13,6 +13,7 @@
 
 mod build;
 mod check_unsafety;
+mod context;
 mod errors;
 pub mod lints;
 mod thir;

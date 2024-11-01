@@ -1,10 +1,7 @@
 #![expect(unused)]  // TODO
 
-use std::collections::hash_map::Entry;
-
-use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
-use rustc_data_structures::unord::UnordMap;
-use rustc_hir::def_id::{DefId, LocalDefId, LocalDefIdMap};
+use rustc_data_structures::fx::{FxHashMap, FxIndexMap, IndexEntry};
+use rustc_hir::def_id::{DefId, DefIndex, LocalDefId, LocalDefIdMap};
 use rustc_macros::{HashStable, TyDecodable, TyEncodable};
 use smallvec::SmallVec;
 
@@ -299,16 +296,16 @@ impl<'tcx> ReifiedContextItem<'tcx> {
 // === Context Graph === //
 
 #[derive(Debug, Default, HashStable, Eq, PartialEq, Clone, TyEncodable, TyDecodable)]
-pub struct ContextSet(pub UnordMap<DefId, Mutability>);
+pub struct ContextSet(FxIndexMap<DefId, Mutability>);
 
 impl ContextSet {
     pub fn add(&mut self, id: DefId, muta: Mutability) -> bool {
         match self.0.entry(id) {
-            Entry::Vacant(mut entry) => {
+            IndexEntry::Vacant(mut entry) => {
                 entry.insert(muta);
                 true
             }
-            Entry::Occupied(mut entry) => {
+            IndexEntry::Occupied(mut entry) => {
                 let entry = entry.get_mut();
 
                 if *entry < muta {
@@ -320,6 +317,10 @@ impl ContextSet {
 
             }
         }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (DefId, Mutability)> + '_ {
+        self.0.iter().map(|(&k, &v)| (k, v))
     }
 }
 
@@ -335,12 +336,17 @@ struct IndirectContextCall<'tcx> {
     absorbs: &'tcx ContextSet,
 }
 
-pub fn extract_static_callee_for_context<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Option<DefId> {
-    let _ = tcx;
+pub fn is_valid_static_callee_for_context<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> bool {
+    tcx.def_kind(def_id) == ty::DefKind::Fn
+        && tcx.is_mir_available(def_id)
+        // TODO: The non-const condition is load bearing as it helps avoid recursive query calls.
+        && !tcx.is_const_fn_raw(def_id)
+}
 
+pub fn extract_static_callee_for_context<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Option<DefId> {
     match ty.kind() {
         &ty::FnDef(def_id, ..) => {
-            Some(def_id)
+            is_valid_static_callee_for_context(tcx, def_id).then_some(def_id)
         }
         ty::Bool
         | ty::Char
@@ -553,15 +559,26 @@ fn components_borrowed_graph<'tcx>(
 ) -> &'tcx LocalDefIdMap<&'tcx ty::ContextSet> {
     let mut map = LocalDefIdMap::default();
 
-    // TODO: Actually implement the graph algorithm
-    for def_id in tcx.hir().body_owners() {
+    // TODO: We can probably rely on a much more precise iteration.
+    for def_id in 0..tcx.untracked().definitions.read().def_index_count() {
+        let def_id = LocalDefId {
+            local_def_index: DefIndex::from_usize(def_id),
+        };
+        if !is_valid_static_callee_for_context(tcx, def_id.to_def_id()) {
+            continue;
+        }
+
         let info = tcx.components_borrowed_local(def_id);
         map.insert(def_id, &info.direct);
     }
+
+    // TODO: Actually implement the graph algorithm
 
     tcx.arena.alloc(map)
 }
 
 fn components_borrowed<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> &'tcx ty::ContextSet {
+    // TODO: This should never fail but it can because `is_valid_static_callee_for_context` does
+    // not properly check whether the item has an owner.
     tcx.components_borrowed_graph(())[&def_id]
 }

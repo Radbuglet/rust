@@ -16,10 +16,9 @@ use rustc_middle::thir::*;
 use rustc_middle::ty::{self, RvalueScopes, TyCtxt};
 use tracing::instrument;
 
+use crate::context::ContextBindTracker;
 use crate::thir::pattern::pat_from_hir;
 use crate::thir::util::UserAnnotatedTyHelpers;
-
-use self::context::ContextBindTracker;
 
 pub(crate) fn thir_body(
     tcx: TyCtxt<'_>,

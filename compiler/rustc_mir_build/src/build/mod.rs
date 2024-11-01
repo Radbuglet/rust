@@ -26,6 +26,7 @@ use rustc_target::spec::abi::Abi;
 use super::lints;
 use crate::build::expr::as_place::PlaceBuilder;
 use crate::build::scope::DropKind;
+use crate::context::ContextBindTracker;
 
 pub(crate) fn closure_saved_names_of_captured_variables<'tcx>(
     tcx: TyCtxt<'tcx>,
@@ -222,6 +223,9 @@ struct Builder<'a, 'tcx> {
 
     /// Maps context binders to information about the locals to use for them while lowering.
     context_binders: context::ContextBinderMap,
+
+    /// Context bind tracker
+    bind_tracker: ContextBindTracker,
 }
 
 type CaptureMap<'tcx> = SortedIndexMultiMap<usize, HirId, Capture<'tcx>>;
@@ -782,6 +786,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             lint_level_roots_cache: GrowableBitSet::new_empty(),
             coverage_info: coverageinfo::CoverageInfoBuilder::new_if_enabled(tcx, def),
             context_binders: context::ContextBinderMap::default(),
+            bind_tracker: ContextBindTracker::default(),
         };
 
         assert_eq!(builder.cfg.start_new_block(), START_BLOCK);

@@ -77,6 +77,7 @@ trivially_parameterized_over_tcx! {
     ty::adjustment::CoerceUnsizedInfo,
     ty::fast_reject::SimplifiedType,
     ty::IntrinsicDef,
+    ty::ContextSet,
     rustc_ast::Attribute,
     rustc_ast::DelimArgs,
     rustc_ast::expand::StrippedCfgItem<rustc_hir::def_id::DefIndex>,

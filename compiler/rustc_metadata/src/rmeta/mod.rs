@@ -468,6 +468,7 @@ define_tables! {
     doc_link_resolutions: Table<DefIndex, LazyValue<DocLinkResMap>>,
     doc_link_traits_in_scope: Table<DefIndex, LazyArray<DefId>>,
     assumed_wf_types_for_rpitit: Table<DefIndex, LazyArray<(Ty<'static>, Span)>>,
+    components_borrowed: Table<DefIndex, LazyValue<ty::ContextSet>>,
 }
 
 #[derive(TyEncodable, TyDecodable)]

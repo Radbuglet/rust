@@ -17,9 +17,12 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         ast_block: BlockId,
         source_info: SourceInfo,
     ) -> BlockAnd<()> {
+        let context_scope = self.bind_tracker.push_scope();
+
         let Block { region_scope, span, ref stmts, expr, targeted_by_break, safety_mode: _ } =
             self.thir[ast_block];
-        self.in_scope((region_scope, source_info), LintLevel::Inherited, move |this| {
+
+        let res = self.in_scope((region_scope, source_info), LintLevel::Inherited, move |this| {
             if targeted_by_break {
                 this.in_breakable_scope(None, destination, span, |this| {
                     Some(this.ast_block_stmts(destination, block, span, stmts, expr, region_scope))
@@ -27,7 +30,11 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             } else {
                 this.ast_block_stmts(destination, block, span, stmts, expr, region_scope)
             }
-        })
+        });
+
+        self.bind_tracker.pop_scope(context_scope);
+
+        res
     }
 
     fn ast_block_stmts(
@@ -339,6 +346,10 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
 
                             let bundle_ty = this.thir.exprs[*bundle].ty;
                             let bundle_reified = this.tcx.reified_bundle(bundle_ty);
+
+                            for &def_id in bundle_reified.fields.keys() {
+                                this.bind_tracker.bind(def_id, *stmt);
+                            }
 
                             // Lower bundle expression
                             let bundle_out = this.temp(bundle_ty, bundle_span);

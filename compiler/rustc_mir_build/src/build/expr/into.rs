@@ -238,8 +238,16 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     None
                 })
             }
-            ExprKind::Call { ty: _, fun, ref args, from_hir_call, fn_span } => {
-                // TODO: Ensure that this invalidates and reborrows all relevant bound context items.
+            ExprKind::Call { ty, fun, ref args, from_hir_call, fn_span } => {
+                if let Some(callee) = rustc_middle::ty::extract_static_callee_for_context(
+                    this.tcx,
+                    ty,
+                ) {
+                    for (def_id, muta) in this.tcx.components_borrowed(callee).iter() {
+                        let binder = this.bind_tracker.resolve(def_id);
+                        dbg!(def_id, muta, binder);
+                    }
+                }
 
                 let fun = unpack!(block = this.as_local_operand(block, fun));
                 let args: Box<[_]> = args

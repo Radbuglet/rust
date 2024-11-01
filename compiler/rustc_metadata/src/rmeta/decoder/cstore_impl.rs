@@ -433,6 +433,7 @@ provide! { tcx, def_id, other, cdata,
     doc_link_traits_in_scope => {
         tcx.arena.alloc_from_iter(cdata.get_doc_link_traits_in_scope(def_id.index))
     }
+    components_borrowed => { table }
 }
 
 pub(in crate::rmeta) fn provide(providers: &mut Providers) {
