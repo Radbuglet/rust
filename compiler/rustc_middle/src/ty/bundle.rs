@@ -5,7 +5,7 @@ use std::collections::hash_map::Entry;
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
 use rustc_data_structures::unord::UnordMap;
 use rustc_hir::def_id::{DefId, LocalDefId, LocalDefIdMap};
-use rustc_macros::{HashStable, Encodable, Decodable};
+use rustc_macros::{HashStable, TyDecodable, TyEncodable};
 use smallvec::SmallVec;
 
 use crate::mir;
@@ -298,7 +298,7 @@ impl<'tcx> ReifiedContextItem<'tcx> {
 
 // === Context Graph === //
 
-#[derive(Debug, Default, HashStable, Eq, PartialEq, Clone, Encodable, Decodable)]
+#[derive(Debug, Default, HashStable, Eq, PartialEq, Clone, TyEncodable, TyDecodable)]
 pub struct ContextSet(pub UnordMap<DefId, Mutability>);
 
 impl ContextSet {
@@ -323,18 +323,59 @@ impl ContextSet {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, HashStable, TyEncodable, TyDecodable)]
 pub struct ContextBorrowsLocal<'tcx> {
     direct: ContextSet,
     indirect: Vec<IndirectContextCall<'tcx>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, HashStable, TyEncodable, TyDecodable)]
 struct IndirectContextCall<'tcx> {
     target: DefId,
     absorbs: &'tcx ContextSet,
 }
 
+pub fn extract_static_callee_for_context<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Option<DefId> {
+    let _ = tcx;
+
+    match ty.kind() {
+        &ty::FnDef(def_id, ..) => {
+            Some(def_id)
+        }
+        ty::Bool
+        | ty::Char
+        | ty::Int(..)
+        | ty::Uint(..)
+        | ty::Float(..)
+        | ty::Adt(..)
+        | ty::Foreign(..)
+        | ty::Str
+        | ty::Array(..)
+        | ty::Pat(..)
+        | ty::Slice(..)
+        | ty::RawPtr(..)
+        | ty::Ref(..)
+        | ty::FnPtr(..)
+        | ty::Dynamic(..)
+        | ty::Closure(..)
+        | ty::CoroutineClosure(..)
+        | ty::Coroutine(..)
+        | ty::CoroutineWitness(..)
+        | ty::Never
+        | ty::Tuple(..)
+        | ty::Alias(..)
+        | ty::Param(..)
+        | ty::Bound(..)
+        | ty::Placeholder(..)
+        | ty::Infer(..)
+        | ty::ContextMarker(..)
+        | ty::Error(..) => {
+            None
+        }
+    }
+}
+
+// TODO: Make queries public (stop glob-importing `bundle` in `ty`)
 fn components_borrowed_local<'tcx>(
     tcx: TyCtxt<'tcx>,
     def_id: LocalDefId,
@@ -444,44 +485,12 @@ impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVi
             Pack { shape, .. } => {
                 self.visit_pack_shape(shape);
             }
-            Call { ty, .. } => {
-                match ty.kind() {
-                    &ty::FnDef(def_id, ..) => {
-                        self.indirect.push(IndirectContextCall {
-                            target: def_id,
-                            absorbs: self.curr_absorb,
-                        });
-                    }
-                    ty::Bool
-                    | ty::Char
-                    | ty::Int(..)
-                    | ty::Uint(..)
-                    | ty::Float(..)
-                    | ty::Adt(..)
-                    | ty::Foreign(..)
-                    | ty::Str
-                    | ty::Array(..)
-                    | ty::Pat(..)
-                    | ty::Slice(..)
-                    | ty::RawPtr(..)
-                    | ty::Ref(..)
-                    | ty::FnPtr(..)
-                    | ty::Dynamic(..)
-                    | ty::Closure(..)
-                    | ty::CoroutineClosure(..)
-                    | ty::Coroutine(..)
-                    | ty::CoroutineWitness(..)
-                    | ty::Never
-                    | ty::Tuple(..)
-                    | ty::Alias(..)
-                    | ty::Param(..)
-                    | ty::Bound(..)
-                    | ty::Placeholder(..)
-                    | ty::Infer(..)
-                    | ty::ContextMarker(..)
-                    | ty::Error(..) => {
-                        // (no statically known function type)
-                    }
+            &Call { ty, .. } => {
+                if let Some(def_id) = extract_static_callee_for_context(self.tcx, ty) {
+                    self.indirect.push(IndirectContextCall {
+                        target: def_id,
+                        absorbs: self.curr_absorb,
+                    });
                 }
             }
 

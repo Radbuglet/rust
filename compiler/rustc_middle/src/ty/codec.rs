@@ -463,6 +463,7 @@ impl_decodable_via_ref! {
     &'tcx ty::ListWithCachedTypeInfo<ty::Clause<'tcx>>,
     &'tcx ty::List<FieldIdx>,
     &'tcx ty::List<(VariantIdx, FieldIdx)>,
+    &'tcx ty::ContextSet,
 }
 
 #[macro_export]

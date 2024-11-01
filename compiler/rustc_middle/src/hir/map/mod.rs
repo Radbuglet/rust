@@ -1,6 +1,7 @@
 use rustc_ast::visit::{VisitorResult, walk_list};
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
+use rustc_data_structures::steal::Steal;
 use rustc_data_structures::svh::Svh;
 use rustc_data_structures::sync::{DynSend, DynSync, par_for_each_in, try_par_for_each_in};
 use rustc_hir::def::{DefKind, Res};
@@ -18,6 +19,7 @@ use {rustc_ast as ast, rustc_hir_pretty as pprust_hir};
 use crate::hir::ModuleItems;
 use crate::middle::debugger_visualizer::DebuggerVisualizerFile;
 use crate::query::LocalCrate;
+use crate::thir;
 use crate::ty::TyCtxt;
 
 // FIXME: the structure was necessary in the past but now it
@@ -108,6 +110,18 @@ impl<'hir> Iterator for ParentOwnerIterator<'hir> {
 }
 
 impl<'tcx> TyCtxt<'tcx> {
+    pub fn thir_body_compute_cx(
+        self,
+        def_id: LocalDefId,
+    ) -> Result<(&'tcx Steal<thir::Thir<'tcx>>, thir::ExprId), ErrorGuaranteed> {
+        let (body, expr) = self.thir_body(def_id)?;
+
+        // Ensure that `components_borrowed_local` is ran before the body is stolen.
+        let _ = self.components_borrowed_local(def_id);
+
+        Ok((body, expr))
+    }
+
     #[inline]
     fn expect_hir_owner_nodes(self, def_id: LocalDefId) -> &'tcx OwnerNodes<'tcx> {
         self.opt_hir_owner_nodes(def_id)

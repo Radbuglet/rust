@@ -199,7 +199,7 @@ impl<'tcx> UnsafetyVisitor<'_, 'tcx> {
 
     /// Handle closures/coroutines/inline-consts, which is unsafecked with their parent body.
     fn visit_inner_body(&mut self, def: LocalDefId) {
-        if let Ok((inner_thir, expr)) = self.tcx.thir_body(def) {
+        if let Ok((inner_thir, expr)) = self.tcx.thir_body_compute_cx(def) {
             // Runs all other queries that depend on THIR.
             self.tcx.ensure_with_value().mir_built(def);
             let inner_thir = &inner_thir.steal();
@@ -1011,7 +1011,7 @@ pub(crate) fn check_unsafety(tcx: TyCtxt<'_>, def: LocalDefId) {
         return;
     }
 
-    let Ok((thir, expr)) = tcx.thir_body(def) else { return };
+    let Ok((thir, expr)) = tcx.thir_body_compute_cx(def) else { return };
     // Runs all other queries that depend on THIR.
     tcx.ensure_with_value().mir_built(def);
     let thir = &thir.steal();

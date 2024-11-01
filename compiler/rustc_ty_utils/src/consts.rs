@@ -424,7 +424,7 @@ fn thir_abstract_const<'tcx>(
         _ => return Ok(None),
     }
 
-    let body = tcx.thir_body(def)?;
+    let body = tcx.thir_body_compute_cx(def)?;
     let (body, body_id) = (&*body.0.borrow(), body.1);
 
     let mut is_poly_vis = IsThirPolymorphic { is_poly: false, thir: body };

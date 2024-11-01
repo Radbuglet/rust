@@ -51,7 +51,7 @@ pub(crate) fn mir_build<'tcx>(tcx: TyCtxtAt<'tcx>, def: LocalDefId) -> Body<'tcx
         return construct_error(tcx, def, e);
     }
 
-    let body = match tcx.thir_body(def) {
+    let body = match tcx.thir_body_compute_cx(def) {
         Err(error_reported) => construct_error(tcx, def, error_reported),
         Ok((thir, expr)) => {
             let build_mir = |thir: &Thir<'tcx>| match thir.body_type {

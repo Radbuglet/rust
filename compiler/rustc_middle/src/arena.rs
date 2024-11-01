@@ -115,7 +115,7 @@ macro_rules! arena_types {
             [] crate_inherent_impls: rustc_middle::ty::CrateInherentImpls,
             [] hir_owner_nodes: rustc_hir::OwnerNodes<'tcx>,
             [] reified_bundles: rustc_middle::ty::ReifiedBundle<'tcx>,
-            [] context_sets: rustc_middle::ty::ContextSet,
+            [decode] context_sets: rustc_middle::ty::ContextSet,
             [] context_borrows_local: rustc_middle::ty::ContextBorrowsLocal<'tcx>,
             [] context_set_map: rustc_hir::def_id::LocalDefIdMap<&'tcx rustc_middle::ty::ContextSet>,
         ]);
