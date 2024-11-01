@@ -14,6 +14,8 @@ use thir_visit::Visitor as _;
 
 use super::Builder;
 
+use crate::context::ContextBindTracker;
+
 // Inner index map allows for deterministic iteration.
 type BinderMap = FxHashMap<ContextBinder, FxIndexMap<DefId, ContextBinderItemInfo>>;
 
@@ -54,16 +56,17 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         source_info: SourceInfo,
         root_expr: thir::ExprId,
     ) {
-        assert!(self.context_binders.0.is_none(), "`define_context_locals` called twice");
+        assert!(self.ctx_bind_values.0.is_none(), "`define_context_locals` called twice");
 
-        let root_expr = &self.thir.exprs[root_expr];
+        let root_expr = &self.thir[root_expr];
         let mut visitor = BinderUseVisitor {
             builder: self,
             map: BinderMap::default(),
+            bind_tracker: ContextBindTracker::default(),
             source_info,
         };
         visitor.visit_expr(root_expr);
-        self.context_binders.0 = Some(visitor.map);
+        self.ctx_bind_values.0 = Some(visitor.map);
     }
 
     pub(crate) fn init_and_borrow_context_binder_locals(
@@ -73,10 +76,11 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         binder: ContextBinder,
         lt_limiter: Place<'tcx>,
     ) {
-        let Some(binders) = self.context_binders.expect_init().get(&binder) else {
+        let Some(binders) = self.ctx_bind_values.expect_init().get(&binder) else {
             return;
         };
 
+        // Acquire a raw pointer for each context item.
         for (&item, &item_info) in binders {
             self.cfg.push_assign(
                 block,
@@ -86,29 +90,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             );
         }
 
-        // Reborrow them
-        self.reborrow_context_binder_locals(block, source_info, binder);
-
-        // Limit their lifetimes to the scope of the bind
-        // (reborrow needed because `self` borrowed by `reborrow_context_binder_locals`)
-        let binders = &self.context_binders.expect_init()[&binder];
-        let equate_refs = [lt_limiter].into_iter()
-            .chain(binders.values().map(|item_info| Place::from(item_info.ref_local())))
-            .collect::<Vec<_>>();
-
-        self.equate_ref_lifetimes(block, source_info, &equate_refs);
-    }
-
-    pub(crate) fn reborrow_context_binder_locals(
-        &mut self,
-        block: BasicBlock,
-        source_info: SourceInfo,
-        binder: ContextBinder,
-    ) {
-        let Some(binders) = self.context_binders.expect_init().get(&binder) else {
-            return;
-        };
-
+        // Borrow each context item.
         let deref_proj = self.tcx.mk_place_elems(&[mir::PlaceElem::Deref]);
 
         for (&item, &item_info) in binders {
@@ -129,6 +111,13 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 }),
             );
         }
+
+        // Limit their lifetimes to the scope of the bind.
+        let equate_refs = [lt_limiter].into_iter()
+            .chain(binders.values().map(|item_info| Place::from(item_info.ref_local())))
+            .collect::<Vec<_>>();
+
+        self.equate_ref_lifetimes(block, source_info, &equate_refs);
     }
 
     pub(crate) fn lookup_context_binder(
@@ -136,7 +125,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         item: DefId,
         binder: ContextBinder,
     ) -> ContextBinderItemInfo {
-        *self.context_binders.expect_init()
+        *self.ctx_bind_values.expect_init()
             .get(&binder)
             .and_then(|v| v.get(&item))
             .unwrap_or_else(|| panic!("unknown context item {item:?} under binder {binder:?}"))
@@ -290,6 +279,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
 
 struct BinderUseVisitor<'a, 'thir, 'tcx> {
     builder: &'a mut Builder<'thir, 'tcx>,
+    bind_tracker: ContextBindTracker,
     map: BinderMap,
     source_info: SourceInfo,
 }
@@ -357,6 +347,36 @@ impl<'a, 'thir, 'tcx> BinderUseVisitor<'a, 'thir, 'tcx> {
 }
 
 impl<'a, 'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for BinderUseVisitor<'a, 'thir, 'tcx> {
+    fn visit_block(&mut self, block: &'thir thir::Block) {
+        let scope = self.bind_tracker.push_scope();
+
+        for &stmt_id in &*block.stmts {
+            use thir::StmtKind::*;
+
+            let stmt = &self.thir()[stmt_id];
+
+            match &stmt.kind {
+                Expr { .. } => {}
+                Let { .. } => {}
+                &BindContext { bundle, .. } => {
+                    let reified = self.builder.tcx.reified_bundle(self.thir()[bundle].ty);
+
+                    for &item in reified.fields.keys() {
+                        self.bind_tracker.bind(item, stmt_id);
+                    }
+                }
+            }
+
+            thir_visit::walk_stmt(self, stmt);
+        }
+
+        if let Some(expr) = block.expr {
+            self.visit_expr(&self.thir()[expr]);
+        }
+
+        self.bind_tracker.pop_scope(scope);
+    }
+
     fn visit_expr(&mut self, expr: &'thir thir::Expr<'tcx>) {
         use thir::ExprKind::*;
 
@@ -367,11 +387,17 @@ impl<'a, 'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for BinderUseVisitor<'a, 
             Pack { shape, .. } => {
                 self.visit_pack_shape(shape);
             }
+            &Call { ty, .. } => {
+                if let Some(callee) = ty::extract_static_callee_for_context(self.builder.tcx, ty) {
+                    for (item, muta) in self.builder.tcx.components_borrowed(callee).iter() {
+                        self.introduce_use(item, muta, self.bind_tracker.resolve(item));
+                    }
+                }
+            }
 
             Scope { .. }
             | Box { .. }
             | If { .. }
-            | Call { .. }
             | Deref { .. }
             | Binary { .. }
             | LogicalOp { .. }

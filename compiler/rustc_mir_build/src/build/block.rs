@@ -17,7 +17,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         ast_block: BlockId,
         source_info: SourceInfo,
     ) -> BlockAnd<()> {
-        let context_scope = self.bind_tracker.push_scope();
+        let context_scope = self.ctx_bind_tracker.push_scope();
 
         let Block { region_scope, span, ref stmts, expr, targeted_by_break, safety_mode: _ } =
             self.thir[ast_block];
@@ -32,7 +32,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             }
         });
 
-        self.bind_tracker.pop_scope(context_scope);
+        self.ctx_bind_tracker.pop_scope(context_scope);
 
         res
     }
@@ -348,7 +348,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                             let bundle_reified = this.tcx.reified_bundle(bundle_ty);
 
                             for &def_id in bundle_reified.fields.keys() {
-                                this.bind_tracker.bind(def_id, *stmt);
+                                this.ctx_bind_tracker.bind(def_id, *stmt);
                             }
 
                             // Lower bundle expression

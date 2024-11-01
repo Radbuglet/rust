@@ -222,10 +222,10 @@ struct Builder<'a, 'tcx> {
     coverage_info: Option<coverageinfo::CoverageInfoBuilder>,
 
     /// Maps context binders to information about the locals to use for them while lowering.
-    context_binders: context::ContextBinderMap,
+    ctx_bind_values: context::ContextBinderMap,
 
     /// Context bind tracker
-    bind_tracker: ContextBindTracker,
+    ctx_bind_tracker: ContextBindTracker,
 }
 
 type CaptureMap<'tcx> = SortedIndexMultiMap<usize, HirId, Capture<'tcx>>;
@@ -785,8 +785,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             var_debug_info: vec![],
             lint_level_roots_cache: GrowableBitSet::new_empty(),
             coverage_info: coverageinfo::CoverageInfoBuilder::new_if_enabled(tcx, def),
-            context_binders: context::ContextBinderMap::default(),
-            bind_tracker: ContextBindTracker::default(),
+            ctx_bind_values: context::ContextBinderMap::default(),
+            ctx_bind_tracker: ContextBindTracker::default(),
         };
 
         assert_eq!(builder.cfg.start_new_block(), START_BLOCK);

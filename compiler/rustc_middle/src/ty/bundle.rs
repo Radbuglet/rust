@@ -559,11 +559,9 @@ fn components_borrowed_graph<'tcx>(
 ) -> &'tcx LocalDefIdMap<&'tcx ty::ContextSet> {
     let mut map = LocalDefIdMap::default();
 
-    // TODO: We can probably rely on a much more precise iteration.
-    for def_id in 0..tcx.untracked().definitions.read().def_index_count() {
-        let def_id = LocalDefId {
-            local_def_index: DefIndex::from_usize(def_id),
-        };
+    // `is_valid_static_callee_for_context` contains a check for `is_mir_available`, which uses
+    // `tcx.mir_keys` to make its determination. Hence, this will not miss any important `LocalDefId`s.
+    for &def_id in tcx.mir_keys(()) {
         if !is_valid_static_callee_for_context(tcx, def_id.to_def_id()) {
             continue;
         }
@@ -578,7 +576,5 @@ fn components_borrowed_graph<'tcx>(
 }
 
 fn components_borrowed<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> &'tcx ty::ContextSet {
-    // TODO: This should never fail but it can because `is_valid_static_callee_for_context` does
-    // not properly check whether the item has an owner.
     tcx.components_borrowed_graph(())[&def_id]
 }

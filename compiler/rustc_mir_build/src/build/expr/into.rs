@@ -9,7 +9,7 @@ use rustc_hir as hir;
 use rustc_middle::mir::*;
 use rustc_middle::span_bug;
 use rustc_middle::thir::*;
-use rustc_middle::ty::CanonicalUserTypeAnnotation;
+use rustc_middle::ty::{CanonicalUserTypeAnnotation, Ty};
 use rustc_span::source_map::Spanned;
 use tracing::{debug, instrument};
 
@@ -231,7 +231,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     // introduce a unit temporary as the destination for the loop body.
                     let tmp = this.get_unit_temp();
                     // Execute the body, branching back to the test.
-                    let body_block_end = this.expr_into_dest(tmp, body_block, body).into_block();
+                let body_block_end = this.expr_into_dest(tmp, body_block, body).into_block();
                     this.cfg.goto(body_block_end, source_info, loop_block);
 
                     // Loops are only exited by `break` expressions.
@@ -239,17 +239,17 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 })
             }
             ExprKind::Call { ty, fun, ref args, from_hir_call, fn_span } => {
-                if let Some(callee) = rustc_middle::ty::extract_static_callee_for_context(
+                let ctx_callee = rustc_middle::ty::extract_static_callee_for_context(
                     this.tcx,
                     ty,
-                ) {
-                    for (def_id, muta) in this.tcx.components_borrowed(callee).iter() {
-                        let binder = this.bind_tracker.resolve(def_id);
-                        dbg!(def_id, muta, binder);
-                    }
-                }
+                );
 
+                let ctx_callee_comps = ctx_callee.map(|callee| this.tcx.components_borrowed(callee));
+
+                // Lower function expression
                 let fun = unpack!(block = this.as_local_operand(block, fun));
+
+                // Lower arguments
                 let args: Box<[_]> = args
                     .into_iter()
                     .copied()
@@ -265,6 +265,42 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
 
                 debug!("expr_into_dest: fn_span={:?}", fn_span);
 
+                // Ensure that context items borrowed in the current function are ended by borrows
+                // in the callee function.
+                if let Some(ctx_callee_comps) = ctx_callee_comps {
+                    for (item, muta) in ctx_callee_comps.iter() {
+                        let binder = this.ctx_bind_tracker.resolve(item);
+                        let binder_info = this.lookup_context_binder(item, binder);
+
+                        let ender_local = this.local_decls.push(LocalDecl::new(
+                            Ty::new_ref(
+                                this.tcx,
+                                this.tcx.lifetimes.re_erased,
+                                this.tcx.context_ty(item),
+                                muta,
+                            ),
+                            fn_span,
+                        ));
+
+                        this.cfg.push_assign(block, source_info, ender_local.into(), Rvalue::Ref(
+                            this.tcx.lifetimes.re_erased,
+                            match muta {
+                                Mutability::Not => BorrowKind::Shared,
+                                Mutability::Mut => BorrowKind::Mut {
+                                    kind: MutBorrowKind::Default,
+                                },
+                            },
+                            Place {
+                                local: binder_info.ref_local(),
+                                projection: this.tcx.mk_place_elems(&[
+                                    PlaceElem::Deref,
+                                ]),
+                            },
+                        ));
+                    }
+                }
+
+                // Lower the terminator.
                 this.cfg.terminate(block, source_info, TerminatorKind::Call {
                     func: fun,
                     args,
@@ -286,6 +322,38 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     fn_span,
                 });
                 this.diverge_from(block);
+
+                // Ensure that the previous borrow of the context item is no longer alive before the
+                // call by "refreshing" it after the call, avoiding aliasing issues.
+                // TODO: Do this (the prototype below doesn't properly re-limit lifetimes)
+                // if let Some(ctx_callee_comps) = ctx_callee_comps {
+                //     for (item, _muta) in ctx_callee_comps.iter() {
+                //         let binder = this.ctx_bind_tracker.resolve(item);
+                //         let binder_info = this.lookup_context_binder(item, binder);
+                // 
+                //         this.cfg.push_assign(
+                //             block,
+                //             source_info,
+                //             binder_info.ref_local().into(),
+                //             Rvalue::Ref(
+                //                 this.tcx.lifetimes.re_erased,
+                //                 match binder_info.muta() {
+                //                     Mutability::Not => BorrowKind::Shared,
+                //                     Mutability::Mut => BorrowKind::Mut {
+                //                         kind: MutBorrowKind::Default,
+                //                     },
+                //                 },
+                //                 Place {
+                //                     local: binder_info.ptr_local(),
+                //                     projection: this.tcx.mk_place_elems(&[
+                //                         PlaceElem::Deref,
+                //                     ]),
+                //                 },
+                //             ),
+                //         );
+                //     }
+                // }
+
                 success.unit()
             }
             ExprKind::Use { source } => this.expr_into_dest(destination, block, source),
