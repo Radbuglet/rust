@@ -325,34 +325,33 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
 
                 // Ensure that the previous borrow of the context item is no longer alive before the
                 // call by "refreshing" it after the call, avoiding aliasing issues.
-                // TODO: Do this (the prototype below doesn't properly re-limit lifetimes)
-                // if let Some(ctx_callee_comps) = ctx_callee_comps {
-                //     for (item, _muta) in ctx_callee_comps.iter() {
-                //         let binder = this.ctx_bind_tracker.resolve(item);
-                //         let binder_info = this.lookup_context_binder(item, binder);
-                // 
-                //         this.cfg.push_assign(
-                //             block,
-                //             source_info,
-                //             binder_info.ref_local().into(),
-                //             Rvalue::Ref(
-                //                 this.tcx.lifetimes.re_erased,
-                //                 match binder_info.muta() {
-                //                     Mutability::Not => BorrowKind::Shared,
-                //                     Mutability::Mut => BorrowKind::Mut {
-                //                         kind: MutBorrowKind::Default,
-                //                     },
-                //                 },
-                //                 Place {
-                //                     local: binder_info.ptr_local(),
-                //                     projection: this.tcx.mk_place_elems(&[
-                //                         PlaceElem::Deref,
-                //                     ]),
-                //                 },
-                //             ),
-                //         );
-                //     }
-                // }
+                if let Some(ctx_callee_comps) = ctx_callee_comps {
+                    for (item, _muta) in ctx_callee_comps.iter() {
+                        let binder = this.ctx_bind_tracker.resolve(item);
+                        let binder_info = this.lookup_context_binder(item, binder);
+
+                        this.cfg.push_assign(
+                            block,
+                            source_info,
+                            binder_info.ref_local().into(),
+                            Rvalue::Ref(
+                                this.tcx.lifetimes.re_erased,
+                                match binder_info.muta() {
+                                    Mutability::Not => BorrowKind::Shared,
+                                    Mutability::Mut => BorrowKind::Mut {
+                                        kind: MutBorrowKind::Default,
+                                    },
+                                },
+                                Place {
+                                    local: binder_info.ptr_local(),
+                                    projection: this.tcx.mk_place_elems(&[
+                                        PlaceElem::Deref,
+                                    ]),
+                                },
+                            ),
+                        );
+                    }
+                }
 
                 success.unit()
             }
