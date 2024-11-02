@@ -117,6 +117,7 @@ impl<'tcx> TyCtxt<'tcx> {
         let (body, expr) = self.thir_body(def_id)?;
 
         // Ensure that `components_borrowed_local` is ran before the body is stolen.
+        // FIXME: Do we need `ensure`?
         let _ = self.components_borrowed_local(def_id);
 
         Ok((body, expr))

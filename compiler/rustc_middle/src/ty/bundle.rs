@@ -1,7 +1,9 @@
 #![expect(unused)]  // TODO
 
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap, IndexEntry};
+use rustc_data_structures::graph::{DirectedGraph, Successors, scc};
 use rustc_hir::def_id::{DefId, DefIndex, LocalDefId, LocalDefIdMap};
+use rustc_index::{Idx, IndexVec};
 use rustc_macros::{HashStable, TyDecodable, TyEncodable};
 use smallvec::SmallVec;
 
@@ -326,8 +328,8 @@ impl ContextSet {
 
 #[derive(Debug, HashStable, TyEncodable, TyDecodable)]
 pub struct ContextBorrowsLocal<'tcx> {
-    direct: ContextSet,
-    indirect: Vec<IndirectContextCall<'tcx>>,
+    local: ContextSet,
+    calls: Vec<IndirectContextCall<'tcx>>,
 }
 
 #[derive(Debug, HashStable, TyEncodable, TyDecodable)]
@@ -339,7 +341,7 @@ struct IndirectContextCall<'tcx> {
 pub fn is_valid_static_callee_for_context<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> bool {
     tcx.def_kind(def_id) == ty::DefKind::Fn
         && tcx.is_mir_available(def_id)
-        // TODO: The non-const condition is load bearing as it helps avoid recursive query calls.
+        // The non-const condition is load bearing as it helps avoid recursive query calls.
         && !tcx.is_const_fn_raw(def_id)
 }
 
@@ -390,8 +392,8 @@ fn components_borrowed_local<'tcx>(
 
     let Ok((thir, entry)) = tcx.thir_body(def_id) else {
         return tcx.arena.alloc(ContextBorrowsLocal {
-            direct: ContextSet::default(),
-            indirect: Vec::new(),
+            local: ContextSet::default(),
+            calls: Vec::new(),
         });
     };
 
@@ -401,23 +403,23 @@ fn components_borrowed_local<'tcx>(
     let mut visitor = ComponentsBorrowedLocalVisitor {
         tcx,
         thir,
-        direct: ContextSet::default(),
-        indirect: Vec::new(),
+        local: ContextSet::default(),
+        calls: Vec::new(),
         curr_absorb: empty_set,
     };
     visitor.visit_expr(&visitor.thir.exprs[entry]);
 
     tcx.arena.alloc(ContextBorrowsLocal {
-        direct: visitor.direct,
-        indirect: visitor.indirect,
+        local: visitor.local,
+        calls: visitor.calls,
     })
 }
 
 struct ComponentsBorrowedLocalVisitor<'thir, 'tcx> {
     tcx: TyCtxt<'tcx>,
     thir: &'thir thir::Thir<'tcx>,
-    direct: ContextSet,
-    indirect: Vec<IndirectContextCall<'tcx>>,
+    local: ContextSet,
+    calls: Vec<IndirectContextCall<'tcx>>,
     curr_absorb: &'tcx ContextSet,
 }
 
@@ -426,7 +428,7 @@ impl<'thir, 'tcx> ComponentsBorrowedLocalVisitor<'thir, 'tcx> {
         match shape {
             &thir::PackShape::ExtractEnv(muta, item, binder) => {
                 if binder.is_env() {
-                    self.direct.add(item, muta);
+                    self.local.add(item, muta);
                 }
             }
             thir::PackShape::Tuple(fields) => {
@@ -485,7 +487,7 @@ impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVi
         match &expr.kind {
             &ContextRef { item, muta, binder, .. } => {
                 if binder.is_env() {
-                    self.direct.add(item, muta);
+                    self.local.add(item, muta);
                 }
             }
             Pack { shape, .. } => {
@@ -493,7 +495,7 @@ impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVi
             }
             &Call { ty, .. } => {
                 if let Some(def_id) = extract_static_callee_for_context(self.tcx, ty) {
-                    self.indirect.push(IndirectContextCall {
+                    self.calls.push(IndirectContextCall {
                         target: def_id,
                         absorbs: self.curr_absorb,
                     });
@@ -553,11 +555,116 @@ impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVi
     }
 }
 
+rustc_index::newtype_index! {
+    #[derive(Ord, PartialOrd)]
+    struct FuncIdx {}
+}
+
+rustc_index::newtype_index! {
+    #[derive(Ord, PartialOrd)]
+    struct SccIdx {}
+}
+
+struct ComponentsBorrowedGraph<'tcx> {
+    nodes: FxIndexMap<DefId, FuncNodeWeight<'tcx>>,
+}
+
+struct FuncNodeWeight<'tcx> {
+    local: &'tcx ContextSet,
+    calls: Box<[FuncEdgeWeight<'tcx>]>,
+}
+
+struct FuncEdgeWeight<'tcx> {
+    target: FuncIdx,
+    absorbs: &'tcx ContextSet,
+}
+
+impl<'tcx> DirectedGraph for ComponentsBorrowedGraph<'tcx> {
+    type Node = FuncIdx;
+
+    fn num_nodes(&self) -> usize {
+        self.nodes.len()
+    }
+}
+
+impl<'tcx> Successors for ComponentsBorrowedGraph<'tcx> {
+    fn successors(&self, node: Self::Node) -> impl Iterator<Item = Self::Node> {
+        self.nodes[node.as_usize()].calls.iter().map(|v| v.target)
+    }
+}
+
+struct SccMembers<N: Idx, S: Idx> {
+    comp_range_ends: IndexVec<S, u32>,
+    node_buf: Box<[N]>,
+}
+
+impl<N: Idx, S: Idx + Ord> SccMembers<N, S> {
+    fn new<A: scc::Annotation>(sccs: &scc::Sccs<N, S, A>) -> Self {
+        // Accumulate the number of elements in each SCC
+        let mut comp_range_ends = IndexVec::from_elem_n(0, sccs.num_sccs());
+        let mut node_buf = (0..sccs.scc_indices().len())
+            .map(|_| N::new(0))
+            .collect::<Box<_>>();
+
+        for (node, &scc) in sccs.scc_indices().iter_enumerated() {
+            comp_range_ends[scc] += 1;
+        }
+
+        // Transform these into fill-start indices
+        let mut next_start = 0;
+        for end in comp_range_ends.iter_mut() {
+            let count = *end;
+            *end = next_start;
+            next_start += count;
+        }
+
+        // Fill up the buffer
+        for (node, &scc) in sccs.scc_indices().iter_enumerated() {
+            let fill_idx = &mut comp_range_ends[scc];
+            node_buf[*fill_idx as usize] = node;
+            *fill_idx += 1;
+        }
+
+        Self {
+            comp_range_ends,
+            node_buf,
+        }
+    }
+
+    fn of(&self, comp: S) -> SccMemberSet<'_, N> {
+        let slice = self.of_raw(comp);
+        if slice.len() == 1 {
+            SccMemberSet::Single(slice[0])
+        } else {
+            SccMemberSet::Many(slice)
+        }
+    }
+
+    fn of_raw(&self, comp: S) -> &[N] {
+        let start = comp.index()
+            .checked_sub(1)
+            .map(|idx| self.comp_range_ends[S::new(idx)])
+            .unwrap_or(0) as usize;
+        let end = self.comp_range_ends[comp] as usize;
+
+        &self.node_buf[start..end]
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+enum SccMemberSet<'a, N> {
+    Single(N),
+    Many(&'a [N]),
+}
+
 fn components_borrowed_graph<'tcx>(
     tcx: TyCtxt<'tcx>,
     _: (),
-) -> &'tcx LocalDefIdMap<&'tcx ty::ContextSet> {
-    let mut map = LocalDefIdMap::default();
+) -> &'tcx LocalDefIdMap<&'tcx ContextSet> {
+    // Build a graph from all the functions.
+    let mut graph = ComponentsBorrowedGraph {
+        nodes: FxIndexMap::default(),
+    };
 
     // `is_valid_static_callee_for_context` contains a check for `is_mir_available`, which uses
     // `tcx.mir_keys` to make its determination. Hence, this will not miss any important `LocalDefId`s.
@@ -567,10 +674,82 @@ fn components_borrowed_graph<'tcx>(
         }
 
         let info = tcx.components_borrowed_local(def_id);
-        map.insert(def_id, &info.direct);
+        let calls = info.calls.iter()
+            .map(|call| {
+                let callee_entry = graph.nodes.entry(call.target);
+                let callee = callee_entry.index();
+
+                if call.target.is_local() {
+                    callee_entry.or_insert(FuncNodeWeight {
+                        // Initialize to some bogus data to reserve the entry.
+                        local: &info.local,
+                        calls: Box::new([]),
+                    });
+                } else {
+                    // We won't be initializing this callee later in the loop so we have to
+                    // initialize it immediately. In any case, the way these are initialized is
+                    // fundamentally different from the way we initialize local nodes.
+                    callee_entry.or_insert(FuncNodeWeight {
+                        local: tcx.components_borrowed(call.target),
+                        // We can treat it as if this foreign function borrowed all of its context
+                        // items directly since this graph is not directly used for diagnostics.
+                        calls: Box::new([]),
+                    });
+                }
+
+                FuncEdgeWeight {
+                    target: FuncIdx::from_usize(callee),
+                    absorbs: &call.absorbs,
+                }
+            })
+            .collect();
+
+        graph.nodes.insert(def_id.to_def_id(), FuncNodeWeight {
+            local: &info.local,
+            calls,
+        });
     }
 
-    // TODO: Actually implement the graph algorithm
+    // Iterate through strongly connected components in dependency order. The main algorithm for
+    // dealing with acyclic portions of the graph runs in O(n) w.r.t the number of nodes whereas the
+    // algorithm for dealing with strongly-connected components runs in O(nm) where `n` is the number
+    // of functions in the cluster and `m` is the number of unique component sets absorbed.
+    let mut sccs = scc::Sccs::<FuncIdx, SccIdx>::new(&graph);
+    let members = SccMembers::new(&sccs);
+
+    for scc in sccs.all_sccs() {
+        match members.of(scc) {
+            SccMemberSet::Single(node) => {
+                let node_data = &graph.nodes[node.index()];
+                let mut set = node_data.local.clone();
+
+                for call in &node_data.calls {
+                    for (comp, muta) in graph.nodes[call.target.index()].local.iter() {
+                        if call.absorbs.0.contains_key(&comp) {
+                            continue;
+                        }
+
+                        set.add(comp, muta);
+                    }
+                }
+
+                graph.nodes[node.index()].local = tcx.arena.alloc(set);
+            }
+            SccMemberSet::Many(nodes) => {
+                todo!();
+            }
+        }
+    }
+
+    // Summarize the graph as an ID map.
+    let mut map = LocalDefIdMap::<&'tcx ContextSet>::default();
+
+    for (&node_def_id, weight) in &graph.nodes {
+        let Some(node_def_id) = node_def_id.as_local() else {
+            continue;
+        };
+        map.insert(node_def_id, weight.local);
+    }
 
     tcx.arena.alloc(map)
 }
