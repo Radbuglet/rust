@@ -217,6 +217,8 @@ pub struct TypeckResults<'tcx> {
 
     /// Container types and field indices of `offset_of!` expressions
     offset_of_data: ItemLocalMap<(Ty<'tcx>, Vec<(VariantIdx, FieldIdx)>)>,
+
+    auto_args: ItemLocalMap<Vec<ty::auto_arg::AutoArg<'tcx>>>,
 }
 
 impl<'tcx> TypeckResults<'tcx> {
@@ -249,6 +251,7 @@ impl<'tcx> TypeckResults<'tcx> {
             treat_byte_string_as_slice: Default::default(),
             closure_size_eval: Default::default(),
             offset_of_data: Default::default(),
+            auto_args: Default::default(),
         }
     }
 
@@ -546,6 +549,21 @@ impl<'tcx> TypeckResults<'tcx> {
         &mut self,
     ) -> LocalTableInContextMut<'_, (Ty<'tcx>, Vec<(VariantIdx, FieldIdx)>)> {
         LocalTableInContextMut { hir_owner: self.hir_owner, data: &mut self.offset_of_data }
+    }
+
+    pub fn auto_args(&self) -> LocalTableInContext<'_, Vec<ty::auto_arg::AutoArg<'tcx>>> {
+        LocalTableInContext { hir_owner: self.hir_owner, data: &self.auto_args }
+    }
+
+    pub fn auto_args_mut(
+        &mut self,
+    ) -> LocalTableInContextMut<'_, Vec<ty::auto_arg::AutoArg<'tcx>>> {
+        LocalTableInContextMut { hir_owner: self.hir_owner, data: &mut self.auto_args }
+    }
+
+    pub fn expr_auto_args(&self, expr: &hir::Expr<'_>) -> &[ty::auto_arg::AutoArg<'tcx>] {
+        validate_hir_id_for_typeck_results(self.hir_owner, expr.hir_id);
+        self.auto_args.get(&expr.hir_id.local_id).map_or(&[], |a| &a[..])
     }
 }
 

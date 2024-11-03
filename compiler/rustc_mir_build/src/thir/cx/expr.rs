@@ -12,6 +12,7 @@ use rustc_middle::thir::*;
 use rustc_middle::ty::adjustment::{
     Adjust, Adjustment, AutoBorrow, AutoBorrowMutability, PointerCoercion,
 };
+use rustc_middle::ty::auto_arg::AutoArgKind;
 use rustc_middle::ty::{
     self, AdtKind, GenericArgs, InlineConstArgs, InlineConstArgsParts, ScalarInt, Ty, TyCtxt,
     UpvarArgs, UserType,
@@ -316,13 +317,17 @@ impl<'tcx> Cx<'tcx> {
         let kind = match expr.kind {
             // Here comes the interesting stuff:
             hir::ExprKind::MethodCall(segment, receiver, args, fn_span) => {
+                let auto_args = self.lower_auto_args(expr, fn_span);
+
                 // Rewrite a.b(c) into UFCS form like Trait::b(a, c)
                 let expr = self.method_callee(expr, segment.ident.span, None);
                 info!("Using method span: {:?}", expr.span);
                 let args = std::iter::once(receiver)
                     .chain(args.iter())
                     .map(|expr| self.mirror_expr(expr))
+                    .chain(auto_args)
                     .collect();
+
                 ExprKind::Call {
                     ty: expr.ty,
                     fun: self.thir.exprs.push(expr),
@@ -735,25 +740,7 @@ impl<'tcx> Cx<'tcx> {
             }
 
             hir::ExprKind::Pack(mode, exprs, _) => {
-                let exprs = exprs.iter()
-                    .map(|expr| self.mirror_expr(expr))
-                    .collect::<Box<_>>();
-
-                let reified = exprs.iter()
-                    .map(|&expr| self.tcx.reified_bundle(self.thir.exprs[expr].ty))
-                    .collect::<Box<_>>();
-
-                let shape = Self::make_bundle_pack_shape(
-                    self.tcx,
-                    &reified,
-                    mode.allows_env(),
-                    expr_ty.bundle_item_set(self.tcx),
-                );
-
-                ExprKind::Pack {
-                    exprs,
-                    shape: Box::new(shape),
-                }
+                self.lower_pack_expr(expr_ty, mode, exprs)
             }
 
             hir::ExprKind::ConstBlock(ref anon_const) => {
@@ -981,53 +968,6 @@ impl<'tcx> Cx<'tcx> {
             span: arm.span,
         };
         self.thir.arms.push(arm)
-    }
-
-    fn make_bundle_pack_shape(
-        tcx: TyCtxt<'tcx>,
-        bundles: &[&'tcx ty::ReifiedBundle<'tcx>],
-        allow_env: bool,
-        ty: Ty<'tcx>,
-    ) -> PackShape<'tcx> {
-        match ty::ReifiedBundleItemSet::decode(ty) {
-            ty::ReifiedBundleItemSet::Ref(_re, muta, def_id) => {
-                for (i, bundle) in bundles.iter().enumerate() {
-                    let Some(member) = bundle.fields.get(&def_id) else {
-                        continue;
-                    };
-
-                    if member.len() > 1 {
-                        todo!();
-                    }
-
-                    let Some(member) = member.get(0) else {
-                        todo!();
-                    };
-
-                    if member.mutability < muta {
-                        todo!();
-                    }
-
-                    return PackShape::ExtractLocal(muta, i, member.location);
-                }
-
-                if allow_env {
-                    // This binder will be updated by the context adjustment pass.
-                    return PackShape::ExtractEnv(muta, def_id, ContextBinder::FuncEnv)
-                }
-
-                todo!();
-            }
-            ty::ReifiedBundleItemSet::Tuple(items) => {
-                let items = items.iter()
-                    .map(|item| Self::make_bundle_pack_shape(tcx, bundles, allow_env, item))
-                    .collect();
-
-                PackShape::Tuple(items)
-            }
-            ty::ReifiedBundleItemSet::Generic(_ty) => todo!(),
-            ty::ReifiedBundleItemSet::Error(err) => PackShape::Error(err),
-        }
     }
 
     fn convert_path_expr(&mut self, expr: &'tcx hir::Expr<'tcx>, res: Res) -> ExprKind<'tcx> {
@@ -1287,6 +1227,102 @@ impl<'tcx> Cx<'tcx> {
                 expr: self.mirror_expr(field.expr),
             })
             .collect()
+    }
+
+    fn lower_auto_args(&mut self, expr: &'tcx hir::Expr<'tcx>, span: Span) -> Vec<ExprId> {
+        dbg!(expr.hir_id, self.typeck_results.expr_auto_args(expr));
+
+        self.typeck_results
+            .expr_auto_args(expr)
+            .iter()
+            .map(|arg| {
+                let expr = Expr {
+                    kind: match arg.kind {
+                        AutoArgKind::PackBundle => {
+                            self.lower_pack_expr(arg.ty, hir::PackMode::AllowEnv, &[])
+                        }
+                    },
+                    ty: arg.ty,
+                    temp_lifetime: None,
+                    span,
+                };
+                self.thir.exprs.push(expr)
+            })
+            .collect()
+    }
+
+    fn lower_pack_expr(
+        &mut self,
+        expr_ty: Ty<'tcx>,
+        mode: hir::PackMode,
+        exprs: &'tcx [hir::Expr<'tcx>],
+    ) -> ExprKind<'tcx> {
+        let exprs = exprs.iter()
+            .map(|expr| self.mirror_expr(expr))
+            .collect::<Box<_>>();
+
+        let reified = exprs.iter()
+            .map(|&expr| self.tcx.reified_bundle(self.thir.exprs[expr].ty))
+            .collect::<Box<_>>();
+
+        let shape = Self::make_bundle_pack_shape(
+            self.tcx,
+            &reified,
+            mode.allows_env(),
+            expr_ty.bundle_item_set(self.tcx),
+        );
+
+        ExprKind::Pack {
+            exprs,
+            shape: Box::new(shape),
+        }
+    }
+
+    fn make_bundle_pack_shape(
+        tcx: TyCtxt<'tcx>,
+        bundles: &[&'tcx ty::ReifiedBundle<'tcx>],
+        allow_env: bool,
+        ty: Ty<'tcx>,
+    ) -> PackShape<'tcx> {
+        match ty::ReifiedBundleItemSet::decode(ty) {
+            ty::ReifiedBundleItemSet::Ref(_re, muta, def_id) => {
+                for (i, bundle) in bundles.iter().enumerate() {
+                    let Some(member) = bundle.fields.get(&def_id) else {
+                        continue;
+                    };
+
+                    if member.len() > 1 {
+                        todo!();
+                    }
+
+                    let Some(member) = member.get(0) else {
+                        todo!();
+                    };
+
+                    if member.mutability < muta {
+                        todo!();
+                    }
+
+                    return PackShape::ExtractLocal(muta, i, member.location);
+                }
+
+                if allow_env {
+                    // This binder will be updated by the context adjustment pass.
+                    return PackShape::ExtractEnv(muta, def_id, ContextBinder::FuncEnv)
+                }
+
+                todo!();
+            }
+            ty::ReifiedBundleItemSet::Tuple(items) => {
+                let items = items.iter()
+                    .map(|item| Self::make_bundle_pack_shape(tcx, bundles, allow_env, item))
+                    .collect();
+
+                PackShape::Tuple(items)
+            }
+            ty::ReifiedBundleItemSet::Generic(_ty) => todo!(),
+            ty::ReifiedBundleItemSet::Error(err) => PackShape::Error(err),
+        }
     }
 }
 

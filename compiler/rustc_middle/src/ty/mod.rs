@@ -121,6 +121,7 @@ use crate::ty::util::Discr;
 
 pub mod abstract_const;
 pub mod adjustment;
+pub mod auto_arg;
 pub mod cast;
 pub mod codec;
 pub mod error;

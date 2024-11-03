@@ -285,12 +285,40 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         };
 
         // If there are no external expectations at the call site, just use the types from the function defn
-        let expected_input_tys = if let Some(expected_input_tys) = expected_input_tys {
+        let mut expected_input_tys = if let Some(expected_input_tys) = expected_input_tys {
             assert_eq!(expected_input_tys.len(), formal_input_tys.len());
             expected_input_tys
         } else {
             formal_input_tys.clone()
         };
+
+        // If we're not variadic and the input argument count is less than the expected count,
+        // try to introduce some auto arguments!
+        if !c_variadic {
+            let mut tck_results = self.typeck_results.borrow_mut();
+            let mut auto_args_list = tck_results.auto_args_mut();
+            let auto_args_list = auto_args_list
+                .entry(call_expr.hir_id)
+                .or_default();
+
+            while provided_args.len() < expected_input_tys.len() {
+                // TODO: Ensure that the argument is marked as an auto-argument.
+
+                let Some(arg) = ty::auto_arg::AutoArg::of(
+                    tcx,
+                    *expected_input_tys.last().unwrap(),
+                ) else {
+                    break;
+                };
+
+                auto_args_list.push(arg);
+                expected_input_tys.pop();
+            }
+
+            dbg!(call_expr.hir_id);
+            dbg!(auto_args_list);
+            dbg!(tck_results.expr_auto_args(call_expr));
+        }
 
         let minimum_input_count = expected_input_tys.len();
         let provided_arg_count = provided_args.len();
