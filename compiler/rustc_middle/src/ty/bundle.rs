@@ -631,16 +631,7 @@ impl<N: Idx, S: Idx + Ord> SccMembers<N, S> {
         }
     }
 
-    fn of(&self, comp: S) -> SccMemberSet<'_, N> {
-        let slice = self.of_raw(comp);
-        if slice.len() == 1 {
-            SccMemberSet::Single(slice[0])
-        } else {
-            SccMemberSet::Many(slice)
-        }
-    }
-
-    fn of_raw(&self, comp: S) -> &[N] {
+    fn of(&self, comp: S) -> &[N] {
         let start = comp.index()
             .checked_sub(1)
             .map(|idx| self.comp_range_ends[S::new(idx)])
@@ -649,12 +640,6 @@ impl<N: Idx, S: Idx + Ord> SccMembers<N, S> {
 
         &self.node_buf[start..end]
     }
-}
-
-#[derive(Debug, Copy, Clone)]
-enum SccMemberSet<'a, N> {
-    Single(N),
-    Many(&'a [N]),
 }
 
 fn components_borrowed_graph<'tcx>(
@@ -718,26 +703,32 @@ fn components_borrowed_graph<'tcx>(
     let members = SccMembers::new(&sccs);
 
     for scc in sccs.all_sccs() {
-        match members.of(scc) {
-            SccMemberSet::Single(node) => {
-                let node_data = &graph.nodes[node.index()];
-                let mut set = node_data.local.clone();
+        let members = members.of(scc);
 
-                for call in &node_data.calls {
-                    for (comp, muta) in graph.nodes[call.target.index()].local.iter() {
-                        if call.absorbs.0.contains_key(&comp) {
-                            continue;
-                        }
+        if members.len() == 1 {
+            let node = members[0];
+            let node_data = &graph.nodes[node.index()];
+            let mut set = node_data.local.clone();
 
-                        set.add(comp, muta);
-                    }
+            for call in &node_data.calls {
+                // Ignore self-refs. We can only ever union a superset of`node_data.local` with the
+                // original `node_data.local` set, which has no effect.
+                if call.target == node {
+                    continue;
                 }
 
-                graph.nodes[node.index()].local = tcx.arena.alloc(set);
+                for (comp, muta) in graph.nodes[call.target.index()].local.iter() {
+                    if call.absorbs.0.contains_key(&comp) {
+                        continue;
+                    }
+
+                    set.add(comp, muta);
+                }
             }
-            SccMemberSet::Many(nodes) => {
-                todo!();
-            }
+
+            graph.nodes[node.index()].local = tcx.arena.alloc(set);
+        } else {
+            // TODO
         }
     }
 
