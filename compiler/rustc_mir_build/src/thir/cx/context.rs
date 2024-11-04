@@ -10,8 +10,6 @@ use rustc_span::DUMMY_SP;
 
 use super::Cx;
 
-use crate::context::ContextBindTracker;
-
 impl<'tcx> Cx<'tcx> {
     pub(crate) fn create_dummy_context_expr(
         &mut self,
@@ -21,7 +19,6 @@ impl<'tcx> Cx<'tcx> {
         let kind = ExprKind::ContextRef {
             item: id,
             muta: Mutability::Not,
-            binder: ContextBinder::FuncEnv,
         };
         let ty = self.tcx.context_ref_ty(id, Mutability::Not, self.tcx.lifetimes.re_erased);
         let temp_lifetime = self
@@ -206,7 +203,7 @@ impl<'tcx> Cx<'tcx> {
             &mut ThreadLocalRef(_did) => {
                 // (terminal)
             },
-            ContextRef { item, muta, binder } => {
+            ContextRef { item, muta } => {
                 if rvalue_mut.is_mut() {
                     *muta = Mutability::Mut;
                     expr.ty = self.tcx.context_ref_ty(
@@ -215,15 +212,11 @@ impl<'tcx> Cx<'tcx> {
                         self.tcx.lifetimes.re_erased,
                     );
                 }
-
-                *binder = self.context_binds.resolve(*item);
             },
-            Pack { exprs, shape } => {
+            Pack { exprs, shape: _ } => {
                 for &mut expr in exprs {
                     self.adjust_context(expr, Mutability::Not);
                 }
-
-                Self::adjust_pack_shape(&self.context_binds, shape);
             }
             &mut Yield { value } => {
                 self.adjust_context(value, Mutability::Not);
@@ -233,26 +226,8 @@ impl<'tcx> Cx<'tcx> {
         self.thir.exprs[id] = expr;
     }
 
-    fn adjust_pack_shape(tracker: &ContextBindTracker, shape: &mut PackShape<'tcx>) {
-        match shape {
-            PackShape::ExtractEnv(_muta, def_id, binder) => {
-                *binder = tracker.resolve(*def_id);
-            }
-            PackShape::Tuple(fields) => {
-                for field in fields {
-                    Self::adjust_pack_shape(tracker, field);
-                }
-            }
-            PackShape::ExtractLocal(..) | PackShape::Error(..) => {
-                // (nothing to adjust)
-            }
-        }
-    }
-
     fn adjust_context_block(&mut self, id: BlockId) {
         let block = mem::replace(&mut self.thir.blocks[id], dummy_block());
-
-        let cx_bind_scope = self.context_binds.push_scope();
 
         for &stmt in &block.stmts {
             self.adjust_context_stmt(stmt);
@@ -261,8 +236,6 @@ impl<'tcx> Cx<'tcx> {
         if let Some(expr) = block.expr {
             self.adjust_context(expr, Mutability::Not);
         }
-
-        self.context_binds.pop_scope(cx_bind_scope);
 
         self.thir.blocks[id] = block;
     }
@@ -296,13 +269,8 @@ impl<'tcx> Cx<'tcx> {
                 init_scope: _,
                 bundle,
                 span: _,
+                self_id: _,
             } => {
-                let reified = self.tcx.reified_bundle(self.thir.exprs[*bundle].ty);
-
-                for &key in reified.fields.keys() {
-                    self.context_binds.bind(key, id);
-                }
-
                 self.adjust_context(*bundle, Mutability::Not);
             }
         }

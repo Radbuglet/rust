@@ -125,18 +125,6 @@ pub enum LintLevel {
     Explicit(HirId),
 }
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, HashStable)]
-pub enum ContextBinder {
-    FuncEnv,
-    LocalBinder(StmtId),
-}
-
-impl ContextBinder {
-    pub fn is_env(self) -> bool {
-        self == ContextBinder::FuncEnv
-    }
-}
-
 #[derive(Clone, Debug, HashStable)]
 pub struct Block {
     /// Whether the block itself has a label. Used by `label: {}`
@@ -245,6 +233,8 @@ pub enum StmtKind<'tcx> {
     },
     /// A context binding.
     BindContext {
+        self_id: StmtId,
+
         /// The scope for context items bound in this `let static`; it covers this and all the
         /// remaining statements in the block.
         ///
@@ -548,7 +538,6 @@ pub enum ExprKind<'tcx> {
     ContextRef {
         item: DefId,
         muta: hir::Mutability,
-        binder: ContextBinder,
     },
     /// A `pack!` expression.
     Pack {
@@ -563,7 +552,7 @@ pub enum ExprKind<'tcx> {
 
 #[derive(Clone, Debug, HashStable)]
 pub enum PackShape<'tcx> {
-    ExtractEnv(hir::Mutability, DefId, ContextBinder),
+    ExtractEnv(hir::Mutability, DefId),
     ExtractLocal(hir::Mutability, usize, ty::ReifiedBundleProjs<'tcx>),
     Tuple(Box<[PackShape<'tcx>]>),
     Error(ErrorGuaranteed),

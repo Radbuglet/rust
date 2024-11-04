@@ -523,7 +523,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 }
                 block.and(PlaceBuilder::from(temp))
             }
-            ExprKind::ContextRef { item, binder, .. } => {
+            ExprKind::ContextRef { item, .. } => {
+                let binder = this.ctx_bind_tracker.resolve(item);
                 block.and(PlaceBuilder::from(this.lookup_context_binder(item, binder).ref_local()))
             }
 

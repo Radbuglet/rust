@@ -324,7 +324,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     }
                     last_remainder_scope = *remainder_scope;
                 }
-                StmtKind::BindContext { remainder_scope, init_scope, bundle, span: _ } => {
+                StmtKind::BindContext { remainder_scope, init_scope, bundle, span: _, self_id: _ } => {
                     this.block_context.push(BlockFrame::Statement { ignores_expr_result: false });
 
                     // Enter the remainder scope, i.e., the bindings' destruction scope.
@@ -346,10 +346,6 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
 
                             let bundle_ty = this.thir.exprs[*bundle].ty;
                             let bundle_reified = this.tcx.reified_bundle(bundle_ty);
-
-                            for &def_id in bundle_reified.fields.keys() {
-                                this.ctx_bind_tracker.bind(def_id, *stmt);
-                            }
 
                             // Lower bundle expression
                             let bundle_out = this.temp(bundle_ty, bundle_span);
@@ -375,7 +371,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                             this.init_and_borrow_context_binder_locals(
                                 block,
                                 source_info,
-                                ContextBinder::LocalBinder(*stmt),
+                                ty::ContextBinder::LocalBinder(*stmt),
                                 lt_limiter,
                             );
 
@@ -390,6 +386,10 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     last_remainder_scope = *remainder_scope;
                 },
             }
+
+            // We bind the context after this statement has been visited to ensure that it isn't
+            // visible to expressions in the statement.
+            this.ctx_bind_tracker.bind_from_stmt(this.tcx, &this.thir, &this.thir[*stmt]);
 
             let popped = this.block_context.pop();
             assert!(popped.is_some_and(|bf| bf.is_statement()));

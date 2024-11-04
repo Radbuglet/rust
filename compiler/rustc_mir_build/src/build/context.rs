@@ -5,16 +5,14 @@ use rustc_hir::def_id::DefId;
 use rustc_hir::Mutability;
 use rustc_index::{Idx as _, IndexVec};
 use rustc_middle::mir::{self, BasicBlock, Local, Operand, Place, Rvalue, SourceInfo};
-use rustc_middle::thir::{self, ContextBinder, visit::{self as thir_visit, Visitor as _}};
-use rustc_middle::ty::{self, Ty, TypeFoldable as _};
+use rustc_middle::thir::{self, visit::{self as thir_visit, Visitor as _}};
+use rustc_middle::ty::{self, ContextBinder, Ty, TypeFoldable as _};
 use rustc_span::DUMMY_SP;
 use rustc_target::abi::FieldIdx;
 
 use thir_visit::Visitor as _;
 
 use super::Builder;
-
-use crate::context::ContextBindTracker;
 
 // Inner index map allows for deterministic iteration.
 type BinderMap = FxHashMap<ContextBinder, FxIndexMap<DefId, ContextBinderItemInfo>>;
@@ -62,7 +60,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         let mut visitor = BinderUseVisitor {
             builder: self,
             map: BinderMap::default(),
-            bind_tracker: ContextBindTracker::default(),
+            bind_tracker: ty::ContextBindTracker::default(),
             source_info,
         };
         visitor.visit_expr(root_expr);
@@ -279,7 +277,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
 
 struct BinderUseVisitor<'a, 'thir, 'tcx> {
     builder: &'a mut Builder<'thir, 'tcx>,
-    bind_tracker: ContextBindTracker,
+    bind_tracker: ty::ContextBindTracker,
     map: BinderMap,
     source_info: SourceInfo,
 }
@@ -328,121 +326,29 @@ impl<'a, 'thir, 'tcx> BinderUseVisitor<'a, 'thir, 'tcx> {
             }
         }
     }
-
-    fn visit_pack_shape(&mut self, shape: &'thir thir::PackShape<'tcx>) {
-        match shape {
-            &thir::PackShape::ExtractEnv(muta, item, binder) => {
-                self.introduce_use(item, muta, binder);
-            }
-            thir::PackShape::Tuple(fields) => {
-                for field in fields {
-                    self.visit_pack_shape(field);
-                }
-            }
-            thir::PackShape::ExtractLocal(..) | thir::PackShape::Error(..) => {
-                // (does not introduce context uses)
-            }
-        }
-    }
 }
 
 impl<'a, 'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for BinderUseVisitor<'a, 'thir, 'tcx> {
     fn visit_block(&mut self, block: &'thir thir::Block) {
         let scope = self.bind_tracker.push_scope();
-
-        for &stmt_id in &*block.stmts {
-            use thir::StmtKind::*;
-
-            let stmt = &self.thir()[stmt_id];
-
-            match &stmt.kind {
-                Expr { .. } => {}
-                Let { .. } => {}
-                &BindContext { bundle, .. } => {
-                    let reified = self.builder.tcx.reified_bundle(self.thir()[bundle].ty);
-
-                    for &item in reified.fields.keys() {
-                        self.bind_tracker.bind(item, stmt_id);
-                    }
-                }
-            }
-
-            thir_visit::walk_stmt(self, stmt);
-        }
-
-        if let Some(expr) = block.expr {
-            self.visit_expr(&self.thir()[expr]);
-        }
-
+        thir_visit::walk_block(self, block);
         self.bind_tracker.pop_scope(scope);
     }
 
+    fn visit_stmt(&mut self, stmt: &'thir thir::Stmt<'tcx>) {
+        thir_visit::walk_stmt(self, stmt);
+
+        // We bind the context after this statement has been visited to ensure that it isn't
+        // visible to expressions in the statement.
+        self.bind_tracker.bind_from_stmt(self.builder.tcx, self.builder.thir, stmt);
+    }
+
     fn visit_expr(&mut self, expr: &'thir thir::Expr<'tcx>) {
-        use thir::ExprKind::*;
-
-        match &expr.kind {
-            &ContextRef { item, muta, binder, .. } => {
-                self.introduce_use(item, muta, binder);
-            }
-            Pack { shape, .. } => {
-                self.visit_pack_shape(shape);
-            }
-            &Call { ty, .. } => {
-                if let Some(callee) = ty::extract_static_callee_for_context(self.builder.tcx, ty) {
-                    for (item, muta) in self.builder.tcx.components_borrowed(callee).iter() {
-                        self.introduce_use(item, muta, self.bind_tracker.resolve(item));
-                    }
-                }
-            }
-
-            Scope { .. }
-            | Box { .. }
-            | If { .. }
-            | Deref { .. }
-            | Binary { .. }
-            | LogicalOp { .. }
-            | Unary { .. }
-            | Cast { .. }
-            | Use { .. }
-            | NeverToAny { .. }
-            | PointerCoercion { .. }
-            | Loop { .. }
-            | Let { .. }
-            | Match { .. }
-            | Block { .. }
-            | Assign { .. }
-            | AssignOp { .. }
-            | Field { .. }
-            | Index { .. }
-            | VarRef { .. }
-            | UpvarRef { .. }
-            | Borrow { .. }
-            | RawBorrow { .. }
-            | Break { .. }
-            | Continue { .. }
-            | Return { .. }
-            | Become { .. }
-            | ConstBlock { .. }
-            | Repeat { .. }
-            | Array { .. }
-            | Tuple { .. }
-            | Adt { .. }
-            | PlaceTypeAscription { .. }
-            | ValueTypeAscription { .. }
-            | Closure { .. }
-            | Literal { .. }
-            | NonHirLiteral { .. }
-            | ZstLiteral { .. }
-            | NamedConst { .. }
-            | ConstParam { .. }
-            | StaticRef { .. }
-            | InlineAsm { .. }
-            | OffsetOf { .. }
-            | ThreadLocalRef { .. }
-            | Yield { .. } => {
-                // (no context users directly introduced by expression)
-            }
-        }
+        ty::visit_context_used_by_expr(self.builder.tcx, expr, true, &mut |usage| match usage {
+            ty::ContextUseKind::Item(item, muta) => {
+                self.introduce_use(item, muta, self.bind_tracker.resolve(item));
+            },
+        });
 
         thir_visit::walk_expr(self, expr);
     }

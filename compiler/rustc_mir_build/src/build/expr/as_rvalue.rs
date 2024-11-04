@@ -594,7 +594,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         let place = Place::from(self.local_decls.push(LocalDecl::new(ty, span)));
 
         let rv = match shape {
-            &PackShape::ExtractEnv(muta, item, binder) => {
+            &PackShape::ExtractEnv(muta, item) => {
+                let binder = self.ctx_bind_tracker.resolve(item);
                 Rvalue::Ref(
                     self.tcx.lifetimes.re_erased,
                     match muta {

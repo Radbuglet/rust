@@ -16,7 +16,6 @@ use rustc_middle::thir::*;
 use rustc_middle::ty::{self, RvalueScopes, TyCtxt};
 use tracing::instrument;
 
-use crate::context::ContextBindTracker;
 use crate::thir::pattern::pat_from_hir;
 use crate::thir::util::UserAnnotatedTyHelpers;
 
@@ -70,9 +69,6 @@ struct Cx<'tcx> {
 
     /// The `DefId` of the owner of this body.
     body_owner: DefId,
-
-    /// Used in [`context`].
-    context_binds: ContextBindTracker,
 }
 
 impl<'tcx> Cx<'tcx> {
@@ -112,7 +108,6 @@ impl<'tcx> Cx<'tcx> {
                 .attrs(hir_id)
                 .iter()
                 .all(|attr| attr.name_or_empty() != rustc_span::sym::custom_mir),
-            context_binds: ContextBindTracker::default(),
         }
     }
 

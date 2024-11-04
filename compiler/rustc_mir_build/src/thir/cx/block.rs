@@ -139,6 +139,7 @@ impl<'tcx> Cx<'tcx> {
                                 init_scope,
                                 bundle: self.mirror_expr(bind.bundle),
                                 span: bind.span,
+                                self_id: self.thir.stmts.next_index(),
                             },
                         };
                         Some(self.thir.stmts.push(stmt))

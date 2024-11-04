@@ -1,5 +1,7 @@
 #![expect(unused)]  // TODO
 
+use std::collections::hash_map::Entry;
+
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap, IndexEntry};
 use rustc_data_structures::graph::{DirectedGraph, Successors, scc};
 use rustc_hir::def_id::{DefId, DefIndex, LocalDefId, LocalDefIdMap};
@@ -295,6 +297,218 @@ impl<'tcx> ReifiedContextItem<'tcx> {
     }
 }
 
+// === Visit Context Uses === //
+
+#[derive(Debug, Copy, Clone)]
+pub enum ContextUseKind {
+    Item(DefId, Mutability),
+}
+
+pub fn visit_context_used_by_expr<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    expr: &thir::Expr<'tcx>,
+    visit_calls: bool,
+    f: &mut impl FnMut(ContextUseKind),
+) {
+    use thir::ExprKind::*;
+
+    match &expr.kind {
+        &ContextRef { item, muta } => {
+            f(ContextUseKind::Item(item, muta));
+        }
+        Pack { shape, .. } => {
+            visit_context_uses_by_pack_shape(tcx, shape, f);
+        }
+        &Call { ty, .. } => {
+            if
+                visit_calls &&
+                let Some(def_id) = extract_static_callee_for_context(tcx, ty)
+            {
+                for (item, muta) in tcx.components_borrowed(def_id).iter() {
+                    f(ContextUseKind::Item(item, muta));
+                }
+            }
+        }
+
+        Scope { .. }
+        | Box { .. }
+        | If { .. }
+        | Deref { .. }
+        | Binary { .. }
+        | LogicalOp { .. }
+        | Unary { .. }
+        | Cast { .. }
+        | Use { .. }
+        | NeverToAny { .. }
+        | PointerCoercion { .. }
+        | Loop { .. }
+        | Let { .. }
+        | Match { .. }
+        | Block { .. }
+        | Assign { .. }
+        | AssignOp { .. }
+        | Field { .. }
+        | Index { .. }
+        | VarRef { .. }
+        | UpvarRef { .. }
+        | Borrow { .. }
+        | RawBorrow { .. }
+        | Break { .. }
+        | Continue { .. }
+        | Return { .. }
+        | Become { .. }
+        | ConstBlock { .. }
+        | Repeat { .. }
+        | Array { .. }
+        | Tuple { .. }
+        | Adt { .. }
+        | PlaceTypeAscription { .. }
+        | ValueTypeAscription { .. }
+        | Closure { .. }
+        | Literal { .. }
+        | NonHirLiteral { .. }
+        | ZstLiteral { .. }
+        | NamedConst { .. }
+        | ConstParam { .. }
+        | StaticRef { .. }
+        | InlineAsm { .. }
+        | OffsetOf { .. }
+        | ThreadLocalRef { .. }
+        | Yield { .. } => {
+            // (no context users directly introduced by expression)
+        }
+    }
+}
+
+pub fn visit_context_uses_by_pack_shape<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    shape: &thir::PackShape<'tcx>,
+    f: &mut impl FnMut(ContextUseKind),
+) {
+    match shape {
+        &thir::PackShape::ExtractEnv(muta, item) => {
+            f(ContextUseKind::Item(item, muta))
+        }
+        thir::PackShape::Tuple(fields) => {
+            for field in fields {
+                visit_context_uses_by_pack_shape(tcx, shape, f);
+            }
+        }
+        thir::PackShape::ExtractLocal(..) | thir::PackShape::Error(..) => {
+            // (does not directly introduce context uses)
+        }
+    }
+}
+
+pub fn visit_context_binds_by_stmt<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &thir::Thir<'tcx>,
+    stmt: &thir::Stmt<'tcx>,
+    f: &mut impl FnMut(ContextBinder, ContextUseKind),
+) {
+    use thir::StmtKind::*;
+
+    match &stmt.kind {
+        &BindContext { self_id, bundle, remainder_scope, .. } => {
+            let bundle_ty = body.exprs[bundle].ty;
+            let reified = tcx.reified_bundle(bundle_ty);
+
+            for (&item, members) in &reified.fields {
+                let muta = members.iter()
+                    .map(|member| member.mutability)
+                    .max()
+                    .unwrap();
+
+                f(ContextBinder::LocalBinder(self_id), ContextUseKind::Item(item, muta));
+            }
+        }
+        Expr { .. } | Let { .. } => {
+            // (does not directly introduce context binds)
+        }
+    }
+}
+
+// === ContextBindTracker === //
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, HashStable)]
+pub enum ContextBinder {
+    FuncEnv,
+    LocalBinder(thir::StmtId),
+}
+
+impl ContextBinder {
+    pub fn is_env(self) -> bool {
+        self == ContextBinder::FuncEnv
+    }
+
+    pub fn unwrap_local(self) -> thir::StmtId {
+        match self {
+            ContextBinder::FuncEnv => panic!("expected function-local context binder"),
+            ContextBinder::LocalBinder(stmt) => stmt,
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct ContextBindTracker {
+    curr_local_binders: FxHashMap<DefId, thir::StmtId>,
+    old_binders: Vec<(DefId, ContextBinder)>,
+}
+
+impl ContextBindTracker {
+    pub fn push_scope(&self) -> ContextBindScope {
+        ContextBindScope(self.old_binders.len())
+    }
+
+    pub fn pop_scope(&mut self, scope: ContextBindScope) {
+        for (item, binder) in self.old_binders.drain((scope.0)..) {
+            match binder {
+                ContextBinder::FuncEnv => {
+                    self.curr_local_binders.remove(&item);
+                },
+                ContextBinder::LocalBinder(old_stmt) => {
+                    self.curr_local_binders.insert(item, old_stmt);
+                },
+            }
+        }
+    }
+
+    pub fn bind(&mut self, item: DefId, stmt: thir::StmtId) {
+        let old_binder = match self.curr_local_binders.entry(item) {
+            Entry::Occupied(mut entry) => ContextBinder::LocalBinder(entry.insert(stmt)),
+            Entry::Vacant(entry) => {
+                entry.insert(stmt);
+                ContextBinder::FuncEnv
+            }
+        };
+
+        self.old_binders.push((item, old_binder));
+    }
+
+    pub fn bind_from_stmt<'tcx>(
+        &mut self,
+        tcx: TyCtxt<'tcx>,
+        body: &thir::Thir<'tcx>,
+        stmt: &thir::Stmt<'tcx>,
+    ) {
+        visit_context_binds_by_stmt(tcx, body, stmt, &mut |binder, usage| match usage {
+            ContextUseKind::Item(item, _muta) => {
+                self.bind(item, binder.unwrap_local());
+            },
+        })
+    }
+
+    pub fn resolve(&self, item: DefId) -> ContextBinder {
+        match self.curr_local_binders.get(&item) {
+            Some(stmt) => ContextBinder::LocalBinder(*stmt),
+            None => ContextBinder::FuncEnv,
+        }
+    }
+}
+
+#[must_use]
+pub struct ContextBindScope(usize);
+
 // === Context Graph === //
 
 #[derive(Debug, Default, HashStable, Eq, PartialEq, Clone, TyEncodable, TyDecodable)]
@@ -338,7 +552,7 @@ struct IndirectContextCall<'tcx> {
     absorbs: &'tcx ContextSet,
 }
 
-pub fn is_valid_static_callee_for_context<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> bool {
+pub fn can_def_borrow_extern_context<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> bool {
     tcx.def_kind(def_id) == ty::DefKind::Fn
         && tcx.is_mir_available(def_id)
         // The non-const condition is load bearing as it helps avoid recursive query calls.
@@ -348,7 +562,7 @@ pub fn is_valid_static_callee_for_context<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId
 pub fn extract_static_callee_for_context<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Option<DefId> {
     match ty.kind() {
         &ty::FnDef(def_id, ..) => {
-            is_valid_static_callee_for_context(tcx, def_id).then_some(def_id)
+            can_def_borrow_extern_context(tcx, def_id).then_some(def_id)
         }
         ty::Bool
         | ty::Char
@@ -403,6 +617,7 @@ fn components_borrowed_local<'tcx>(
     let mut visitor = ComponentsBorrowedLocalVisitor {
         tcx,
         thir,
+        bind_tracker: ContextBindTracker::default(),
         local: ContextSet::default(),
         calls: Vec::new(),
         curr_absorb: empty_set,
@@ -418,29 +633,10 @@ fn components_borrowed_local<'tcx>(
 struct ComponentsBorrowedLocalVisitor<'thir, 'tcx> {
     tcx: TyCtxt<'tcx>,
     thir: &'thir thir::Thir<'tcx>,
+    bind_tracker: ContextBindTracker,
     local: ContextSet,
     calls: Vec<IndirectContextCall<'tcx>>,
     curr_absorb: &'tcx ContextSet,
-}
-
-impl<'thir, 'tcx> ComponentsBorrowedLocalVisitor<'thir, 'tcx> {
-    fn visit_pack_shape(&mut self, shape: &'thir thir::PackShape<'tcx>) {
-        match shape {
-            &thir::PackShape::ExtractEnv(muta, item, binder) => {
-                if binder.is_env() {
-                    self.local.add(item, muta);
-                }
-            }
-            thir::PackShape::Tuple(fields) => {
-                for field in fields {
-                    self.visit_pack_shape(field);
-                }
-            }
-            thir::PackShape::ExtractLocal(..) | thir::PackShape::Error(..) => {
-                // (does not introduce context uses)
-            }
-        }
-    }
 }
 
 impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVisitor<'thir, 'tcx> {
@@ -450,49 +646,38 @@ impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVi
 
     fn visit_block(&mut self, block: &'thir thir::Block) {
         let old_absorb = self.curr_absorb;
+        let old_scope = self.bind_tracker.push_scope();
         thir_visit::walk_block(self, block);
         self.curr_absorb = old_absorb;
+        self.bind_tracker.pop_scope(old_scope);
     }
 
     fn visit_stmt(&mut self, stmt: &'thir thir::Stmt<'tcx>) {
-        use thir::StmtKind::*;
+        self.bind_tracker.bind_from_stmt(self.tcx, self.thir, stmt);
 
-        match &stmt.kind {
-            &BindContext { bundle, .. } => {
-                let bundle_ty = self.thir.exprs[bundle].ty;
-                let reified = self.tcx.reified_bundle(bundle_ty);
+        visit_context_binds_by_stmt(self.tcx, self.thir, stmt, &mut |_binder, usage| match usage {
+            ContextUseKind::Item(item, muta) => {
+                let mut absorb = self.curr_absorb.clone();
+                absorb.add(item, muta);
+                self.curr_absorb = self.tcx.arena.alloc(absorb);
+            },
+        });
 
-                let mut set = self.curr_absorb.clone();
-                let mut changed = false;
-
-                for (def_id, members) in &reified.fields {
-                    for member in members {
-                        changed |= set.add(*def_id, member.mutability);
-                    }
-                }
-
-                if changed {
-                    self.curr_absorb = self.tcx.arena.alloc(set);
-                }
-            }
-            Expr { .. } | Let { .. } => {
-                thir_visit::walk_stmt(self, stmt);
-            }
-        }
+        thir_visit::walk_stmt(self, stmt);
     }
 
     fn visit_expr(&mut self, expr: &'thir thir::Expr<'tcx>) {
+        visit_context_used_by_expr(self.tcx, expr, false, &mut |usage| match usage {
+            ContextUseKind::Item(item, muta) => {
+                if self.bind_tracker.resolve(item).is_env() {
+                    self.local.add(item, muta);
+                }
+            },
+        });
+
         use thir::ExprKind::*;
 
         match &expr.kind {
-            &ContextRef { item, muta, binder, .. } => {
-                if binder.is_env() {
-                    self.local.add(item, muta);
-                }
-            }
-            Pack { shape, .. } => {
-                self.visit_pack_shape(shape);
-            }
             &Call { ty, .. } => {
                 if let Some(def_id) = extract_static_callee_for_context(self.tcx, ty) {
                     self.calls.push(IndirectContextCall {
@@ -546,8 +731,10 @@ impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVi
             | InlineAsm { .. }
             | OffsetOf { .. }
             | ThreadLocalRef { .. }
+            | ContextRef { .. }
+            | Pack { .. }
             | Yield { .. } => {
-                // (no context users directly introduced by expression)
+                // (do not result in another function borrowing context being called)
             }
         }
 
@@ -651,10 +838,10 @@ fn components_borrowed_graph<'tcx>(
         nodes: FxIndexMap::default(),
     };
 
-    // `is_valid_static_callee_for_context` contains a check for `is_mir_available`, which uses
+    // `can_def_borrow_extern_context` contains a check for `is_mir_available`, which uses
     // `tcx.mir_keys` to make its determination. Hence, this will not miss any important `LocalDefId`s.
     for &def_id in tcx.mir_keys(()) {
-        if !is_valid_static_callee_for_context(tcx, def_id.to_def_id()) {
+        if !can_def_borrow_extern_context(tcx, def_id.to_def_id()) {
             continue;
         }
 

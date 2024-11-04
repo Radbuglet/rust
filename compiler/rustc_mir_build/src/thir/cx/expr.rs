@@ -1328,8 +1328,7 @@ impl<'tcx> Cx<'tcx> {
                 }
 
                 if allow_env {
-                    // This binder will be updated by the context adjustment pass.
-                    return PackShape::ExtractEnv(muta, def_id, ContextBinder::FuncEnv)
+                    return PackShape::ExtractEnv(muta, def_id)
                 }
 
                 todo!();

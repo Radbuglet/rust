@@ -1748,7 +1748,7 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
                 record!(self.tables.mir_coroutine_witnesses[def_id.to_def_id()] <- witnesses);
             }
 
-            if ty::is_valid_static_callee_for_context(tcx, def_id.to_def_id()) {
+            if ty::can_def_borrow_extern_context(tcx, def_id.to_def_id()) {
                 record!(self.tables.components_borrowed[def_id.to_def_id()] <-
                     tcx.components_borrowed(def_id));
             }

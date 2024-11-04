@@ -181,6 +181,7 @@ impl<'a, 'tcx> ThirPrinter<'a, 'tcx> {
                 init_scope,
                 bundle,
                 span,
+                self_id: _,
             } => {
                 print_indented!(self, "kind: BindContext {", depth_lvl + 1);
                 print_indented!(
@@ -560,11 +561,10 @@ impl<'a, 'tcx> ThirPrinter<'a, 'tcx> {
                 print_indented!(self, format!("def_id: {:?}", def_id), depth_lvl + 1);
                 print_indented!(self, "}", depth_lvl);
             }
-            ContextRef { item, muta, binder } => {
+            ContextRef { item, muta } => {
                 print_indented!(self, "ContextRef {", depth_lvl);
                 print_indented!(self, format!("item: {:?}", item), depth_lvl + 1);
                 print_indented!(self, format!("muta: {:?}", muta), depth_lvl + 1);
-                print_indented!(self, format!("binder: {:?}", binder), depth_lvl + 1);
                 print_indented!(self, "}", depth_lvl);
             }
             Pack { .. } => {

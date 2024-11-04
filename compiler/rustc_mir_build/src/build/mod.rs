@@ -26,7 +26,6 @@ use rustc_target::spec::abi::Abi;
 use super::lints;
 use crate::build::expr::as_place::PlaceBuilder;
 use crate::build::scope::DropKind;
-use crate::context::ContextBindTracker;
 
 pub(crate) fn closure_saved_names_of_captured_variables<'tcx>(
     tcx: TyCtxt<'tcx>,
@@ -225,7 +224,7 @@ struct Builder<'a, 'tcx> {
     ctx_bind_values: context::ContextBinderMap,
 
     /// Context bind tracker
-    ctx_bind_tracker: ContextBindTracker,
+    ctx_bind_tracker: ty::ContextBindTracker,
 }
 
 type CaptureMap<'tcx> = SortedIndexMultiMap<usize, HirId, Capture<'tcx>>;
@@ -786,7 +785,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             lint_level_roots_cache: GrowableBitSet::new_empty(),
             coverage_info: coverageinfo::CoverageInfoBuilder::new_if_enabled(tcx, def),
             ctx_bind_values: context::ContextBinderMap::default(),
-            ctx_bind_tracker: ContextBindTracker::default(),
+            ctx_bind_tracker: ty::ContextBindTracker::default(),
         };
 
         assert_eq!(builder.cfg.start_new_block(), START_BLOCK);
@@ -996,7 +995,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             self.init_and_borrow_context_binder_locals(
                 block,
                 source_info,
-                thir::ContextBinder::FuncEnv,
+                ty::ContextBinder::FuncEnv,
                 lt_limiter,
             );
 
