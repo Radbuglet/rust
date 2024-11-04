@@ -71,6 +71,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         wbcx.visit_user_provided_sigs();
         wbcx.visit_coroutine_interior();
         wbcx.visit_offset_of_container_types();
+        wbcx.visit_auto_args();
 
         wbcx.typeck_results.rvalue_scopes =
             mem::take(&mut self.typeck_results.borrow_mut().rvalue_scopes);
@@ -717,6 +718,23 @@ impl<'cx, 'tcx> WritebackCx<'cx, 'tcx> {
             let hir_id = HirId { owner: common_hir_owner, local_id };
             let container = self.resolve(container, &hir_id);
             self.typeck_results.offset_of_data_mut().insert(hir_id, (container, indices.clone()));
+        }
+    }
+
+    fn visit_auto_args(&mut self) {
+        let fcx_typeck_results = self.fcx.typeck_results.borrow();
+        assert_eq!(fcx_typeck_results.hir_owner, self.typeck_results.hir_owner);
+        let common_hir_owner = fcx_typeck_results.hir_owner;
+
+        for (local_id, args) in
+            fcx_typeck_results.auto_args().items_in_stable_order()
+        {
+            let hir_id = HirId { owner: common_hir_owner, local_id };
+            let args = args.iter()
+                .map(|&arg| self.resolve(arg, &hir_id))
+                .collect();
+
+            self.typeck_results.auto_args_mut().insert(hir_id, args);
         }
     }
 

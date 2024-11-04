@@ -1,13 +1,13 @@
 use super::{TyCtxt, Ty};
 use rustc_macros::{HashStable, TyDecodable, TyEncodable, TypeFoldable, TypeVisitable};
 
-#[derive(Debug, Clone, TyEncodable, TyDecodable, HashStable, TypeFoldable, TypeVisitable)]
+#[derive(Debug, Copy, Clone, TyEncodable, TyDecodable, HashStable, TypeFoldable, TypeVisitable)]
 pub struct AutoArg<'tcx> {
     pub kind: AutoArgKind,
     pub ty: Ty<'tcx>,
 }
 
-#[derive(Debug, Clone, TyEncodable, TyDecodable, HashStable, TypeFoldable, TypeVisitable)]
+#[derive(Debug, Copy, Clone, TyEncodable, TyDecodable, HashStable, TypeFoldable, TypeVisitable)]
 pub enum AutoArgKind {
     PackBundle,
 }

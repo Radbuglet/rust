@@ -314,10 +314,6 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 auto_args_list.push(arg);
                 expected_input_tys.pop();
             }
-
-            dbg!(call_expr.hir_id);
-            dbg!(auto_args_list);
-            dbg!(tck_results.expr_auto_args(call_expr));
         }
 
         let minimum_input_count = expected_input_tys.len();

@@ -338,6 +338,8 @@ impl<'tcx> Cx<'tcx> {
             }
 
             hir::ExprKind::Call(fun, ref args) => {
+                let auto_args = self.lower_auto_args(expr, fun.span);
+
                 if self.typeck_results().is_method_call(expr) {
                     // The callee is something implementing Fn, FnMut, or FnOnce.
                     // Find the actual method implementation being called and
@@ -348,12 +350,28 @@ impl<'tcx> Cx<'tcx> {
 
                     let method = self.method_callee(expr, fun.span, None);
 
-                    let arg_tys = args.iter().map(|e| self.typeck_results().expr_ty_adjusted(e));
+                    let args_ty = Ty::new_tup_from_iter(
+                        tcx,
+                        args.iter()
+                            .map(|e| self.typeck_results().expr_ty_adjusted(e))
+                            .chain(self.typeck_results.expr_auto_args(expr)
+                                .iter()
+                                .map(|arg| arg.ty),
+                            ),
+                    );
+
+                    let arg_fields = args.iter()
+                        .map(|arg| self.mirror_expr(arg))
+                        .chain(auto_args)
+                        .collect();
+
                     let tupled_args = Expr {
-                        ty: Ty::new_tup_from_iter(tcx, arg_tys),
+                        ty: args_ty,
                         temp_lifetime,
                         span: expr.span,
-                        kind: ExprKind::Tuple { fields: self.mirror_exprs(args) },
+                        kind: ExprKind::Tuple {
+                            fields: arg_fields,
+                        },
                     };
                     let tupled_args = self.thir.exprs.push(tupled_args);
 
@@ -455,10 +473,15 @@ impl<'tcx> Cx<'tcx> {
                             base: None,
                         }))
                     } else {
+                        let args = args.iter()
+                            .map(|arg| self.mirror_expr(arg))
+                            .chain(auto_args)
+                            .collect();
+
                         ExprKind::Call {
                             ty: self.typeck_results().node_type(fun.hir_id),
                             fun: self.mirror_expr(fun),
-                            args: self.mirror_exprs(args),
+                            args,
                             from_hir_call: true,
                             fn_span: expr.span,
                         }
@@ -1230,8 +1253,6 @@ impl<'tcx> Cx<'tcx> {
     }
 
     fn lower_auto_args(&mut self, expr: &'tcx hir::Expr<'tcx>, span: Span) -> Vec<ExprId> {
-        dbg!(expr.hir_id, self.typeck_results.expr_auto_args(expr));
-
         self.typeck_results
             .expr_auto_args(expr)
             .iter()
