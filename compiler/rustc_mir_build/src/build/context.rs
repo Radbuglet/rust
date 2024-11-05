@@ -283,8 +283,12 @@ struct BinderUseVisitor<'a, 'thir, 'tcx> {
 }
 
 impl<'a, 'thir, 'tcx> BinderUseVisitor<'a, 'thir, 'tcx> {
-    fn introduce_use(&mut self, item: DefId, muta: Mutability, binder: ContextBinder) {
+    fn introduce_use(&mut self, item: DefId, muta: Mutability) {
         let tcx = self.builder.tcx;
+        let binder_info = self.bind_tracker.resolve_rich(item);
+        let binder = ContextBinder::from_info(binder_info);
+
+        let muta = muta.min(binder_info.map_or(Mutability::Mut, |info| info.muta));
 
         let item_entry = self.map.entry(binder)
             .or_default()
@@ -346,7 +350,7 @@ impl<'a, 'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for BinderUseVisitor<'a, 
     fn visit_expr(&mut self, expr: &'thir thir::Expr<'tcx>) {
         ty::visit_context_used_by_expr(self.builder.tcx, expr, true, &mut |usage| match usage {
             ty::ContextUseKind::Item(item, muta) => {
-                self.introduce_use(item, muta, self.bind_tracker.resolve(item));
+                self.introduce_use(item, muta);
             },
         });
 

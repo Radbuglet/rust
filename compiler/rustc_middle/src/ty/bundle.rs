@@ -437,6 +437,13 @@ pub enum ContextBinder {
 }
 
 impl ContextBinder {
+    pub fn from_info(info: Option<ContextBindInfo>) -> ContextBinder {
+        match info {
+            Some(info) => ContextBinder::LocalBinder(info.binder),
+            None => ContextBinder::FuncEnv,
+        }
+    }
+
     pub fn is_env(self) -> bool {
         self == ContextBinder::FuncEnv
     }
@@ -451,8 +458,14 @@ impl ContextBinder {
 
 #[derive(Default)]
 pub struct ContextBindTracker {
-    curr_local_binders: FxHashMap<DefId, thir::StmtId>,
-    old_binders: Vec<(DefId, ContextBinder)>,
+    curr_local_binders: FxHashMap<DefId, ContextBindInfo>,
+    old_binders: Vec<(DefId, Option<ContextBindInfo>)>,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct ContextBindInfo {
+    pub binder: thir::StmtId,
+    pub muta: Mutability,
 }
 
 impl ContextBindTracker {
@@ -463,25 +476,18 @@ impl ContextBindTracker {
     pub fn pop_scope(&mut self, scope: ContextBindScope) {
         for (item, binder) in self.old_binders.drain((scope.0)..) {
             match binder {
-                ContextBinder::FuncEnv => {
-                    self.curr_local_binders.remove(&item);
+                Some(old) => {
+                    self.curr_local_binders.insert(item, old);
                 },
-                ContextBinder::LocalBinder(old_stmt) => {
-                    self.curr_local_binders.insert(item, old_stmt);
+                None => {
+                    self.curr_local_binders.remove(&item);
                 },
             }
         }
     }
 
-    pub fn bind(&mut self, item: DefId, stmt: thir::StmtId) {
-        let old_binder = match self.curr_local_binders.entry(item) {
-            Entry::Occupied(mut entry) => ContextBinder::LocalBinder(entry.insert(stmt)),
-            Entry::Vacant(entry) => {
-                entry.insert(stmt);
-                ContextBinder::FuncEnv
-            }
-        };
-
+    pub fn bind(&mut self, item: DefId, info: ContextBindInfo) {
+        let old_binder = self.curr_local_binders.insert(item, info);
         self.old_binders.push((item, old_binder));
     }
 
@@ -492,17 +498,24 @@ impl ContextBindTracker {
         stmt: &thir::Stmt<'tcx>,
     ) {
         visit_context_binds_by_stmt(tcx, body, stmt, &mut |binder, usage| match usage {
-            ContextUseKind::Item(item, _muta) => {
-                self.bind(item, binder.unwrap_local());
+            ContextUseKind::Item(item, muta) => {
+                self.bind(item, ContextBindInfo {
+                    binder: binder.unwrap_local(),
+                    muta,
+                });
             },
         })
     }
 
     pub fn resolve(&self, item: DefId) -> ContextBinder {
         match self.curr_local_binders.get(&item) {
-            Some(stmt) => ContextBinder::LocalBinder(*stmt),
+            Some(info) => ContextBinder::LocalBinder(info.binder),
             None => ContextBinder::FuncEnv,
         }
+    }
+
+    pub fn resolve_rich(&self, item: DefId) -> Option<ContextBindInfo> {
+        self.curr_local_binders.get(&item).copied()
     }
 }
 
