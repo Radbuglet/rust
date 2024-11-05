@@ -2,10 +2,10 @@
 
 use std::collections::hash_map::Entry;
 
-use rustc_data_structures::fx::{FxHashMap, FxIndexMap, IndexEntry};
+use rustc_data_structures::fx::{FxHashSet, FxHashMap, FxIndexMap, IndexEntry};
 use rustc_data_structures::graph::{DirectedGraph, Successors, scc};
 use rustc_hir::def_id::{DefId, DefIndex, LocalDefId, LocalDefIdMap};
-use rustc_index::{Idx, IndexVec};
+use rustc_index::{Idx, IndexSlice, IndexVec};
 use rustc_macros::{HashStable, TyDecodable, TyEncodable};
 use smallvec::SmallVec;
 
@@ -548,6 +548,14 @@ impl ContextSet {
         }
     }
 
+    pub fn has(&self, item: DefId) -> bool {
+        self.0.contains_key(&item)
+    }
+
+    pub fn get(&self, item: DefId) -> Option<Mutability> {
+        self.0.get(&item).copied()
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = (DefId, Mutability)> + '_ {
         self.0.iter().map(|(&k, &v)| (k, v))
     }
@@ -680,6 +688,8 @@ impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVi
     }
 
     fn visit_expr(&mut self, expr: &'thir thir::Expr<'tcx>) {
+        use thir::ExprKind::*;
+
         visit_context_used_by_expr(self.tcx, expr, false, &mut |usage| match usage {
             ContextUseKind::Item(item, muta) => {
                 if self.bind_tracker.resolve(item).is_env() {
@@ -687,8 +697,6 @@ impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVi
                 }
             },
         });
-
-        use thir::ExprKind::*;
 
         match &expr.kind {
             &Call { ty, .. } => {
@@ -765,6 +773,11 @@ rustc_index::newtype_index! {
     struct SccIdx {}
 }
 
+rustc_index::newtype_index! {
+    #[derive(Ord, PartialOrd)]
+    struct SubFuncIdx {}
+}
+
 struct ComponentsBorrowedGraph<'tcx> {
     nodes: FxIndexMap<DefId, FuncNodeWeight<'tcx>>,
 }
@@ -793,52 +806,28 @@ impl<'tcx> Successors for ComponentsBorrowedGraph<'tcx> {
     }
 }
 
-struct SccMembers<N: Idx, S: Idx> {
-    comp_range_ends: IndexVec<S, u32>,
-    node_buf: Box<[N]>,
+struct ComponentsBorrowedSccSubgraph<'a, 'tcx> {
+    graph: &'a ComponentsBorrowedGraph<'tcx>,
+    members: scc::SccMemberSet<'a, FuncIdx, SubFuncIdx>,
+    remove: DefId,
 }
 
-impl<N: Idx, S: Idx + Ord> SccMembers<N, S> {
-    fn new<A: scc::Annotation>(sccs: &scc::Sccs<N, S, A>) -> Self {
-        // Accumulate the number of elements in each SCC
-        let mut comp_range_ends = IndexVec::from_elem_n(0, sccs.num_sccs());
-        let mut node_buf = (0..sccs.scc_indices().len())
-            .map(|_| N::new(0))
-            .collect::<Box<_>>();
+impl<'a, 'tcx> DirectedGraph for ComponentsBorrowedSccSubgraph<'a, 'tcx> {
+    type Node = SubFuncIdx;
 
-        for (node, &scc) in sccs.scc_indices().iter_enumerated() {
-            comp_range_ends[scc] += 1;
-        }
-
-        // Transform these into fill-start indices
-        let mut next_start = 0;
-        for end in comp_range_ends.iter_mut() {
-            let count = *end;
-            *end = next_start;
-            next_start += count;
-        }
-
-        // Fill up the buffer
-        for (node, &scc) in sccs.scc_indices().iter_enumerated() {
-            let fill_idx = &mut comp_range_ends[scc];
-            node_buf[*fill_idx as usize] = node;
-            *fill_idx += 1;
-        }
-
-        Self {
-            comp_range_ends,
-            node_buf,
-        }
+    fn num_nodes(&self) -> usize {
+        self.members.len()
     }
+}
 
-    fn of(&self, comp: S) -> &[N] {
-        let start = comp.index()
-            .checked_sub(1)
-            .map(|idx| self.comp_range_ends[S::new(idx)])
-            .unwrap_or(0) as usize;
-        let end = self.comp_range_ends[comp] as usize;
-
-        &self.node_buf[start..end]
+impl<'a, 'tcx> Successors for ComponentsBorrowedSccSubgraph<'a, 'tcx> {
+    fn successors(&self, node: Self::Node) -> impl Iterator<Item = Self::Node> {
+        self.graph
+            .nodes[self.members.member_to_node(node).as_usize()]
+            .calls
+            .iter()
+            .filter(|v| v.absorbs.has(self.remove))
+            .filter_map(|v| self.members.node_to_member(v.target))
     }
 }
 
@@ -900,35 +889,125 @@ fn components_borrowed_graph<'tcx>(
     // algorithm for dealing with strongly-connected components runs in O(nm) where `n` is the number
     // of functions in the cluster and `m` is the number of unique component sets absorbed.
     let mut sccs = scc::Sccs::<FuncIdx, SccIdx>::new(&graph);
-    let members = SccMembers::new(&sccs);
+    let members = scc::SccMembers::<FuncIdx, SccIdx, SubFuncIdx>::new(&sccs);
 
     for scc in sccs.all_sccs() {
         let members = members.of(scc);
 
-        if members.len() == 1 {
-            let node = members[0];
-            let node_data = &graph.nodes[node.index()];
-            let mut set = node_data.local.clone();
+        // We begin by seeding local sets with their target components.
+        for &member in members.iter() {
+            let member_data = &graph.nodes[FuncIdx::as_usize(member)];
+            let mut set = member_data.local.clone();
 
-            for call in &node_data.calls {
-                // Ignore self-refs. We can only ever union a superset of`node_data.local` with the
-                // original `node_data.local` set, which has no effect.
-                if call.target == node {
+            for call in &member_data.calls {
+                // Ignore component-internal calls for now since their local sets haven't yet been
+                // set up correctly.
+                if sccs.scc(call.target) == scc {
                     continue;
                 }
 
-                for (comp, muta) in graph.nodes[call.target.index()].local.iter() {
-                    if call.absorbs.0.contains_key(&comp) {
-                        continue;
+                for (item, muta) in graph.nodes[FuncIdx::as_usize(call.target)].local.iter() {
+                    if !call.absorbs.has(item) {
+                        set.add(item, muta);
                     }
-
-                    set.add(comp, muta);
                 }
             }
 
-            graph.nodes[node.index()].local = tcx.arena.alloc(set);
-        } else {
-            // TODO
+            graph.nodes[FuncIdx::as_usize(member)].local = tcx.arena.alloc(set);
+        }
+
+        // If this was a single-member component, we've properly populated the entire SCC with the
+        // previous step and can move on to the next component.
+        if members.len() <= 1 {
+            continue;
+        }
+
+        // Collect the set of all context items absorbed by a function in the SCC.
+        let mut absorbed_comps = FxHashSet::<DefId>::default();
+
+        for &member in members.iter() {
+            for call in &graph.nodes[FuncIdx::as_usize(member)].calls {
+                if sccs.scc(call.target) != scc {
+                    continue;
+                }
+
+                absorbed_comps.extend(call.absorbs.iter().map(|(item, _muta)| item));
+            }
+        }
+
+        // Determine the mutabilities of each absorbed component for every node in the SCC.
+        for &absorbed in &absorbed_comps {
+            let sub_graph = ComponentsBorrowedSccSubgraph {
+                graph: &graph,
+                members,
+                remove: absorbed,
+            };
+
+            let mut sub_sccs = scc::Sccs::<SubFuncIdx, SccIdx>::new(&sub_graph);
+            let sub_members = scc::SccMembers::<SubFuncIdx, SccIdx, u32>::new(&sub_sccs);
+
+            // We know that every SCC in the subgraph will have the same set of borrows.
+            for scc in sub_sccs.all_sccs() {
+                let sub_members = sub_members.of(scc);
+                let mut comp_muta = None;
+
+                for &sub_member in sub_members.iter() {
+                    let member = members[sub_member];
+                    let member = &graph.nodes[FuncIdx::as_usize(member)];
+
+                    if let Some(muta) = member.local.get(absorbed) {
+                        let comp_muta = comp_muta.get_or_insert(Mutability::Not);
+                        *comp_muta = (*comp_muta).max(muta);
+                    }
+
+                    // TODO: This could be accomplished directly from the SCC graph.
+                    for call in &member.calls {
+                        if
+                            !call.absorbs.has(absorbed) &&
+                            let Some(muta) = graph.nodes[FuncIdx::as_usize(call.target)]
+                                .local
+                                .get(absorbed)
+                        {
+                            let comp_muta = comp_muta.get_or_insert(Mutability::Not);
+                            *comp_muta = (*comp_muta).max(muta);
+                        }
+                    }
+                }
+
+                let Some(comp_muta) = comp_muta else {
+                    continue;
+                };
+
+                for &sub_member in sub_members.iter() {
+                    let member = members[sub_member];
+                    let member_node = &mut graph.nodes[FuncIdx::as_usize(member)];
+                    let mut set = member_node.local.clone();
+                    set.add(absorbed, comp_muta);
+                    member_node.local = tcx.arena.alloc(set);
+                }
+            }
+        }
+
+        // Determine the borrows sets for every other context item not involved in an absorption.
+        let mut union_set = ContextSet::default();
+
+        for &member in members.iter() {
+            for (item, muta) in graph.nodes[FuncIdx::as_usize(member)].local.iter() {
+                if !absorbed_comps.contains(&item) {
+                    union_set.add(item, muta);
+                }
+            }
+        }
+
+        for &member in members.iter() {
+            let member_data = &mut graph.nodes[FuncIdx::as_usize(member)];
+            let mut set = member_data.local.clone();
+
+            for (item, muta) in union_set.iter() {
+                set.add(item, muta);
+            }
+
+            member_data.local = tcx.arena.alloc(set);
         }
     }
 

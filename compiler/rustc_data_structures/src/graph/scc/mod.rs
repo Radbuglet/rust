@@ -10,7 +10,8 @@
 
 use std::assert_matches::debug_assert_matches;
 use std::fmt::Debug;
-use std::ops::Range;
+use std::marker::PhantomData;
+use std::ops::{Deref, Range};
 
 use rustc_index::{Idx, IndexSlice, IndexVec};
 use tracing::{debug, instrument};
@@ -715,5 +716,87 @@ where
         debug_assert_eq!(self.successors_stack.len(), 0);
 
         return_value.unwrap()
+    }
+}
+
+pub struct SccMembers<N: Idx, S: Idx, M: Idx> {
+    _ty: PhantomData<fn() -> M>,
+    comp_range_ends: IndexVec<S, u32>,
+    node_buf: Box<[N]>,
+}
+
+impl<N: Idx, S: Idx + Ord, M: Idx> SccMembers<N, S, M> {
+    pub fn new<A: Annotation>(sccs: &Sccs<N, S, A>) -> Self {
+        // Accumulate the number of elements in each SCC
+        let mut comp_range_ends = IndexVec::from_elem_n(0, sccs.num_sccs());
+        let mut node_buf = (0..sccs.scc_indices().len())
+            .map(|_| N::new(0))
+            .collect::<Box<_>>();
+
+        for (_node, &scc) in sccs.scc_indices().iter_enumerated() {
+            comp_range_ends[scc] += 1;
+        }
+
+        // Transform these into fill-start indices
+        let mut next_start = 0;
+        for end in comp_range_ends.iter_mut() {
+            let count = *end;
+            *end = next_start;
+            next_start += count;
+        }
+
+        // Fill up the buffer
+        for (node, &scc) in sccs.scc_indices().iter_enumerated() {
+            let fill_idx = &mut comp_range_ends[scc];
+            node_buf[*fill_idx as usize] = node;
+            *fill_idx += 1;
+        }
+
+        Self {
+            _ty: PhantomData,
+            comp_range_ends,
+            node_buf,
+        }
+    }
+
+    pub fn of(&self, comp: S) -> SccMemberSet<'_, N, M> {
+        let start = comp.index()
+            .checked_sub(1)
+            .map(|idx| self.comp_range_ends[S::new(idx)])
+            .unwrap_or(0) as usize;
+        let end = self.comp_range_ends[comp] as usize;
+
+        SccMemberSet(IndexSlice::from_raw(&self.node_buf[start..end]))
+    }
+}
+
+pub struct SccMemberSet<'a, N: Idx, M: Idx>(&'a IndexSlice<M, N>);
+
+impl<N: Idx, M: Idx> Copy for SccMemberSet<'_, N, M> {}
+
+impl<N: Idx, M: Idx> Clone for SccMemberSet<'_, N, M> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<N: Idx, M: Idx> SccMemberSet<'_, N, M> {
+    pub fn member_to_node(&self, index: M) -> N {
+        self.0[index]
+    }
+
+    pub fn node_to_member(&self, node: N) -> Option<M>
+    where
+        N: Ord,
+    {
+        self.0.binary_search(&node).ok()
+    }
+}
+
+impl<N: Idx, M: Idx> Deref for SccMemberSet<'_, N, M> {
+    type Target = IndexSlice<M, N>;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
     }
 }
