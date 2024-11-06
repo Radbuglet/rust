@@ -775,6 +775,11 @@ rustc_index::newtype_index! {
 
 rustc_index::newtype_index! {
     #[derive(Ord, PartialOrd)]
+    struct SubSccIdx {}
+}
+
+rustc_index::newtype_index! {
+    #[derive(Ord, PartialOrd)]
     struct SubFuncIdx {}
 }
 
@@ -943,47 +948,72 @@ fn components_borrowed_graph<'tcx>(
                 remove: absorbed,
             };
 
-            let mut sub_sccs = scc::Sccs::<SubFuncIdx, SccIdx>::new(&sub_graph);
-            let sub_members = scc::SccMembers::<SubFuncIdx, SccIdx, u32>::new(&sub_sccs);
+            let mut sub_sccs = scc::Sccs::<SubFuncIdx, SubSccIdx>::new(&sub_graph);
+            let sub_members = scc::SccMembers::<SubFuncIdx, SubSccIdx, u32>::new(&sub_sccs);
+            let mut scc_results = IndexVec::<SubSccIdx, Option<Mutability>>::from_elem_n(
+                None,
+                sub_sccs.num_sccs(),
+            );
 
             // We know that every SCC in the subgraph will have the same set of borrows.
-            for scc in sub_sccs.all_sccs() {
-                let sub_members = sub_members.of(scc);
+            for sub_scc in sub_sccs.all_sccs() {
+                // Determine the mutability of the current `absorbed` component throughout this
+                // sub-SCC. This is determined by two things:
+                //
+                // 1. The local borrow sets of the components in this SCC.
+                // 2. The borrows of sub-SCCs at least one of our members points into.
+                //
+                // This is sufficient because...
+                //
+                // - Borrows introduced by their callees outside of the main-SCC have already been
+                //   seeded into the local sets of nodes in the main-SCC.
+                //
+                // - Borrows introduced by members in the same sub-SCC will count towards `comp_muta`
+                //   when we iterate over them.
+                //
+                // - Borrows introduced by members in the same main-SCC but in a different sub-SCC
+                //   will be counted by the borrows of sub-SCCs at least one of our members points
+                //   into.
+                //
+                // We know these will properly reflect absorption semantics because:
+                //
+                // 1) Local borrow-set seeding properly checks this field.
+                // 2) `sub_graph` and `sub_sccs` properly obey absorptions for `absorbed`.
+                //
+
+                let sub_members = sub_members.of(sub_scc);
                 let mut comp_muta = None;
+                let mut update_comp_muta = |muta: Option<Mutability>| {
+                    let Some(muta) = muta else { return };
+                    let comp_muta = comp_muta.get_or_insert(Mutability::Not);
+                    *comp_muta = (*comp_muta).max(muta);
+                };
+
+                for &suc_scc in sub_sccs.successors(sub_scc) {
+                    update_comp_muta(scc_results[suc_scc]);
+                }
 
                 for &sub_member in sub_members.iter() {
                     let member = members[sub_member];
-                    let member = &graph.nodes[FuncIdx::as_usize(member)];
-
-                    if let Some(muta) = member.local.get(absorbed) {
-                        let comp_muta = comp_muta.get_or_insert(Mutability::Not);
-                        *comp_muta = (*comp_muta).max(muta);
-                    }
-
-                    // TODO: This could be accomplished directly from the SCC graph.
-                    for call in &member.calls {
-                        if
-                            !call.absorbs.has(absorbed) &&
-                            let Some(muta) = graph.nodes[FuncIdx::as_usize(call.target)]
-                                .local
-                                .get(absorbed)
-                        {
-                            let comp_muta = comp_muta.get_or_insert(Mutability::Not);
-                            *comp_muta = (*comp_muta).max(muta);
-                        }
-                    }
+                    let member_data = &graph.nodes[FuncIdx::as_usize(member)];
+                    update_comp_muta(member_data.local.get(absorbed));
                 }
+
+                scc_results[sub_scc] = comp_muta;
 
                 let Some(comp_muta) = comp_muta else {
                     continue;
                 };
 
+                // If this absorbed component is used by any member of the sub-SCC after removal of
+                // the relevant absorption edges, we know the entire SCC will share this same borrow.
+                // Write it back!
                 for &sub_member in sub_members.iter() {
                     let member = members[sub_member];
-                    let member_node = &mut graph.nodes[FuncIdx::as_usize(member)];
-                    let mut set = member_node.local.clone();
+                    let member_data = &mut graph.nodes[FuncIdx::as_usize(member)];
+                    let mut set = member_data.local.clone();
                     set.add(absorbed, comp_muta);
-                    member_node.local = tcx.arena.alloc(set);
+                    member_data.local = tcx.arena.alloc(set);
                 }
             }
         }
