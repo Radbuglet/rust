@@ -2,7 +2,7 @@
 
 use std::collections::hash_map::Entry;
 
-use rustc_data_structures::fx::{FxHashSet, FxHashMap, FxIndexMap, IndexEntry};
+use rustc_data_structures::fx::{FxHashMap, FxHashSet, FxIndexMap, FxIndexSet, IndexEntry};
 use rustc_data_structures::graph::{DirectedGraph, Successors, scc};
 use rustc_hir::def_id::{DefId, DefIndex, LocalDefId, LocalDefIdMap};
 use rustc_index::{Idx, IndexSlice, IndexVec};
@@ -33,7 +33,7 @@ pub struct ReifiedBundle<'tcx> {
     pub original_bundle: Ty<'tcx>,
     pub value_ty: Ty<'tcx>,
     pub fields: FxIndexMap<DefId, SmallVec<[ReifiedBundleMember<'tcx>; 1]>>,
-    pub generic_types: Vec<Ty<'tcx>>,
+    pub generic_types: FxIndexSet<Ty<'tcx>>,
 }
 
 #[derive(Debug, Clone)]
@@ -82,7 +82,7 @@ fn reified_bundle<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> &'tcx ReifiedBundle<
         proj_stack: Vec::new(),
         bundle_item_set_to_value: FxHashMap::default(),
         fields: FxIndexMap::default(),
-        generic_types: Vec::new(),
+        generic_types: FxIndexSet::default(),
     };
     let value_ty = walker.bundle_item_set_to_value(bundle_arg);
     walker.proj_stack.push(ReifiedBundleProj {
@@ -105,7 +105,7 @@ struct ReifiedBundleWalker<'tcx> {
     bundle_item_set_to_value: FxHashMap<Ty<'tcx>, Ty<'tcx>>,
 
     fields: FxIndexMap<DefId, SmallVec<[ReifiedBundleMember<'tcx>; 1]>>,
-    generic_types: Vec<Ty<'tcx>>,
+    generic_types: FxIndexSet<Ty<'tcx>>,
 }
 
 impl<'tcx> ReifiedBundleWalker<'tcx> {
@@ -174,7 +174,7 @@ impl<'tcx> ReifiedBundleWalker<'tcx> {
                 }
             }
             ReifiedBundleItemSet::Generic(ty) => {
-                self.generic_types.push(ty);
+                self.generic_types.insert(ty);
             }
             ReifiedBundleItemSet::Error(_err) => {}
         }

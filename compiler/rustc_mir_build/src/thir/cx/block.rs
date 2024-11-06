@@ -6,6 +6,7 @@ use rustc_middle::ty;
 use rustc_middle::ty::CanonicalUserTypeAnnotation;
 use tracing::debug;
 
+use crate::errors;
 use crate::thir::cx::Cx;
 
 impl<'tcx> Cx<'tcx> {
@@ -121,6 +122,18 @@ impl<'tcx> Cx<'tcx> {
                         Some(self.thir.stmts.push(stmt))
                     }
                     hir::StmtKind::BindContext(bind) => {
+                        let bundle = self.mirror_expr(bind.bundle);
+                        let full_ty = self.thir[bundle].ty;
+                        let reified = self.tcx.reified_bundle(full_ty);
+
+                        for &generic_ty in &reified.generic_types {
+                            self.tcx.dcx().emit_err(errors::ThirBuildGenericsInBind {
+                                span: bind.span,
+                                full_ty,
+                                generic_ty,
+                            });
+                        }
+
                         let remainder_scope = region::Scope {
                             id: block_id,
                             data: region::ScopeData::Remainder(region::FirstStatementIndex::new(
@@ -137,7 +150,7 @@ impl<'tcx> Cx<'tcx> {
                             kind: StmtKind::BindContext {
                                 remainder_scope,
                                 init_scope,
-                                bundle: self.mirror_expr(bind.bundle),
+                                bundle,
                                 span: bind.span,
                                 self_id: self.thir.stmts.next_index(),
                             },
