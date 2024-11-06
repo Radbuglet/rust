@@ -1,11 +1,7 @@
-#![expect(unused)]  // TODO
-
-use std::collections::hash_map::Entry;
-
 use rustc_data_structures::fx::{FxHashMap, FxHashSet, FxIndexMap, FxIndexSet, IndexEntry};
 use rustc_data_structures::graph::{DirectedGraph, Successors, scc};
-use rustc_hir::def_id::{DefId, DefIndex, LocalDefId, LocalDefIdMap};
-use rustc_index::{Idx, IndexSlice, IndexVec};
+use rustc_hir::def_id::{DefId, LocalDefId, LocalDefIdMap};
+use rustc_index::IndexVec;
 use rustc_macros::{HashStable, TyDecodable, TyEncodable};
 
 use crate::mir;
@@ -433,7 +429,7 @@ pub fn visit_context_uses_by_pack_shape<'tcx>(
         }
         thir::PackShape::Tuple(fields) => {
             for field in fields {
-                visit_context_uses_by_pack_shape(tcx, shape, f);
+                visit_context_uses_by_pack_shape(tcx, field, f);
             }
         }
         thir::PackShape::ExtractLocalRef(..)
@@ -453,7 +449,7 @@ pub fn visit_context_binds_by_stmt<'tcx>(
     use thir::StmtKind::*;
 
     match &stmt.kind {
-        &BindContext { self_id, bundle, remainder_scope, .. } => {
+        &BindContext { self_id, bundle, .. } => {
             let bundle_ty = body.exprs[bundle].ty;
             let reified = tcx.reified_bundle(bundle_ty);
 
@@ -572,7 +568,7 @@ pub struct ContextSet(FxIndexMap<DefId, Mutability>);
 impl ContextSet {
     pub fn add(&mut self, id: DefId, muta: Mutability) -> bool {
         match self.0.entry(id) {
-            IndexEntry::Vacant(mut entry) => {
+            IndexEntry::Vacant(entry) => {
                 entry.insert(muta);
                 true
             }
@@ -931,7 +927,7 @@ fn components_borrowed_graph<'tcx>(
     // dealing with acyclic portions of the graph runs in O(n) w.r.t the number of nodes whereas the
     // algorithm for dealing with strongly-connected components runs in O(nm) where `n` is the number
     // of functions in the cluster and `m` is the number of unique component sets absorbed.
-    let mut sccs = scc::Sccs::<FuncIdx, SccIdx>::new(&graph);
+    let sccs = scc::Sccs::<FuncIdx, SccIdx>::new(&graph);
     let members = scc::SccMembers::<FuncIdx, SccIdx, SubFuncIdx>::new(&sccs);
 
     for scc in sccs.all_sccs() {
@@ -986,7 +982,7 @@ fn components_borrowed_graph<'tcx>(
                 remove: absorbed,
             };
 
-            let mut sub_sccs = scc::Sccs::<SubFuncIdx, SubSccIdx>::new(&sub_graph);
+            let sub_sccs = scc::Sccs::<SubFuncIdx, SubSccIdx>::new(&sub_graph);
             let sub_members = scc::SccMembers::<SubFuncIdx, SubSccIdx, u32>::new(&sub_sccs);
             let mut scc_results = IndexVec::<SubSccIdx, Option<Mutability>>::from_elem_n(
                 None,
