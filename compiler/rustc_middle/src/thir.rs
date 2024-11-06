@@ -553,7 +553,8 @@ pub enum ExprKind<'tcx> {
 #[derive(Clone, Debug, HashStable)]
 pub enum PackShape<'tcx> {
     ExtractEnv(hir::Mutability, DefId),
-    ExtractLocal(hir::Mutability, usize, ty::ReifiedBundleProjs<'tcx>),
+    ExtractLocalRef(hir::Mutability, usize, ty::ReifiedBundleProjs<'tcx>),
+    ExtractLocalMove(usize, ty::ReifiedBundleProjs<'tcx>),
     Tuple(Box<[PackShape<'tcx>]>),
     Error(ErrorGuaranteed),
 }

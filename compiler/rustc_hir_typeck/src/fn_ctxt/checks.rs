@@ -1775,9 +1775,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         let expr = bind.bundle;
         let expr_ty = self.check_expr_with_needs(expr, Needs::None);
 
-        let Some(bundle_adt) = self.tcx.lang_items().bundle() else {
-            bug!("`bundle` lang-item not defined");
-        };
+        let bundle_adt = self.tcx.require_lang_item(hir::LangItem::Bundle, Some(bind.span));
         let bundle_adt = self.tcx.adt_def(bundle_adt);
 
         let inf_var = self.next_ty_var(expr.span);

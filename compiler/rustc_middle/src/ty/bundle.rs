@@ -7,7 +7,6 @@ use rustc_data_structures::graph::{DirectedGraph, Successors, scc};
 use rustc_hir::def_id::{DefId, DefIndex, LocalDefId, LocalDefIdMap};
 use rustc_index::{Idx, IndexSlice, IndexVec};
 use rustc_macros::{HashStable, TyDecodable, TyEncodable};
-use smallvec::SmallVec;
 
 use crate::mir;
 use crate::thir::{self, visit as thir_visit};
@@ -32,9 +31,22 @@ pub fn provide(providers: &mut Providers) {
 pub struct ReifiedBundle<'tcx> {
     pub original_bundle: Ty<'tcx>,
     pub value_ty: Ty<'tcx>,
-    pub fields: FxIndexMap<DefId, SmallVec<[ReifiedBundleMember<'tcx>; 1]>>,
-    pub generic_types: FxIndexSet<Ty<'tcx>>,
+    pub fields: FxIndexMap<DefId, ReifiedBundleMemberList<'tcx>>,
+    pub generic_fields: FxIndexMap<Ty<'tcx>, ReifiedBundleMemberList<'tcx>>,
+    pub generic_sets: FxIndexMap<Ty<'tcx>, ReifiedBundleMemberList<'tcx>>,
 }
+
+impl<'tcx> ReifiedBundle<'tcx> {
+    pub fn generic_types(&self) -> FxIndexSet<Ty<'tcx>> {
+        self.generic_fields
+            .keys()
+            .copied()
+            .chain(self.generic_sets.keys().copied())
+            .collect()
+    }
+}
+
+pub type ReifiedBundleMemberList<'tcx> = smallvec::SmallVec<[ReifiedBundleMember<'tcx>; 1]>;
 
 #[derive(Debug, Clone)]
 pub struct ReifiedBundleMember<'tcx> {
@@ -82,7 +94,8 @@ fn reified_bundle<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> &'tcx ReifiedBundle<
         proj_stack: Vec::new(),
         bundle_item_set_to_value: FxHashMap::default(),
         fields: FxIndexMap::default(),
-        generic_types: FxIndexSet::default(),
+        generic_fields: FxIndexMap::default(),
+        generic_sets: FxIndexMap::default(),
     };
     let value_ty = walker.bundle_item_set_to_value(bundle_arg);
     walker.proj_stack.push(ReifiedBundleProj {
@@ -95,7 +108,8 @@ fn reified_bundle<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> &'tcx ReifiedBundle<
         original_bundle: ty,
         value_ty,
         fields: walker.fields,
-        generic_types: walker.generic_types,
+        generic_fields: walker.generic_fields,
+        generic_sets: walker.generic_sets,
     })
 }
 
@@ -104,8 +118,9 @@ struct ReifiedBundleWalker<'tcx> {
     proj_stack: Vec<ReifiedBundleProj<'tcx>>,
     bundle_item_set_to_value: FxHashMap<Ty<'tcx>, Ty<'tcx>>,
 
-    fields: FxIndexMap<DefId, SmallVec<[ReifiedBundleMember<'tcx>; 1]>>,
-    generic_types: FxIndexSet<Ty<'tcx>>,
+    fields: FxIndexMap<DefId, ReifiedBundleMemberList<'tcx>>,
+    generic_fields: FxIndexMap<Ty<'tcx>, ReifiedBundleMemberList<'tcx>>,
+    generic_sets: FxIndexMap<Ty<'tcx>, ReifiedBundleMemberList<'tcx>>,
 }
 
 impl<'tcx> ReifiedBundleWalker<'tcx> {
@@ -132,7 +147,21 @@ impl<'tcx> ReifiedBundleWalker<'tcx> {
                     fields.iter().map(|field| self.bundle_item_set_to_value(field)),
                 )
             }
-            ReifiedBundleItemSet::Generic(ty) => {
+            ReifiedBundleItemSet::GenericRef(re, muta, ty) => {
+                let context_item_trait_def_id =
+                    self.tcx.require_lang_item(ty::LangItem::ContextItemTrait, None);
+
+                let item_assoc_para_def_id =
+                    self.tcx.associated_item_def_ids(context_item_trait_def_id)[0];
+
+                let value_ty = Ty::new_alias(
+                    self.tcx,
+                    ty::AliasTyKind::Projection,
+                    ty::AliasTy::new(self.tcx, item_assoc_para_def_id, [ty]),
+                );
+                Ty::new_ref(self.tcx, re, value_ty, muta)
+            }
+            ReifiedBundleItemSet::GenericSet(ty) => {
                 Ty::new_alias(
                     self.tcx,
                     ty::AliasTyKind::Projection,
@@ -173,8 +202,21 @@ impl<'tcx> ReifiedBundleWalker<'tcx> {
                     self.proj_stack.pop();
                 }
             }
-            ReifiedBundleItemSet::Generic(ty) => {
-                self.generic_types.insert(ty);
+            ReifiedBundleItemSet::GenericRef(_re, muta, ty) => {
+                self.generic_fields.entry(ty).or_default().push(ReifiedBundleMember {
+                    location: ReifiedBundleProjs(self.tcx.arena.alloc_from_iter(
+                        self.proj_stack.iter().copied(),
+                    )),
+                    mutability: muta,
+                });
+            }
+            ReifiedBundleItemSet::GenericSet(ty) => {
+                self.generic_sets.entry(ty).or_default().push(ReifiedBundleMember {
+                    location: ReifiedBundleProjs(self.tcx.arena.alloc_from_iter(
+                        self.proj_stack.iter().copied(),
+                    )),
+                    mutability: Mutability::Mut,
+                });
             }
             ReifiedBundleItemSet::Error(_err) => {}
         }
@@ -183,9 +225,14 @@ impl<'tcx> ReifiedBundleWalker<'tcx> {
 
 #[derive(Copy, Clone)]
 pub enum ReifiedBundleItemSet<'tcx> {
+    /// A reference `&{mut?} T` where `T` is known and implements `ContextItem`.
     Ref(ty::Region<'tcx>, Mutability, DefId),
+    /// A tuple `(A, B, C, ...)` where each `A_k` implements `BundleItemSet`.
     Tuple(&'tcx RawList<(), Ty<'tcx>>),
-    Generic(Ty<'tcx>),
+    /// A reference `&{mut?} T` where `T` is generic but implements `BundleItemSet`.
+    GenericRef(ty::Region<'tcx>, Mutability, Ty<'tcx>),
+    /// A type `T` where `T` is generic but implements `BundleItemSet`.
+    GenericSet(Ty<'tcx>),
     Error(ty::ErrorGuaranteed),
 }
 
@@ -195,7 +242,7 @@ impl<'tcx> ReifiedBundleItemSet<'tcx> {
             &ty::Ref(re, inner, muta) => {
                 match ReifiedContextItem::decode(inner) {
                     ReifiedContextItem::Reified(did) => Self::Ref(re, muta, did),
-                    ReifiedContextItem::Generic(ty) => Self::Generic(ty),
+                    ReifiedContextItem::Generic(ty) => Self::GenericRef(re, muta, ty),
                     ReifiedContextItem::Error(err) => Self::Error(err),
                 }
             }
@@ -203,7 +250,7 @@ impl<'tcx> ReifiedBundleItemSet<'tcx> {
                 Self::Tuple(fields)
             }
             ty::Alias(..) | ty::Param(..) => {
-                Self::Generic(ty)
+                Self::GenericSet(ty)
             }
             &ty::Error(err) => {
                 Self::Error(err)
@@ -394,7 +441,9 @@ pub fn visit_context_uses_by_pack_shape<'tcx>(
                 visit_context_uses_by_pack_shape(tcx, shape, f);
             }
         }
-        thir::PackShape::ExtractLocal(..) | thir::PackShape::Error(..) => {
+        thir::PackShape::ExtractLocalRef(..)
+        | thir::PackShape::ExtractLocalMove(..)
+        | thir::PackShape::Error(..) => {
             // (does not directly introduce context uses)
         }
     }

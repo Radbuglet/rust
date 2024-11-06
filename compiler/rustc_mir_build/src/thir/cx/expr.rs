@@ -1308,23 +1308,17 @@ impl<'tcx> Cx<'tcx> {
         match ty::ReifiedBundleItemSet::decode(ty) {
             ty::ReifiedBundleItemSet::Ref(_re, muta, def_id) => {
                 for (i, bundle) in bundles.iter().enumerate() {
-                    let Some(member) = bundle.fields.get(&def_id) else {
+                    let Some(members) = bundle.fields.get(&def_id) else {
                         continue;
                     };
 
-                    if member.len() > 1 {
+                    if members.len() > 1 {
                         todo!();
                     }
 
-                    let Some(member) = member.get(0) else {
-                        todo!();
-                    };
+                    let Some(member) = members.get(0) else { unreachable!() };
 
-                    if member.mutability < muta {
-                        todo!();
-                    }
-
-                    return PackShape::ExtractLocal(muta, i, member.location);
+                    return PackShape::ExtractLocalRef(muta, i, member.location);
                 }
 
                 if allow_env {
@@ -1340,7 +1334,40 @@ impl<'tcx> Cx<'tcx> {
 
                 PackShape::Tuple(items)
             }
-            ty::ReifiedBundleItemSet::Generic(_ty) => todo!(),
+            ty::ReifiedBundleItemSet::GenericSet(ty) => {
+                for (i, bundle) in bundles.iter().enumerate() {
+                    let Some(members) = bundle.generic_sets.get(&ty) else {
+                        continue;
+                    };
+
+                    if members.len() > 1 {
+                        todo!();
+                    }
+
+                    let Some(member) = members.get(0) else { unreachable!() };
+
+                    return PackShape::ExtractLocalMove(i, member.location);
+                }
+
+                todo!();
+            }
+            ty::ReifiedBundleItemSet::GenericRef(_re, muta, ty) => {
+                for (i, bundle) in bundles.iter().enumerate() {
+                    let Some(members) = bundle.generic_fields.get(&ty) else {
+                        continue;
+                    };
+
+                    if members.len() > 1 {
+                        todo!();
+                    }
+
+                    let Some(member) = members.get(0) else { unreachable!() };
+
+                    return PackShape::ExtractLocalRef(muta, i, member.location);
+                }
+
+                todo!();
+            }
             ty::ReifiedBundleItemSet::Error(err) => PackShape::Error(err),
         }
     }

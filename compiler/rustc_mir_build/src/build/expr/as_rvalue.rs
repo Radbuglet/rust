@@ -14,6 +14,7 @@ use rustc_middle::ty::{self, Ty, UpvarArgs};
 use rustc_span::source_map::Spanned;
 use rustc_span::{DUMMY_SP, Span};
 use rustc_target::abi::{Abi, FieldIdx, Primitive, VariantIdx};
+use rustc_trait_selection::infer::InferCtxtExt as _;
 use tracing::debug;
 
 use crate::build::expr::as_place::PlaceBase;
@@ -544,9 +545,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 block.and(Rvalue::Use(operand))
             }
             ExprKind::Pack { ref exprs, ref shape } => {
-                let Some(bundle_did) = this.tcx.lang_items().bundle() else {
-                    bug!("missing `bundle` lang-item");
-                };
+                let bundle_did = this.tcx.lang_items().bundle().unwrap();
 
                 let exprs = exprs
                     .into_iter()
@@ -610,7 +609,19 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     },
                 )
             }
-            PackShape::ExtractLocal(muta, expr_idx, location) => {
+            PackShape::ExtractLocalMove(expr_idx, location) => {
+                let place = location.project_place(
+                    self.tcx,
+                    exprs[*expr_idx],
+                    [],
+                );
+                if !self.infcx.type_is_copy_modulo_regions(self.param_env, ty) {
+                    Rvalue::Use(Operand::Move(place))
+                } else {
+                    Rvalue::Use(Operand::Copy(place))
+                }
+            }
+            PackShape::ExtractLocalRef(muta, expr_idx, location) => {
                 Rvalue::Ref(
                     self.tcx.lifetimes.re_erased,
                     match muta {

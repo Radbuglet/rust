@@ -126,7 +126,7 @@ impl<'tcx> Cx<'tcx> {
                         let full_ty = self.thir[bundle].ty;
                         let reified = self.tcx.reified_bundle(full_ty);
 
-                        for &generic_ty in &reified.generic_types {
+                        for generic_ty in reified.generic_types() {
                             self.tcx.dcx().emit_err(errors::ThirBuildGenericsInBind {
                                 span: bind.span,
                                 full_ty,

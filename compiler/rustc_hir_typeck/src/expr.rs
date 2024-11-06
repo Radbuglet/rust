@@ -323,9 +323,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 ascribed_ty
             }
             ExprKind::Pack(_mode, exprs, hir_ty) => {
-                let Some(bundle_adt) = self.tcx.lang_items().bundle() else {
-                    bug!("`bundle` lang-item not defined");
-                };
+                let bundle_adt = self.tcx.require_lang_item(LangItem::Bundle, Some(expr.span));
                 let bundle_adt = self.tcx.adt_def(bundle_adt);
 
                 let mk_infer = || -> Ty<'tcx> {
