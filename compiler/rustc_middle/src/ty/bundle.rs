@@ -346,22 +346,17 @@ impl<'tcx> ReifiedContextItem<'tcx> {
 
 // === Visit Context Uses === //
 
-#[derive(Debug, Copy, Clone)]
-pub enum ContextUseKind {
-    Item(DefId, Mutability),
-}
-
 pub fn visit_context_used_by_expr<'tcx>(
     tcx: TyCtxt<'tcx>,
     expr: &thir::Expr<'tcx>,
     visit_calls: bool,
-    f: &mut impl FnMut(ContextUseKind),
+    f: &mut impl FnMut(DefId, Mutability),
 ) {
     use thir::ExprKind::*;
 
     match &expr.kind {
         &ContextRef { item, muta } => {
-            f(ContextUseKind::Item(item, muta));
+            f(item, muta);
         }
         Pack { shape, .. } => {
             visit_context_uses_by_pack_shape(tcx, shape, f);
@@ -372,7 +367,7 @@ pub fn visit_context_used_by_expr<'tcx>(
                 let Some(def_id) = extract_static_callee_for_context(tcx, ty)
             {
                 for (item, muta) in tcx.components_borrowed(def_id).iter() {
-                    f(ContextUseKind::Item(item, muta));
+                    f(item, muta);
                 }
             }
         }
@@ -430,11 +425,11 @@ pub fn visit_context_used_by_expr<'tcx>(
 pub fn visit_context_uses_by_pack_shape<'tcx>(
     tcx: TyCtxt<'tcx>,
     shape: &thir::PackShape<'tcx>,
-    f: &mut impl FnMut(ContextUseKind),
+    f: &mut impl FnMut(DefId, Mutability),
 ) {
     match shape {
         &thir::PackShape::ExtractEnv(muta, item) => {
-            f(ContextUseKind::Item(item, muta))
+            f(item, muta);
         }
         thir::PackShape::Tuple(fields) => {
             for field in fields {
@@ -453,7 +448,7 @@ pub fn visit_context_binds_by_stmt<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &thir::Thir<'tcx>,
     stmt: &thir::Stmt<'tcx>,
-    f: &mut impl FnMut(ContextBinder, ContextUseKind),
+    f: &mut impl FnMut(ContextBinder, DefId, Mutability),
 ) {
     use thir::StmtKind::*;
 
@@ -468,7 +463,7 @@ pub fn visit_context_binds_by_stmt<'tcx>(
                     .max()
                     .unwrap();
 
-                f(ContextBinder::LocalBinder(self_id), ContextUseKind::Item(item, muta));
+                f(ContextBinder::LocalBinder(self_id), item, muta);
             }
         }
         Expr { .. } | Let { .. } => {
@@ -546,13 +541,11 @@ impl ContextBindTracker {
         body: &thir::Thir<'tcx>,
         stmt: &thir::Stmt<'tcx>,
     ) {
-        visit_context_binds_by_stmt(tcx, body, stmt, &mut |binder, usage| match usage {
-            ContextUseKind::Item(item, muta) => {
-                self.bind(item, ContextBindInfo {
-                    binder: binder.unwrap_local(),
-                    muta,
-                });
-            },
+        visit_context_binds_by_stmt(tcx, body, stmt, &mut |binder, item, muta| {
+            self.bind(item, ContextBindInfo {
+                binder: binder.unwrap_local(),
+                muta,
+            });
         })
     }
 
@@ -725,12 +718,10 @@ impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVi
     fn visit_stmt(&mut self, stmt: &'thir thir::Stmt<'tcx>) {
         self.bind_tracker.bind_from_stmt(self.tcx, self.thir, stmt);
 
-        visit_context_binds_by_stmt(self.tcx, self.thir, stmt, &mut |_binder, usage| match usage {
-            ContextUseKind::Item(item, muta) => {
-                let mut absorb = self.curr_absorb.clone();
-                absorb.add(item, muta);
-                self.curr_absorb = self.tcx.arena.alloc(absorb);
-            },
+        visit_context_binds_by_stmt(self.tcx, self.thir, stmt, &mut |_binder, item, muta| {
+            let mut absorb = self.curr_absorb.clone();
+            absorb.add(item, muta);
+            self.curr_absorb = self.tcx.arena.alloc(absorb);
         });
 
         thir_visit::walk_stmt(self, stmt);
@@ -739,12 +730,10 @@ impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVi
     fn visit_expr(&mut self, expr: &'thir thir::Expr<'tcx>) {
         use thir::ExprKind::*;
 
-        visit_context_used_by_expr(self.tcx, expr, false, &mut |usage| match usage {
-            ContextUseKind::Item(item, muta) => {
-                if self.bind_tracker.resolve(item).is_env() {
-                    self.local.add(item, muta);
-                }
-            },
+        visit_context_used_by_expr(self.tcx, expr, false, &mut |item, muta| {
+            if self.bind_tracker.resolve(item).is_env() {
+                self.local.add(item, muta);
+            }
         });
 
         match &expr.kind {

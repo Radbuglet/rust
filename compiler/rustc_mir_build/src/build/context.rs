@@ -348,10 +348,8 @@ impl<'a, 'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for BinderUseVisitor<'a, 
     }
 
     fn visit_expr(&mut self, expr: &'thir thir::Expr<'tcx>) {
-        ty::visit_context_used_by_expr(self.builder.tcx, expr, true, &mut |usage| match usage {
-            ty::ContextUseKind::Item(item, muta) => {
-                self.introduce_use(item, muta);
-            },
+        ty::visit_context_used_by_expr(self.builder.tcx, expr, true, &mut |item, muta| {
+            self.introduce_use(item, muta);
         });
 
         thir_visit::walk_expr(self, expr);
