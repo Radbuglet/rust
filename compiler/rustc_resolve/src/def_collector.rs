@@ -507,6 +507,13 @@ impl<'a, 'ra, 'tcx> visit::Visitor<'a> for DefCollector<'a, 'ra, 'tcx> {
                     }
                 };
             }
+            TyKind::InferBundle(id, _bounds) => {
+                let name = Symbol::intern(&pprust::ty_to_string(ty).replace('\n', " "));
+
+                self.create_def(*id, name, DefKind::InferBundle, ty.span);
+
+                // (there are no sub-types in an infer_bundle so there's no need to walk the type)
+            }
             _ => visit::walk_ty(self, ty),
         }
     }

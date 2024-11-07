@@ -629,7 +629,8 @@ impl<'tcx> EmbargoVisitor<'tcx> {
             | DefKind::GlobalAsm
             | DefKind::Impl { .. }
             | DefKind::Closure
-            | DefKind::SyntheticCoroutineBody => (),
+            | DefKind::SyntheticCoroutineBody
+            | DefKind::InferBundle => (),
         }
     }
 }

@@ -1471,6 +1471,13 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                 );
                 hir::TyKind::Err(guar)
             }
+            TyKind::InferBundle(def_node_id, bounds) => {
+                let def_id = self.local_def_id(*def_node_id);
+
+                dbg!(def_id, bounds);
+
+                todo!();
+            },
             TyKind::Dummy => panic!("`TyKind::Dummy` should never be lowered"),
         };
 

@@ -51,6 +51,10 @@ pub enum BoundKind {
     /// Super traits of a trait.
     /// E.g., `trait A: B`
     SuperTraits,
+
+    /// Inferred bundle bounds
+    /// E.g., `infer_bundle!(A + B + C)`
+    InferBundle,
 }
 impl BoundKind {
     pub fn descr(self) -> &'static str {
@@ -59,6 +63,7 @@ impl BoundKind {
             BoundKind::Impl => "`impl Trait`",
             BoundKind::TraitObject => "`dyn` trait object bounds",
             BoundKind::SuperTraits => "supertrait bounds",
+            BoundKind::InferBundle => "`infer_bundle` bounds",
         }
     }
 }
@@ -555,6 +560,9 @@ pub fn walk_ty<'a, V: Visitor<'a>>(visitor: &mut V, typ: &'a Ty) -> V::Result {
         TyKind::Never | TyKind::CVarArgs => {}
         TyKind::AnonStruct(_id, ref fields) | TyKind::AnonUnion(_id, ref fields) => {
             walk_list!(visitor, visit_field_def, fields);
+        }
+        TyKind::InferBundle(_id, bounds) => {
+            walk_list!(visitor, visit_param_bound, bounds, BoundKind::InferBundle);
         }
     }
     V::Result::output()

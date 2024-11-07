@@ -291,6 +291,7 @@ pub enum DefPathData {
     OpaqueTy,
     /// An anonymous struct or union type i.e. `struct { foo: Type }` or `union { bar: Type }`
     AnonAdt,
+    InferBundle,
 }
 
 impl Definitions {
@@ -415,7 +416,7 @@ impl DefPathData {
             TypeNs(name) | ValueNs(name) | MacroNs(name) | LifetimeNs(name) => Some(name),
 
             Impl | ForeignMod | CrateRoot | Use | GlobalAsm | Closure | Ctor | AnonConst
-            | OpaqueTy | AnonAdt => None,
+            | OpaqueTy | AnonAdt | InferBundle => None,
         }
     }
 
@@ -438,6 +439,7 @@ impl DefPathData {
             Ctor => DefPathDataName::Anon { namespace: sym::constructor },
             AnonConst => DefPathDataName::Anon { namespace: sym::constant },
             OpaqueTy => DefPathDataName::Anon { namespace: sym::opaque },
+            InferBundle => DefPathDataName::Anon { namespace: sym::infer_bundle },
             AnonAdt => DefPathDataName::Anon { namespace: sym::anon_adt },
         }
     }

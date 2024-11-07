@@ -597,6 +597,7 @@ impl<'v> ast_visit::Visitor<'v> for StatCollector<'v> {
             MacCall,
             CVarArgs,
             Dummy,
+            InferBundle,
             Err
         ]);
 

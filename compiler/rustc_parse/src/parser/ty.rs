@@ -267,6 +267,8 @@ impl<'a> Parser<'a> {
         } else if self.eat(&token::Not) {
             // Never type `!`
             TyKind::Never
+        } else if self.is_builtin() {
+            self.parse_ty_builtin()?
         } else if self.eat(&token::BinOp(token::Star)) {
             self.parse_ty_ptr()?
         } else if self.eat(&token::OpenDelim(Delimiter::Bracket)) {
@@ -380,6 +382,26 @@ impl<'a> Parser<'a> {
             ty = self.maybe_recover_from_question_mark(ty);
         }
         if allow_qpath_recovery { self.maybe_recover_from_bad_qpath(ty) } else { Ok(ty) }
+    }
+
+    fn parse_ty_builtin(&mut self) -> PResult<'a, TyKind> {
+        self.parse_builtin(|this, _lo, ident| {
+            Ok(match ident.name {
+                sym::infer_bundle => Some(this.parse_ty_infer_bundle()?),
+                _ => None,
+            })
+        })
+    }
+
+    fn parse_ty_infer_bundle(&mut self) -> PResult<'a, TyKind> {
+        let bounds = self.parse_generic_bounds()?;
+
+        if !matches!(self.token.kind, token::CloseDelim(..) | token::Eof) {
+            self.unexpected()?;
+        }
+
+        // Macro definition ensures that there is a lifetime.
+        Ok(TyKind::InferBundle(ast::DUMMY_NODE_ID, bounds))
     }
 
     /// Parse an anonymous struct or union (only for field definitions):

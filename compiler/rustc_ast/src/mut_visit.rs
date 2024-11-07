@@ -527,6 +527,10 @@ pub fn walk_ty<T: MutVisitor>(vis: &mut T, ty: &mut P<Ty>) {
             vis.visit_id(id);
             fields.flat_map_in_place(|field| vis.flat_map_field_def(field));
         }
+        TyKind::InferBundle(id, bounds) => {
+            vis.visit_id(id);
+            visit_vec(bounds, |bound| vis.visit_param_bound(bound, BoundKind::InferBundle));
+        },
     }
     visit_lazy_tts(vis, tokens);
     vis.visit_span(span);

@@ -173,6 +173,7 @@ fixed_size_enum! {
         ( Macro(MacroKind::Attr)                   )
         ( Macro(MacroKind::Derive)                 )
         ( SyntheticCoroutineBody                   )
+        ( InferBundle )
     }
 }
 

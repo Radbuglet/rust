@@ -288,6 +288,7 @@ fn type_trailing_braced_mac_call(mut ty: &ast::Ty) -> Option<&ast::MacCall> {
             | ast::TyKind::CVarArgs
             | ast::TyKind::Pat(..)
             | ast::TyKind::Dummy
+            | ast::TyKind::InferBundle(..)  // TODO?
             | ast::TyKind::Err(..) => break None,
 
             // These end in brace, but cannot occur in a let-else statement.

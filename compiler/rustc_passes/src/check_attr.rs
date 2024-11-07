@@ -835,7 +835,8 @@ impl<'tcx> CheckAttrVisitor<'tcx> {
             | Target::GenericParam(..)
             | Target::MacroDef
             | Target::PatField
-            | Target::ExprField => None,
+            | Target::ExprField
+            | Target::InferBundle => None,
         } {
             tcx.dcx().emit_err(errors::DocAliasBadLocation { span, attr_str, location });
             return;

@@ -114,3 +114,8 @@ pub macro unpack {
         pack!($($src),* => Bundle<$ty>).unwrap()
     },
 }
+
+#[allow_internal_unstable(builtin_syntax)]
+pub macro infer_bundle {
+    ($($tt:tt)*) => { builtin # infer_bundle($($tt)*) },
+}

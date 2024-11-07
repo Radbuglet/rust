@@ -57,6 +57,7 @@ pub enum Target {
     Param,
     PatField,
     ExprField,
+    InferBundle,
 }
 
 impl Display for Target {
@@ -98,7 +99,8 @@ impl Target {
             | Target::MacroDef
             | Target::Param
             | Target::PatField
-            | Target::ExprField => false,
+            | Target::ExprField
+            | Target::InferBundle => false,
         }
     }
 
@@ -149,6 +151,7 @@ impl Target {
             DefKind::Trait => Target::Trait,
             DefKind::TraitAlias => Target::TraitAlias,
             DefKind::Impl { .. } => Target::Impl,
+            DefKind::InferBundle => Target::InferBundle,
 
             // See note in `from_item`.
             DefKind::Context => Target::Static,
@@ -230,6 +233,7 @@ impl Target {
             Target::Param => "function param",
             Target::PatField => "pattern field",
             Target::ExprField => "struct field",
+            Target::InferBundle => "infer bundle",
         }
     }
 }

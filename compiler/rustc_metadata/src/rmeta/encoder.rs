@@ -879,7 +879,8 @@ fn should_encode_span(def_kind: DefKind) -> bool {
         | DefKind::Field
         | DefKind::Impl { .. }
         | DefKind::Closure
-        | DefKind::SyntheticCoroutineBody => true,
+        | DefKind::SyntheticCoroutineBody
+        | DefKind::InferBundle => true,
         DefKind::ForeignMod | DefKind::GlobalAsm => false,
     }
 }
@@ -922,7 +923,8 @@ fn should_encode_attrs(def_kind: DefKind) -> bool {
         | DefKind::OpaqueTy
         | DefKind::LifetimeParam
         | DefKind::Static { nested: true, .. }
-        | DefKind::GlobalAsm => false,
+        | DefKind::GlobalAsm
+        | DefKind::InferBundle => false,
     }
 }
 
@@ -959,7 +961,8 @@ fn should_encode_expn_that_defined(def_kind: DefKind) -> bool {
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
         | DefKind::Closure
-        | DefKind::SyntheticCoroutineBody => false,
+        | DefKind::SyntheticCoroutineBody
+        | DefKind::InferBundle => false,
     }
 }
 
@@ -997,7 +1000,8 @@ fn should_encode_visibility(def_kind: DefKind) -> bool {
         | DefKind::Impl { .. }
         | DefKind::Closure
         | DefKind::ExternCrate
-        | DefKind::SyntheticCoroutineBody => false,
+        | DefKind::SyntheticCoroutineBody
+        | DefKind::InferBundle => false,
     }
 }
 
@@ -1026,7 +1030,8 @@ fn should_encode_stability(def_kind: DefKind) -> bool {
         | DefKind::Trait
         | DefKind::TraitAlias
         | DefKind::Macro(..)
-        | DefKind::ForeignTy => true,
+        | DefKind::ForeignTy
+        | DefKind::InferBundle => true,
         DefKind::Use
         | DefKind::LifetimeParam
         | DefKind::AnonConst
@@ -1102,6 +1107,7 @@ fn should_encode_variances<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, def_kind: Def
         | DefKind::Enum
         | DefKind::Variant
         | DefKind::OpaqueTy
+        | DefKind::InferBundle  // TODO?
         | DefKind::Fn
         | DefKind::Ctor(..)
         | DefKind::AssocFn => true,
@@ -1153,6 +1159,7 @@ fn should_encode_generics(def_kind: DefKind) -> bool {
         | DefKind::AnonConst
         | DefKind::InlineConst
         | DefKind::OpaqueTy
+        | DefKind::InferBundle  // TODO?
         | DefKind::Impl { .. }
         | DefKind::Field
         | DefKind::TyParam
@@ -1227,6 +1234,7 @@ fn should_encode_type(tcx: TyCtxt<'_>, def_id: LocalDefId, def_kind: DefKind) ->
         | DefKind::Use
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
+        | DefKind::InferBundle  // TODO?
         | DefKind::ExternCrate => false,
     }
 }
@@ -1264,7 +1272,8 @@ fn should_encode_fn_sig(def_kind: DefKind) -> bool {
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
         | DefKind::ExternCrate
-        | DefKind::SyntheticCoroutineBody => false,
+        | DefKind::SyntheticCoroutineBody
+        | DefKind::InferBundle => false,
     }
 }
 
@@ -1303,7 +1312,8 @@ fn should_encode_constness(def_kind: DefKind) -> bool {
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
         | DefKind::ExternCrate
-        | DefKind::SyntheticCoroutineBody => false,
+        | DefKind::SyntheticCoroutineBody
+        | DefKind::InferBundle => false,
     }
 }
 
@@ -1338,7 +1348,8 @@ fn should_encode_const(def_kind: DefKind) -> bool {
         | DefKind::LifetimeParam
         | DefKind::GlobalAsm
         | DefKind::ExternCrate
-        | DefKind::SyntheticCoroutineBody => false,
+        | DefKind::SyntheticCoroutineBody
+        | DefKind::InferBundle => false,
     }
 }
 
