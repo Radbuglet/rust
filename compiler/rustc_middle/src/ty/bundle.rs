@@ -252,6 +252,8 @@ impl<'tcx> ReifiedBundleItemSet<'tcx> {
                 Self::Error(err)
             }
 
+            ty::InferBundle(..) => todo!(),
+
             ty::Bool
             | ty::Char
             | ty::Int(..)
@@ -327,6 +329,7 @@ impl<'tcx> ReifiedContextItem<'tcx> {
             | ty::Coroutine(..)
             | ty::CoroutineWitness(..)
             | ty::Never
+            | ty::InferBundle(..)
             | ty::Tuple(..) => {
                 bug!("expected {ty} to implement `ContextItem` but it doesn't");
             }
@@ -650,6 +653,7 @@ pub fn extract_static_callee_for_context<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) 
         | ty::Placeholder(..)
         | ty::Infer(..)
         | ty::ContextMarker(..)
+        | ty::InferBundle(..)
         | ty::Error(..) => {
             None
         }

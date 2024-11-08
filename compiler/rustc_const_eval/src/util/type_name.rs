@@ -39,6 +39,7 @@ impl<'tcx> Printer<'tcx> for AbsolutePathPrinter<'tcx> {
             | ty::Never
             | ty::Tuple(_)
             | ty::ContextMarker(_)
+            | ty::InferBundle(..)
             | ty::Dynamic(_, _, _) => self.pretty_print_type(ty),
 
             // Placeholders (all printed as `_` to uniformize them).

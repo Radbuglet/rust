@@ -427,6 +427,7 @@ impl<'tcx> Interner for TyCtxt<'tcx> {
             | ty::Coroutine(_, _)
             | ty::Never
             | ty::ContextMarker(_)  // TODO: What is this?
+            | ty::InferBundle(..)
             | ty::Tuple(_) => {
                 let simp = ty::fast_reject::simplify_type(
                     tcx,
@@ -2281,6 +2282,7 @@ impl<'tcx> TyCtxt<'tcx> {
                     Alias,
                     Pat,
                     ContextMarker,
+                    InferBundle,
                     Foreign
                 )?;
 

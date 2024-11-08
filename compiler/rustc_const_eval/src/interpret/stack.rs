@@ -495,6 +495,7 @@ impl<'tcx, M: Machine<'tcx>> InterpCx<'tcx, M> {
                 | ty::Never
                 | ty::Error(_)
                 | ty::ContextMarker(_)
+                | ty::InferBundle(..)
                 | ty::Dynamic(_, _, ty::DynStar) => true,
 
                 ty::Str | ty::Slice(_) | ty::Dynamic(_, _, ty::Dyn) | ty::Foreign(..) => false,

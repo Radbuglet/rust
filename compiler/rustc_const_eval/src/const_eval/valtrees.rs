@@ -164,6 +164,8 @@ fn const_to_valtree_inner<'tcx>(
             branches(ecx, place, def.variant(variant).fields.len(), def.is_enum().then_some(variant), num_nodes)
         }
 
+        ty::InferBundle(..) => todo!(),
+
         ty::Never
         | ty::Error(_)
         | ty::Foreign(..)
@@ -340,6 +342,7 @@ pub fn valtree_to_const_value<'tcx>(
 
             op_to_const(&ecx, &place.into(), /* for diagnostics */ false)
         }
+        ty::InferBundle(..) => todo!(),
         ty::Never
         | ty::Error(_)
         | ty::Foreign(..)

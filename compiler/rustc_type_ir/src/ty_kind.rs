@@ -252,6 +252,9 @@ pub enum TyKind<I: Interner> {
     /// The marker type for context items.
     ContextMarker(I::DefId),
 
+    /// An inference bundle created by `infer_bundle!(<lt>)`.
+    InferBundle(I::DefId, I::Region),
+
     /// A placeholder for a type which could not be computed; this is
     /// propagated to avoid useless error messages.
     Error(I::ErrorGuaranteed),
@@ -321,6 +324,7 @@ impl<I: Interner> fmt::Debug for TyKind<I> {
             Placeholder(p) => write!(f, "{p:?}"),
             Infer(t) => write!(f, "{:?}", t),
             ContextMarker(d) => f.debug_tuple("ContextMarker").field(d).finish(),
+            InferBundle(d, l) => f.debug_tuple("InferBundle").field(d).field(l).finish(),
             TyKind::Error(_) => write!(f, "{{type error}}"),
         }
     }

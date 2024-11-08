@@ -43,6 +43,7 @@ pub enum SimplifiedType<DefId> {
     Function(usize),
     Placeholder,
     ContextMarker(DefId),
+    InferBundle(DefId),
     Error,
 }
 
@@ -155,6 +156,7 @@ pub fn simplify_type<I: Interner>(
         ty::Foreign(def_id) => Some(SimplifiedType::Foreign(def_id)),
         ty::Error(_) => Some(SimplifiedType::Error),
         ty::ContextMarker(def_id) => Some(SimplifiedType::ContextMarker(def_id)),
+        ty::InferBundle(def_id, _lt) => Some(SimplifiedType::InferBundle(def_id)),
         ty::Bound(..) | ty::Infer(_) => None,
     }
 }
@@ -273,7 +275,8 @@ impl<I: Interner, const INSTANTIATE_LHS_WITH_INFER: bool, const INSTANTIATE_RHS_
             | ty::CoroutineWitness(..)
             | ty::Foreign(_)
             | ty::Placeholder(_)
-            | ty::ContextMarker(_) => {}
+            | ty::ContextMarker(_)
+            | ty::InferBundle(..) => {}
         };
 
         // For purely rigid types, use structural equivalence.
@@ -325,6 +328,11 @@ impl<I: Interner, const INSTANTIATE_LHS_WITH_INFER: bool, const INSTANTIATE_RHS_
             | ty::Never
             | ty::Foreign(_)
             | ty::ContextMarker(_) => lhs == rhs,
+
+            ty::InferBundle(lhs_def_id, _lt) => match rhs.kind() {
+                ty::InferBundle(rhs_def_id, _lt) => lhs_def_id == rhs_def_id,
+                _ => false,
+            },
 
             ty::Tuple(lhs) => match rhs.kind() {
                 ty::Tuple(rhs) => {

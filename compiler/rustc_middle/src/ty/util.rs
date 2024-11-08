@@ -1315,6 +1315,7 @@ impl<'tcx> Ty<'tcx> {
             | ty::Infer(_)
             | ty::Alias(..)
             | ty::Param(_)
+            | ty::InferBundle(..)
             | ty::Placeholder(_) => false,
         }
     }
@@ -1342,6 +1343,7 @@ impl<'tcx> Ty<'tcx> {
             | ty::FnDef(..)
             | ty::Error(_)
             | ty::ContextMarker(_)
+            | ty::InferBundle(..)
             | ty::FnPtr(..) => true,
             ty::Tuple(fields) => fields.iter().all(Self::is_trivially_unpin),
             ty::Pat(ty, _) | ty::Slice(ty) | ty::Array(ty, _) => ty.is_trivially_unpin(),
@@ -1383,6 +1385,7 @@ impl<'tcx> Ty<'tcx> {
             | ty::FnDef(..)
             | ty::FnPtr(..)
             | ty::ContextMarker(_)
+            | ty::InferBundle(..)
             | ty::Infer(ty::FreshIntTy(_))
             | ty::Infer(ty::FreshFloatTy(_)) => AsyncDropGlueMorphology::Noop,
 
@@ -1562,6 +1565,8 @@ impl<'tcx> Ty<'tcx> {
             // implementation.
             ty::ContextMarker(_) => false,
 
+            ty::InferBundle(..) => false,
+
             // Composite types that satisfy `Eq` when all of their fields do.
             //
             // Because this function is "shallow", we return `true` for these composites regardless
@@ -1705,6 +1710,7 @@ pub fn needs_drop_components_with_async<'tcx>(
         | ty::RawPtr(_, _)
         | ty::Ref(..)
         | ty::ContextMarker(_)
+        | ty::InferBundle(..)
         | ty::Str => Ok(SmallVec::new()),
 
         // Foreign types can never have destructors.
@@ -1771,6 +1777,7 @@ pub fn is_trivially_const_drop(ty: Ty<'_>) -> bool {
         | ty::FnPtr(..)
         | ty::Never
         | ty::ContextMarker(_)
+        | ty::InferBundle(..)
         | ty::Foreign(_) => true,
 
         ty::Alias(..)

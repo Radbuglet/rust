@@ -432,7 +432,8 @@ impl<'tcx> Printer<'tcx> for SymbolMangler<'tcx> {
                 self.print_def_path(def_id, args)?;
             }
 
-            ty::Foreign(def_id) | ty::ContextMarker(def_id) => {
+            // TODO: should `InferBundle` be mangled?
+            ty::Foreign(def_id) | ty::ContextMarker(def_id) | ty::InferBundle(def_id, _) => {
                 self.print_def_path(def_id, &[])?;
             }
 

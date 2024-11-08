@@ -237,6 +237,10 @@ impl<'a, 'tcx> ConstraintContext<'a, 'tcx> {
                 // leaf type -- noop
             }
 
+            ty::InferBundle(_did, region) => {
+                self.add_constraints_from_region(current, region, variance);
+            }
+
             ty::FnDef(..) | ty::Coroutine(..) | ty::Closure(..) | ty::CoroutineClosure(..) => {
                 bug!("Unexpected unnameable type in variance computation: {ty}");
             }

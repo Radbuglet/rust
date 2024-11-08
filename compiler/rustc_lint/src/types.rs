@@ -1060,6 +1060,12 @@ impl<'a, 'tcx> ImproperCTypesVisitor<'a, 'tcx> {
                 reason: fluent::lint_improper_ctypes_context_marker_reason,
                 help: None,
             },
+            ty::InferBundle(..) => FfiUnsafe {
+                ty,
+                // TODO: use a more specific reason
+                reason: fluent::lint_improper_ctypes_struct_layout_reason,
+                help: None,
+            },
 
             ty::Slice(_) => FfiUnsafe {
                 ty,

@@ -1412,6 +1412,7 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                 | ty::FnPtr(..)
                 | ty::Never
                 | ty::ContextMarker(_)
+                | ty::InferBundle(..)
                 | ty::Foreign(_) => {}
 
                 // `ManuallyDrop` is trivially drop

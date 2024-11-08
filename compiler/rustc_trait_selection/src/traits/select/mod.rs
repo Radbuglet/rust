@@ -2122,6 +2122,7 @@ impl<'tcx> SelectionContext<'_, 'tcx> {
             | ty::CoroutineClosure(..)
             | ty::Never
             | ty::ContextMarker(_)
+            | ty::InferBundle(..)
             | ty::Dynamic(_, _, ty::DynStar)
             | ty::Error(_) => {
                 // safe for everything
@@ -2190,6 +2191,7 @@ impl<'tcx> SelectionContext<'_, 'tcx> {
             | ty::Slice(..)
             | ty::Foreign(..)
             | ty::ContextMarker(_)
+            | ty::InferBundle(..)
             | ty::Ref(_, _, hir::Mutability::Mut) => None,
 
             ty::Tuple(tys) => {
@@ -2337,6 +2339,7 @@ impl<'tcx> SelectionContext<'_, 'tcx> {
             | ty::Infer(ty::IntVar(_) | ty::FloatVar(_))
             | ty::Never
             | ty::ContextMarker(_)
+            | ty::InferBundle(..)
             | ty::Char => ty::Binder::dummy(Vec::new()),
 
             // Treat this like `struct str([u8]);`

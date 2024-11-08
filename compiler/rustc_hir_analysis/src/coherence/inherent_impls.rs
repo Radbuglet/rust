@@ -180,7 +180,9 @@ impl<'tcx> InherentCollect<'tcx> {
             | ty::Never
             | ty::FnPtr(..)
             | ty::Tuple(..) => self.check_primitive_impl(id, self_ty),
-            ty::Alias(ty::Projection | ty::Inherent | ty::Opaque, _) | ty::Param(_) => {
+            ty::Alias(ty::Projection | ty::Inherent | ty::Opaque, _)
+            | ty::InferBundle(..)
+            | ty::Param(_) => {
                 Err(self.tcx.dcx().emit_err(errors::InherentNominal { span: item_span }))
             }
             ty::FnDef(..)

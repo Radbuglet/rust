@@ -1510,6 +1510,7 @@ impl<'a, 'tcx> TypeErrCtxt<'a, 'tcx> {
                 ty::CoroutineClosure(..) => Some(21),
                 ty::Pat(..) => Some(22),
                 ty::ContextMarker(..) => Some(23),
+                ty::InferBundle(..) => Some(24),
                 ty::Placeholder(..) | ty::Bound(..) | ty::Infer(..) | ty::Error(_) => None,
             }
         }
@@ -1537,6 +1538,7 @@ impl<'a, 'tcx> TypeErrCtxt<'a, 'tcx> {
                 (ty::Adt(def_a, _), ty::Adt(def_b, _)) => def_a == def_b,
                 (ty::Foreign(def_a), ty::Foreign(def_b)) => def_a == def_b,
                 (ty::ContextMarker(def_a), ty::ContextMarker(def_b)) => def_a == def_b,
+                (ty::InferBundle(def_a, _lt_a), ty::InferBundle(def_b, _lt_b)) => def_a == def_b,
                 // Matching on references results in a lot of unhelpful
                 // suggestions, so let's just not do that for now.
                 //

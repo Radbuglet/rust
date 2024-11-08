@@ -142,6 +142,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             | ty::Adt(..)
             | ty::Never
             | ty::ContextMarker(_)
+            | ty::InferBundle(..)
             | ty::Dynamic(_, _, ty::DynStar)
             | ty::Error(_) => {
                 let guar = self

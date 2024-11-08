@@ -191,7 +191,8 @@ pub trait Ty<I: Interner<Ty = Self>>:
             | ty::CoroutineWitness(..)
             | ty::Never
             | ty::Tuple(_)
-            | ty::ContextMarker(_) => true,
+            | ty::ContextMarker(_)
+            | ty::InferBundle(..) => true,
 
             ty::Error(_)
             | ty::Infer(_)

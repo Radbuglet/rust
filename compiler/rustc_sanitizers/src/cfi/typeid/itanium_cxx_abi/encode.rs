@@ -538,6 +538,7 @@ pub fn encode_ty<'tcx>(
             compress(dict, DictKey::Ty(ty, TyQ::None), &mut s);
             typeid.push_str(&s);
         }
+        ty::InferBundle(..) => todo!(),
 
         // Function types
         ty::FnDef(def_id, args) | ty::Closure(def_id, args) => {

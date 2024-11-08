@@ -136,6 +136,10 @@ fn push_inner<'tcx>(stack: &mut TypeWalkerStack<'tcx>, parent: GenericArg<'tcx>)
             | ty::ContextMarker(_)
             | ty::Foreign(..) => {}
 
+            ty::InferBundle(_did, lt) => {
+                stack.push(lt.into());
+            }
+
             ty::Pat(ty, pat) => {
                 match *pat {
                     ty::PatternKind::Range { start, end, include_end: _ } => {

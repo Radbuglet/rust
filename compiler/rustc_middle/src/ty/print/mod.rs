@@ -284,6 +284,7 @@ fn characteristic_def_id_of_type_cached<'a>(
         | ty::Coroutine(def_id, _)
         | ty::CoroutineWitness(def_id, _)
         | ty::ContextMarker(def_id)
+        | ty::InferBundle(def_id, _)
         | ty::Foreign(def_id) => Some(def_id),
 
         ty::Bool

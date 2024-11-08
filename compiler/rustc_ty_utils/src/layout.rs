@@ -219,6 +219,10 @@ fn layout_of_uncached<'tcx>(
             univariant(IndexSlice::empty(), &ReprOptions::default(), StructKind::AlwaysSized)?
         },
 
+        ty::InferBundle(..) => {
+            todo!();
+        }
+
         // Potentially-wide pointers.
         ty::Ref(_, pointee, _) | ty::RawPtr(pointee, _) => {
             let mut data_ptr = scalar_unit(Pointer(AddressSpace::DATA));

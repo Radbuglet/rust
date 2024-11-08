@@ -646,6 +646,8 @@ fn try_write_constant<'tcx>(
         // ZSTs. Nothing to do.
         ty::FnDef(..) | ty::ContextMarker(..) => {}
 
+        ty::InferBundle(..) => todo!(),
+
         // Those are scalars, must be handled above.
         ty::Bool | ty::Int(_) | ty::Uint(_) | ty::Float(_) | ty::Char =>
             throw_machine_stop_str!("primitive type with provenance"),

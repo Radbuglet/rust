@@ -616,6 +616,11 @@ impl<'tcx> Ty<'tcx> {
     }
 
     #[inline]
+    pub fn new_infer_bundle(tcx: TyCtxt<'tcx>, def_id: DefId, lt: Region<'tcx>) -> Ty<'tcx> {
+        Ty::new(tcx, InferBundle(def_id, lt))
+    }
+
+    #[inline]
     pub fn new_array(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>, n: u64) -> Ty<'tcx> {
         Ty::new(tcx, Array(ty, ty::Const::from_target_usize(tcx, n)))
     }
@@ -1481,6 +1486,7 @@ impl<'tcx> Ty<'tcx> {
             | ty::Tuple(_)
             | ty::Error(_)
             | ty::ContextMarker(_)
+            | ty::InferBundle(..)
             | ty::Infer(IntVar(_) | FloatVar(_)) => tcx.types.u8,
 
             ty::Bound(..)
@@ -1656,6 +1662,7 @@ impl<'tcx> Ty<'tcx> {
             | ty::CoroutineClosure(..)
             | ty::Never
             | ty::ContextMarker(_)
+            | ty::InferBundle(..)
             | ty::Error(_)
             // Extern types have metadata = ().
             | ty::Foreign(..)
@@ -1851,6 +1858,7 @@ impl<'tcx> Ty<'tcx> {
             | ty::Never
             | ty::Error(_)
             | ty::ContextMarker(_)
+            | ty::InferBundle(..)
             | ty::Dynamic(_, _, ty::DynStar) => true,
 
             ty::Str | ty::Slice(_) | ty::Dynamic(_, _, ty::Dyn) | ty::Foreign(..) => false,
@@ -1884,7 +1892,12 @@ impl<'tcx> Ty<'tcx> {
             ty::Bool | ty::Char | ty::Never => true,
 
             // These aren't even `Clone`
-            ty::Str | ty::Slice(..) | ty::Foreign(..) | ty::Dynamic(..) | ty::ContextMarker(_) => false,
+            ty::Str
+            | ty::Slice(..)
+            | ty::Foreign(..)
+            | ty::Dynamic(..)
+            | ty::ContextMarker(_)
+            | ty::InferBundle(..) => false,
 
             ty::Infer(ty::InferTy::FloatVar(_) | ty::InferTy::IntVar(_))
             | ty::Int(..)
@@ -1997,6 +2010,7 @@ impl<'tcx> Ty<'tcx> {
             | CoroutineWitness(..)
             | Never
             | ContextMarker(_)
+            | InferBundle(..)
             | Tuple(_) => true,
             Error(_) | Infer(_) | Alias(_, _) | Param(_) | Bound(_, _) | Placeholder(_) => false,
         }

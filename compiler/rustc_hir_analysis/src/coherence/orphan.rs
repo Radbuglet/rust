@@ -211,6 +211,10 @@ pub(crate) fn orphan_check_impl(
                 LocalImpl::Disallow { problematic_kind: "pattern type" },
                 NonlocalImpl::DisallowOther,
             ),
+            ty::InferBundle(..) => (
+                LocalImpl::Disallow { problematic_kind: "inferred bundle type" },
+                NonlocalImpl::DisallowOther,
+            ),
 
             ty::Bool
             | ty::Char

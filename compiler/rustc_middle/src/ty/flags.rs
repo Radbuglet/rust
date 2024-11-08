@@ -98,6 +98,10 @@ impl FlagComputation {
             | &ty::ContextMarker(_)
             | &ty::Foreign(..) => {}
 
+            &ty::InferBundle(_did, re) => {
+                self.add_region(re);
+            }
+
             &ty::Error(_) => self.add_flags(TypeFlags::HAS_ERROR),
 
             &ty::Param(_) => {

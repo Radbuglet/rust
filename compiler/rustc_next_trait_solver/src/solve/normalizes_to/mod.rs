@@ -530,6 +530,7 @@ where
                 | ty::Never
                 | ty::Foreign(..)
                 | ty::ContextMarker(_)
+                | ty::InferBundle(..)
                 | ty::Dynamic(_, _, ty::DynStar) => Ty::new_unit(cx),
 
                 ty::Error(e) => Ty::new_error(cx, e),
@@ -784,6 +785,7 @@ where
             | ty::Dynamic(_, _, _)
             | ty::Tuple(_)
             | ty::ContextMarker(_)
+            | ty::InferBundle(..)
             | ty::Error(_) => self_ty.discriminant_ty(ecx.cx()),
 
             // We do not call `Ty::discriminant_ty` on alias, param, or placeholder
@@ -832,6 +834,7 @@ where
             | ty::Slice(_)
             | ty::Tuple(_)
             | ty::ContextMarker(_)
+            | ty::InferBundle(..)
             | ty::Error(_) => self_ty.async_destructor_ty(ecx.cx()),
 
             // We do not call `Ty::async_destructor_ty` on alias, param, or placeholder

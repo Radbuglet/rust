@@ -762,6 +762,7 @@ impl<'rt, 'tcx, M: Machine<'tcx>> ValidityVisitor<'rt, 'tcx, M> {
             }
             // TODO: What should we do here?
             ty::ContextMarker(_) => Ok(true),
+            ty::InferBundle(..) => todo!(),
             // The above should be all the primitive types. The rest is compound, we
             // check them by visiting their fields/variants.
             ty::Adt(..)

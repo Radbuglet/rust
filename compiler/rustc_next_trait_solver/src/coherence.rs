@@ -339,7 +339,8 @@ where
             | ty::Slice(..)
             | ty::RawPtr(..)
             | ty::Never
-            | ty::Tuple(..) => self.found_non_local_ty(ty),
+            | ty::Tuple(..)
+            | ty::InferBundle(..) => self.found_non_local_ty(ty),
 
             ty::Param(..) => panic!("unexpected ty param"),
 

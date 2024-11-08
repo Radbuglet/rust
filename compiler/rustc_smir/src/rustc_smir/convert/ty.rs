@@ -395,6 +395,7 @@ impl<'tcx> Stable<'tcx> for ty::TyKind<'tcx> {
                 unreachable!();
             }
             ty::ContextMarker(..) => todo!("ContextMarker not yet supported in SMIR"),
+            ty::InferBundle(..) => todo!("InferBundle not yet supported in SMIR"),
         }
     }
 }

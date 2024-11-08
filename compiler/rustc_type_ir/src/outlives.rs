@@ -190,6 +190,7 @@ impl<I: Interner> TypeVisitor<I> for OutlivesCollector<'_, I> {
             | ty::Slice(_)
             | ty::RawPtr(_, _)
             | ty::Ref(_, _, _)
+            | ty::InferBundle(..)
             | ty::FnPtr(..)
             | ty::Dynamic(_, _, _)
             | ty::Tuple(_) => {

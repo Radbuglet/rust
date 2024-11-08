@@ -782,6 +782,7 @@ where
                 | ty::Foreign(..)
                 | ty::Pat(_, _)
                 | ty::ContextMarker(_)
+                | ty::InferBundle(..)
                 | ty::Dynamic(_, _, ty::Dyn) => {
                     bug!("TyAndLayout::field({:?}): not applicable", this)
                 }

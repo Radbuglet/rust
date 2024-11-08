@@ -244,6 +244,7 @@ where
                     | ty::Never
                     | ty::Infer(_)
                     | ty::ContextMarker(_)
+                    | ty::InferBundle(..)
                     | ty::Error(_) => {
                         bug!("unexpected type returned by `needs_drop_components`: {component}")
                     }
