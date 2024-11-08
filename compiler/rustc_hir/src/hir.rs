@@ -2885,6 +2885,12 @@ pub enum TyKind<'hir> {
     /// `TyKind::Infer` means the type should be inferred instead of it having been
     /// specified. This can appear anywhere in a type.
     Infer,
+    /// Inferred bundle for `infer_bundle!(Trait1 + Trait2 + 'a)`
+    ///
+    /// Unlike `OpaqueDef`, the `LocalDefId` of an `InferBundle` does not point to an item. We only
+    /// use these `LocalDefId`s to keep track of infer bundle identity, not to perform any complex
+    /// trait or type-checking.
+    InferBundle(LocalDefId, &'hir Lifetime),
     /// Placeholder for a type that has failed to be defined.
     Err(rustc_span::ErrorGuaranteed),
     /// Pattern types (`pattern_type!(u32 is 1..)`)

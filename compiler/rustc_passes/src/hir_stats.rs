@@ -339,6 +339,7 @@ impl<'v> hir_visit::Visitor<'v> for StatCollector<'v> {
             Typeof,
             Infer,
             Pat,
+            InferBundle,
             Err
         ]);
         hir_visit::walk_ty(self, t)

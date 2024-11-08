@@ -934,6 +934,9 @@ pub fn walk_ty<'v, V: Visitor<'v>>(visitor: &mut V, typ: &'v Ty<'v>) -> V::Resul
             try_visit!(visitor.visit_ty(ty));
             try_visit!(visitor.visit_pattern_type_pattern(pat));
         }
+        TyKind::InferBundle(_item_id, lifetime) => {
+            try_visit!(visitor.visit_lifetime(lifetime));
+        }
     }
     V::Result::output()
 }

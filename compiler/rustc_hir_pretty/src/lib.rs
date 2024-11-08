@@ -344,6 +344,9 @@ impl<'a> State<'a> {
                 self.word(" is ");
                 self.print_pat(pat);
             }
+            hir::TyKind::InferBundle(_def_id, _lt) => {
+                self.word("/* infer_bundle */");
+            }
         }
         self.end()
     }

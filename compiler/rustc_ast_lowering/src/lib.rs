@@ -1473,9 +1473,9 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
             }
             TyKind::InferBundle(def_node_id, lt) => {
                 let def_id = self.local_def_id(*def_node_id);
+                let lt = self.lower_lifetime(lt);
 
-                dbg!(def_id, lt);
-                todo!()
+                hir::TyKind::InferBundle(def_id, lt)
             },
             TyKind::Dummy => panic!("`TyKind::Dummy` should never be lowered"),
         };
