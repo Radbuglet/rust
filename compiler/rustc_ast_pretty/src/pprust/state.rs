@@ -1243,11 +1243,11 @@ impl<'a> State<'a> {
                 self.word(" is ");
                 self.print_pat(pat);
             }
-            ast::TyKind::InferBundle(_id, bounds) => {
+            ast::TyKind::InferBundle(_id, lt) => {
                 self.word("builtin # infer_bundle");
                 self.popen();
                 self.ibox(0);
-                self.print_type_bounds(bounds);
+                self.print_lifetime(*lt);
                 self.end();
                 self.pclose();
             }

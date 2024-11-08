@@ -1404,8 +1404,10 @@ impl<'a> Visitor<'a> for AstValidator<'a> {
             }
             GenericBound::Outlives(_) => {}
             GenericBound::Use(_, span) => match ctxt {
-                BoundKind::Impl | BoundKind::InferBundle => {}
-                BoundKind::Bound | BoundKind::TraitObject | BoundKind::SuperTraits => {
+                BoundKind::Impl => {}
+                BoundKind::Bound
+                | BoundKind::TraitObject
+                | BoundKind::SuperTraits => {
                     self.dcx().emit_err(errors::PreciseCapturingNotAllowedHere {
                         loc: ctxt.descr(),
                         span: *span,

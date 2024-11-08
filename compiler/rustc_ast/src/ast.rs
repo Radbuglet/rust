@@ -2225,8 +2225,8 @@ pub enum TyKind {
     /// Pattern types like `pattern_type!(u32 is 1..=)`, which is the same as `NonZero<u32>`,
     /// just as part of the type system.
     Pat(P<Ty>, P<Pat>),
-    /// Inferred bundle for `inferred_bundle!(Trait1 + Trait2 + 'a)`
-    InferBundle(NodeId, GenericBounds),
+    /// Inferred bundle for `infer_bundle!(Trait1 + Trait2 + 'a)`
+    InferBundle(NodeId, Lifetime),
     /// Sometimes we need a dummy value when no error has occurred.
     Dummy,
     /// Placeholder for a kind that has failed to be defined.

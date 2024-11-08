@@ -62,10 +62,13 @@ pub fn walk_types<'tcx, V: SpannedTypeVisitor<'tcx>>(
                 try_visit!(visitor.visit(span, pred));
             }
         }
-        DefKind::OpaqueTy | DefKind::InferBundle => {
+        DefKind::OpaqueTy => {
             for (pred, span) in tcx.explicit_item_bounds(item).iter_identity_copied() {
                 try_visit!(visitor.visit(span, pred));
             }
+        }
+        DefKind::InferBundle => {
+            todo!();
         }
         // Look at field types
         DefKind::Struct | DefKind::Union | DefKind::Enum => {

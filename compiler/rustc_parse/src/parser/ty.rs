@@ -394,14 +394,8 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_ty_infer_bundle(&mut self) -> PResult<'a, TyKind> {
-        let bounds = self.parse_generic_bounds()?;
-
-        if !matches!(self.token.kind, token::CloseDelim(..) | token::Eof) {
-            self.unexpected()?;
-        }
-
-        // Macro definition ensures that there is a lifetime.
-        Ok(TyKind::InferBundle(ast::DUMMY_NODE_ID, bounds))
+        // Expect OK: Macro definition ensures that there is a lifetime.
+        Ok(TyKind::InferBundle(ast::DUMMY_NODE_ID, self.expect_lifetime()))
     }
 
     /// Parse an anonymous struct or union (only for field definitions):

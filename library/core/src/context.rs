@@ -117,5 +117,5 @@ pub macro unpack {
 
 #[allow_internal_unstable(builtin_syntax)]
 pub macro infer_bundle {
-    ($($tt:tt)*) => { builtin # infer_bundle($($tt)*) },
+    ($lt:lifetime) => { builtin # infer_bundle($lt) },
 }
