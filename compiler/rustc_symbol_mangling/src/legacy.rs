@@ -232,6 +232,10 @@ impl<'tcx> Printer<'tcx> for SymbolPrinter<'tcx> {
             | ty::Closure(def_id, args)
             | ty::CoroutineClosure(def_id, args)
             | ty::Coroutine(def_id, args) => self.print_def_path(def_id, args),
+            ty::InferBundle(def_id, lt) => self.print_def_path(
+                def_id,
+                self.tcx.mk_args(&[lt.into()]),
+            ),
 
             // The `pretty_print_type` formatting of array size depends on
             // -Zverbose-internals flag, so we cannot reuse it here.

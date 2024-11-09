@@ -388,6 +388,12 @@ pub fn structurally_relate_tys<I: Interner, R: TypeRelation<I>>(
             Ok(a)
         }
 
+        (ty::InferBundle(a_did, a_re), ty::InferBundle(b_did, b_re)) if a_did == b_did => {
+            let unified_re = relation.relate(a_re, b_re)?;
+
+            Ok(Ty::new_infer_bundle(cx, a_did, unified_re))
+        }
+
         (ty::Param(a_p), ty::Param(b_p)) if a_p.index() == b_p.index() => {
             // FIXME: Put this back
             //debug_assert_eq!(a_p.name(), b_p.name(), "param types with same index differ in name");

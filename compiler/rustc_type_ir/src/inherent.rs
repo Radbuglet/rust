@@ -112,6 +112,8 @@ pub trait Ty<I: Interner<Ty = Self>>:
 
     fn new_pat(interner: I, ty: Self, pat: I::Pat) -> Self;
 
+    fn new_infer_bundle(interner: I, def_id: I::DefId, re: I::Region) -> Self;
+
     fn tuple_fields(self) -> I::Tys;
 
     fn to_opt_closure_kind(self) -> Option<ty::ClosureKind>;

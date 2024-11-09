@@ -181,7 +181,6 @@ where
             ty::Adt(ty::AdtDef(Interned(&ty::AdtDefData { did: def_id, .. }, _)), ..)
             | ty::Foreign(def_id)
             | ty::ContextMarker(def_id)
-            | ty::InferBundle(def_id, ..) // TODO
             | ty::FnDef(def_id, ..)
             | ty::Closure(def_id, ..)
             | ty::CoroutineClosure(def_id, ..)
@@ -268,6 +267,12 @@ where
                     try_visit!(self.visit_clauses(tcx.explicit_item_bounds(def_id).skip_binder()));
                 }
             }
+
+            ty::InferBundle(..) => {
+                // The item DefId has no associated reachability rules so there's no need to
+                // visit it.
+            }
+
             // These types don't have their own def-ids (but may have subcomponents
             // with def-ids that should be visited recursively).
             ty::Bool

@@ -1485,6 +1485,28 @@ impl<'a, 'tcx> TypeErrCtxt<'a, 'tcx> {
                                 pos.col.to_usize() + 1,
                             )
                         }
+                        (true, ty::Alias(ty::Projection, proj))
+                            if self.tcx.is_impl_trait_in_trait(proj.def_id) =>
+                        {
+                            let sm = self.tcx.sess.source_map();
+                            let pos = sm.lookup_char_pos(self.tcx.def_span(proj.def_id).lo());
+                            format!(
+                                " (trait associated opaque type at <{}:{}:{}>)",
+                                sm.filename_for_diagnostics(&pos.file.name),
+                                pos.line,
+                                pos.col.to_usize() + 1,
+                            )
+                        }
+                        (true, ty::InferBundle(def_id, _lt)) => {
+                            let sm = self.tcx.sess.source_map();
+                            let pos = sm.lookup_char_pos(self.tcx.def_span(*def_id).lo());
+                            format!(
+                                " (infer bundle type at <{}:{}:{}>)",
+                                sm.filename_for_diagnostics(&pos.file.name),
+                                pos.line,
+                                pos.col.to_usize() + 1,
+                            )
+                        }
                         (true, _) => format!(" ({})", ty.sort_string(self.tcx)),
                         (false, _) => "".to_string(),
                     };

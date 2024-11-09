@@ -969,27 +969,12 @@ pub trait PrettyPrinter<'tcx>: Printer<'tcx> + fmt::Write {
             ty::Array(ty, sz) => p!("[", print(ty), "; ", print(sz), "]"),
             ty::Slice(ty) => p!("[", print(ty), "]"),
             ty::ContextMarker(def) => p!(print_def_path(def, &[])),
-
-            // TODO: improve formatting
-            ty::InferBundle(did, r) => {
-                p!(write("{{"));
-                p!(write("bundle"));
+            ty::InferBundle(_did, r) => {
+                p!("infer_bundle!");
 
                 if self.should_print_region(r) {
-                    p!("<", print(r), ">");
+                    p!("(", print(r), ")");
                 }
-
-                let preference = if with_forced_trimmed_paths() {
-                    FileNameDisplayPreference::Short
-                } else {
-                    FileNameDisplayPreference::Remapped
-                };
-                let span = self.tcx().def_span(did);
-                p!(write(
-                    "@{}",
-                    self.tcx().sess.source_map().span_to_string(span, preference)
-                ));
-                p!("}}");
             },
         }
 

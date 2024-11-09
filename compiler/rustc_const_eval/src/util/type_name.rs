@@ -39,7 +39,6 @@ impl<'tcx> Printer<'tcx> for AbsolutePathPrinter<'tcx> {
             | ty::Never
             | ty::Tuple(_)
             | ty::ContextMarker(_)
-            | ty::InferBundle(..)
             | ty::Dynamic(_, _, _) => self.pretty_print_type(ty),
 
             // Placeholders (all printed as `_` to uniformize them).
@@ -56,6 +55,10 @@ impl<'tcx> Printer<'tcx> for AbsolutePathPrinter<'tcx> {
             | ty::CoroutineClosure(def_id, args)
             | ty::Coroutine(def_id, args) => self.print_def_path(def_id, args),
             ty::Foreign(def_id) => self.print_def_path(def_id, &[]),
+            ty::InferBundle(def_id, lt) => self.print_def_path(
+                def_id,
+                self.tcx.mk_args(&[lt.into()]),
+            ),
 
             ty::Alias(ty::Weak, _) => bug!("type_name: unexpected weak projection"),
             ty::Alias(ty::Inherent, _) => bug!("type_name: unexpected inherent projection"),

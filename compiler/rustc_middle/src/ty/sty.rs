@@ -961,6 +961,10 @@ impl<'tcx> rustc_type_ir::inherent::Ty<TyCtxt<'tcx>> for Ty<'tcx> {
         Ty::new_pat(interner, ty, pat)
     }
 
+    fn new_infer_bundle(interner: TyCtxt<'tcx>, def_id: DefId, re: ty::Region<'tcx>) -> Self {
+        Ty::new_infer_bundle(interner, def_id, re)
+    }
+
     fn new_unit(interner: TyCtxt<'tcx>) -> Self {
         interner.types.unit
     }
