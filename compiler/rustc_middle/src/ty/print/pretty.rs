@@ -969,11 +969,36 @@ pub trait PrettyPrinter<'tcx>: Printer<'tcx> + fmt::Write {
             ty::Array(ty, sz) => p!("[", print(ty), "; ", print(sz), "]"),
             ty::Slice(ty) => p!("[", print(ty), "]"),
             ty::ContextMarker(def) => p!(print_def_path(def, &[])),
-            ty::InferBundle(_did, r) => {
-                p!("infer_bundle!");
+            ty::InferBundle(def_id, r) => {
+                let args = self.tcx().mk_args(&[r.into()]);
+                let parent = self.tcx().parent(def_id);
+                match self.tcx().def_kind(parent) {
+                    DefKind::TyAlias | DefKind::AssocTy => {
+                        // NOTE: I know we should check for NO_QUERIES here, but it's alright.
+                        // `type_of` on a type alias or assoc type should never cause a cycle.
+                        if let ty::InferBundle(d, _) =
+                            *self.tcx().type_of(parent).instantiate_identity().kind()
+                        {
+                            if d == def_id {
+                                // If the type alias directly starts with the `impl` of the
+                                // inferred bundle type we're printing, then skip the `::{infer_bundle#0}`.
+                                p!(print_def_path(parent, args));
+                                return Ok(());
+                            }
+                        }
+                        // Complex inferred bundle, e.g. `type Foo = (i32, infer_bundle!('a));`
+                        p!(print_def_path(def_id, args));
+                        return Ok(());
+                    }
+                    _ => {
+                        p!("infer_bundle!");
 
-                if self.should_print_region(r) {
-                    p!("(", print(r), ")");
+                        if self.should_print_region(r) {
+                            p!("(", print(r), ")");
+                        } else {
+                            p!("(...)");
+                        }
+                    }
                 }
             },
         }

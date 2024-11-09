@@ -495,6 +495,9 @@ impl<T> Trait<T> for X {
                             MachineApplicable,
                         );
                     }
+                    (ty::InferBundle(..), ty::InferBundle(..)) => {
+                        diag.note("distinct uses of `infer_bundle!(...)` result in different opaque inference types");
+                    }
                     _ => {}
                 }
                 debug!(

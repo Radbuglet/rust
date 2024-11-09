@@ -1475,12 +1475,16 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
                 let def_id = self.local_def_id(*def_node_id);
 
                 self.with_hir_id_owner(*def_node_id, |this| {
+                    // We want the span of the `infer_bundle!()` invocation, not the standard
+                    // library's definition of it.
+                    let span = t.span.source_callsite();
+
                     let item = hir::Item {
                         owner_id: hir::OwnerId { def_id },
                         ident: Ident::empty(),
                         kind: hir::ItemKind::InferBundle,
-                        vis_span: this.lower_span(t.span.shrink_to_lo()),
-                        span: this.lower_span(t.span),
+                        vis_span: this.lower_span(span.shrink_to_lo()),
+                        span: this.lower_span(span),
                     };
 
                     hir::OwnerNode::Item(this.arena.alloc(item))

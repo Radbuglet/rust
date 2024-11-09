@@ -2185,6 +2185,7 @@ pub enum TyCategory {
     Closure,
     Opaque,
     OpaqueFuture,
+    InferBundle,
     Coroutine(hir::CoroutineKind),
     Foreign,
 }
@@ -2195,6 +2196,7 @@ impl fmt::Display for TyCategory {
             Self::Closure => "closure".fmt(f),
             Self::Opaque => "opaque type".fmt(f),
             Self::OpaqueFuture => "future".fmt(f),
+            Self::InferBundle => "infer bundle".fmt(f),
             Self::Coroutine(gk) => gk.fmt(f),
             Self::Foreign => "foreign type".fmt(f),
         }
@@ -2209,6 +2211,9 @@ impl TyCategory {
                 let kind =
                     if tcx.ty_is_opaque_future(ty) { Self::OpaqueFuture } else { Self::Opaque };
                 Some((kind, def_id))
+            }
+            ty::InferBundle(def_id, _lt) => {
+                Some((Self::InferBundle, def_id))
             }
             ty::Coroutine(def_id, ..) => {
                 Some((Self::Coroutine(tcx.coroutine_kind(def_id).unwrap()), def_id))
