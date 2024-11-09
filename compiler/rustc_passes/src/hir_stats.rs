@@ -237,7 +237,8 @@ impl<'v> hir_visit::Visitor<'v> for StatCollector<'v> {
             Trait,
             TraitAlias,
             Impl,
-            Context
+            Context,
+            InferBundle
         ]);
         hir_visit::walk_item(self, i)
     }

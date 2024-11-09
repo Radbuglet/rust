@@ -586,6 +586,7 @@ pub fn walk_item<'v, V: Visitor<'v>>(visitor: &mut V, item: &'v Item<'v>) -> V::
         ItemKind::Context(ref typ) => {
             try_visit!(visitor.visit_ty(typ));
         }
+        ItemKind::InferBundle => {}
     }
     V::Result::output()
 }

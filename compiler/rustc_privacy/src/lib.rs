@@ -662,7 +662,7 @@ impl<'tcx> Visitor<'tcx> for EmbargoVisitor<'tcx> {
             | hir::ItemKind::ExternCrate(..)
             | hir::ItemKind::GlobalAsm(..) => {}
             // The interface is empty, and all nested items are processed by `visit_item`.
-            hir::ItemKind::Mod(..) | hir::ItemKind::OpaqueTy(..) => {}
+            hir::ItemKind::Mod(..) | hir::ItemKind::OpaqueTy(..) | hir::ItemKind::InferBundle => {}
             hir::ItemKind::Macro(macro_def, _) => {
                 if let Some(item_ev) = item_ev {
                     self.update_reachability_from_macro(item.owner_id.def_id, macro_def, item_ev);

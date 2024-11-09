@@ -1168,6 +1168,7 @@ fn hir_id_to_string(map: Map<'_>, id: HirId) -> String {
                 ItemKind::TraitAlias(..) => "trait alias",
                 ItemKind::Impl { .. } => "impl",
                 ItemKind::Context(..) => "context",
+                ItemKind::InferBundle => "inferred bundle",
             };
             format!("{id} ({item_str} {})", path_str(item.owner_id.def_id))
         }

@@ -669,6 +669,11 @@ impl<'a> State<'a> {
                 self.end(); // end the head-ibox
                 self.end(); // end the outer cbox
             }
+            hir::ItemKind::InferBundle => {
+                self.print_item_type(item, hir::Generics::empty(), |state| {
+                    state.word("infer_bundle!('_)")
+                });
+            }
         }
         self.ann.post(self, AnnNode::Item(item))
     }

@@ -248,7 +248,8 @@ impl<'tcx> ReachableContext<'tcx> {
                     | hir::ItemKind::Enum(..)
                     | hir::ItemKind::Union(..)
                     | hir::ItemKind::GlobalAsm(..)
-                    | hir::ItemKind::Context(..) => {}
+                    | hir::ItemKind::Context(..)
+                    | hir::ItemKind::InferBundle => {}
                 }
             }
             Node::TraitItem(trait_method) => {

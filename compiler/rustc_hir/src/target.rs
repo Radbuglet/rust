@@ -128,6 +128,8 @@ impl Target {
             // We treat context as a static because, for attribute checking, statics and contexts
             // are one and the same.
             ItemKind::Context(..) => Target::Static,
+
+            ItemKind::InferBundle => Target::InferBundle,
         }
     }
 

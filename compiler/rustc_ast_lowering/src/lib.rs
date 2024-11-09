@@ -1473,6 +1473,19 @@ impl<'a, 'hir> LoweringContext<'a, 'hir> {
             }
             TyKind::InferBundle(def_node_id, lt) => {
                 let def_id = self.local_def_id(*def_node_id);
+
+                self.with_hir_id_owner(*def_node_id, |this| {
+                    let item = hir::Item {
+                        owner_id: hir::OwnerId { def_id },
+                        ident: Ident::empty(),
+                        kind: hir::ItemKind::InferBundle,
+                        vis_span: this.lower_span(t.span.shrink_to_lo()),
+                        span: this.lower_span(t.span),
+                    };
+
+                    hir::OwnerNode::Item(this.arena.alloc(item))
+                });
+
                 let lt = self.lower_lifetime(lt);
 
                 hir::TyKind::InferBundle(def_id, lt)
