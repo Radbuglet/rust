@@ -14,7 +14,7 @@ use rustc_middle::ty::adjustment::{
 };
 use rustc_middle::ty::auto_arg::AutoArgKind;
 use rustc_middle::ty::{
-    self, AdtKind, GenericArgs, InlineConstArgs, InlineConstArgsParts, ScalarInt, Ty, TyCtxt,
+    self, AdtKind, GenericArgs, InlineConstArgs, InlineConstArgsParts, ScalarInt, Ty,
     UpvarArgs, UserType,
 };
 use rustc_middle::{bug, span_bug};
@@ -1286,7 +1286,7 @@ impl<'tcx> Cx<'tcx> {
             .map(|&expr| self.tcx.reified_bundle(self.thir.exprs[expr].ty))
             .collect::<Box<_>>();
 
-        let shape = Self::make_bundle_pack_shape(
+        let shape = ty::make_bundle_pack_shape(
             self.tcx,
             &reified,
             mode.allows_env(),
@@ -1296,79 +1296,6 @@ impl<'tcx> Cx<'tcx> {
         ExprKind::Pack {
             exprs,
             shape: Box::new(shape),
-        }
-    }
-
-    fn make_bundle_pack_shape(
-        tcx: TyCtxt<'tcx>,
-        bundles: &[&'tcx ty::ReifiedBundle<'tcx>],
-        allow_env: bool,
-        ty: Ty<'tcx>,
-    ) -> PackShape<'tcx> {
-        match ty::ReifiedBundleItemSet::decode(ty) {
-            ty::ReifiedBundleItemSet::Ref(_re, muta, def_id) => {
-                for (i, bundle) in bundles.iter().enumerate() {
-                    let Some(members) = bundle.fields.get(&def_id) else {
-                        continue;
-                    };
-
-                    if members.len() > 1 {
-                        todo!();
-                    }
-
-                    let Some(member) = members.get(0) else { unreachable!() };
-
-                    return PackShape::ExtractLocalRef(muta, i, member.location);
-                }
-
-                if allow_env {
-                    return PackShape::ExtractEnv(muta, def_id)
-                }
-
-                todo!();
-            }
-            ty::ReifiedBundleItemSet::Tuple(items) => {
-                let items = items.iter()
-                    .map(|item| Self::make_bundle_pack_shape(tcx, bundles, allow_env, item))
-                    .collect();
-
-                PackShape::Tuple(items)
-            }
-            ty::ReifiedBundleItemSet::GenericSet(ty) => {
-                for (i, bundle) in bundles.iter().enumerate() {
-                    let Some(members) = bundle.generic_sets.get(&ty) else {
-                        continue;
-                    };
-
-                    if members.len() > 1 {
-                        todo!();
-                    }
-
-                    let Some(member) = members.get(0) else { unreachable!() };
-
-                    return PackShape::ExtractLocalMove(i, member.location);
-                }
-
-                todo!();
-            }
-            ty::ReifiedBundleItemSet::GenericRef(_re, muta, ty) => {
-                for (i, bundle) in bundles.iter().enumerate() {
-                    let Some(members) = bundle.generic_fields.get(&ty) else {
-                        continue;
-                    };
-
-                    if members.len() > 1 {
-                        todo!();
-                    }
-
-                    let Some(member) = members.get(0) else { unreachable!() };
-
-                    return PackShape::ExtractLocalRef(muta, i, member.location);
-                }
-
-                todo!();
-            }
-            ty::ReifiedBundleItemSet::Error(err) => PackShape::Error(err),
         }
     }
 }

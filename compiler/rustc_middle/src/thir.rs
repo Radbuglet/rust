@@ -542,21 +542,12 @@ pub enum ExprKind<'tcx> {
     /// A `pack!` expression.
     Pack {
         exprs: Box<[ExprId]>,
-        shape: Box<PackShape<'tcx>>,
+        shape: Box<ty::PackShape<'tcx>>,
     },
     /// A `yield` expression.
     Yield {
         value: ExprId,
     },
-}
-
-#[derive(Clone, Debug, HashStable)]
-pub enum PackShape<'tcx> {
-    ExtractEnv(hir::Mutability, DefId),
-    ExtractLocalRef(hir::Mutability, usize, ty::ReifiedBundleProjs<'tcx>),
-    ExtractLocalMove(usize, ty::ReifiedBundleProjs<'tcx>),
-    Tuple(Box<[PackShape<'tcx>]>),
-    Error(ErrorGuaranteed),
 }
 
 /// Represents the association of a field identifier and an expression.
