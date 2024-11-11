@@ -35,6 +35,7 @@ pub enum TraitSolverLangItem {
     FusedIterator,
     Future,
     FutureOutput,
+    InferBundleTrait,
     Iterator,
     Metadata,
     Option,

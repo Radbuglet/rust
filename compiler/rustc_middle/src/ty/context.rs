@@ -639,6 +639,7 @@ bidirectional_lang_item_map! {
     FusedIterator,
     Future,
     FutureOutput,
+    InferBundleTrait,
     Iterator,
     Metadata,
     Option,

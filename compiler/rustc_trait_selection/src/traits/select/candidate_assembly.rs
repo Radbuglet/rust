@@ -115,6 +115,8 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                 self.assemble_candidates_for_fn_ptr_trait(obligation, &mut candidates);
             } else if tcx.is_lang_item(def_id, LangItem::ContextItemTrait) {
                 self.assemble_candidates_for_context_item_trait(obligation, &mut candidates);
+            } else if tcx.is_lang_item(def_id, LangItem::InferBundleTrait) {
+                self.assemble_candidates_for_infer_bundle_trait(obligation, &mut candidates);
             } else {
                 if tcx.is_lang_item(def_id, LangItem::Clone) {
                     // Same builtin conditions as `Copy`, i.e., every type which has builtin support
@@ -1435,6 +1437,55 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             | ty::Infer(_)
             | ty::Tuple(_)
             | ty::InferBundle(..)
+            | ty::Placeholder(_) => {}
+        }
+    }
+
+    fn assemble_candidates_for_infer_bundle_trait(
+        &mut self,
+        obligation: &PolyTraitObligation<'tcx>,
+        candidates: &mut SelectionCandidateSet<'tcx>,
+    ) {
+        let self_ty = self.infcx.shallow_resolve(obligation.self_ty().skip_binder());
+
+        match self_ty.kind() {
+            ty::InferBundle(..) => {
+                if obligation.polarity() == ty::PredicatePolarity::Positive {
+                    candidates.vec.push(BuiltinCandidate { has_nested: false });
+                }
+            }
+            ty::Infer(ty::TyVar(_)) => {
+                candidates.ambiguous = true;
+            }
+
+            ty::Bool
+            | ty::Char
+            | ty::Int(_)
+            | ty::Uint(_)
+            | ty::Float(_)
+            | ty::Adt(_, _)
+            | ty::Foreign(_)
+            | ty::Str
+            | ty::Array(_, _)
+            | ty::Slice(_)
+            | ty::Ref(_, _, _)
+            | ty::RawPtr(_, _)
+            | ty::FnDef(_, _)
+            | ty::Pat(_, _)
+            | ty::FnPtr(..)
+            | ty::Dynamic(_, _, _)
+            | ty::Closure(..)
+            | ty::CoroutineClosure(..)
+            | ty::Coroutine(_, _)
+            | ty::CoroutineWitness(..)
+            | ty::Never
+            | ty::Alias(..)
+            | ty::Param(_)
+            | ty::Bound(_, _)
+            | ty::Error(_)
+            | ty::Infer(_)
+            | ty::Tuple(_)
+            | ty::ContextMarker(_)
             | ty::Placeholder(_) => {}
         }
     }

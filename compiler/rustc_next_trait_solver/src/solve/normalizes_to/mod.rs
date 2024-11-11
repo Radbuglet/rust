@@ -597,6 +597,13 @@ where
         })
     }
 
+    fn consider_builtin_infer_bundle_candidate(
+        _ecx: &mut EvalCtxt<'_, D>,
+        goal: Goal<I, Self>,
+    ) -> Result<Candidate<I>, NoSolution> {
+        panic!("`InferBundle` does not have an associated type: {:?}", goal);
+    }
+
     fn consider_builtin_future_candidate(
         ecx: &mut EvalCtxt<'_, D>,
         goal: Goal<I, Self>,

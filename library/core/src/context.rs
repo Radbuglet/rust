@@ -1,61 +1,93 @@
 #![allow(missing_docs)]  // TODO
 
+macro_rules! tuple {
+    ($mac:path) => {
+        tuple!(@inner $mac, A B C D E F G H I J K L);
+    };
+    (@inner $mac:path, $($first:ident $($rest:ident)*)?) => {
+        $mac!($($first $($rest)*)?);
+        $(tuple!(@inner $mac, $($rest)*);)?
+    };
+}
+
+// === ContextItem(Set) === //
+
 #[lang = "context_item"]
 #[rustc_deny_explicit_impl(implement_via_object = false)]
 pub trait ContextItem: Sized + 'static {
     type Item: ?Sized + 'static;
 }
 
-pub trait BundleItem {
-    type Value;
-    type Context: ContextItem;
-}
-
-impl<'a, T: ContextItem> BundleItem for &'a T {
-    type Value = &'a T::Item;
-    type Context = T;
-}
-
-impl<'a, T: ContextItem> BundleItem for &'a mut T {
-    type Value = &'a mut T::Item;
-    type Context = T;
-}
-
 pub trait ContextItemSet {}
+
+// This blanket impl is safe to write alongside the tuple implementations because no tuple can
+// implement `ContextItem`.
+impl<T: ContextItem> ContextItemSet for T {}
+
+macro_rules! impl_context_item_set {
+    ($($para:ident)*) => {
+        impl<$($para: ContextItemSet,)*> ContextItemSet for ($($para,)*) {}
+    }
+}
+
+tuple!(impl_context_item_set);
+
+// === BundleItemSet === //
+
+#[lang = "infer_bundle"]
+// TODO: `#[rustc_deny_explicit_impl(implement_via_object = false)]`, but make it work with negative impls.
+pub trait InferBundle: Sized {}
+
+impl<T: ?Sized> !InferBundle for &'_ T {}
+
+impl<T: ?Sized> !InferBundle for &'_ mut T {}
 
 pub trait BundleItemSet {
     #[lang = "bundle_item_set_values"]
     type Values;
+}
+
+pub trait KnownBundleItemSet: BundleItemSet {
     type Contexts: ContextItemSet;
 }
 
-// This blanket impl is safe to write alongside the tuple implementation because no tuple can
-// implement `ContextItem`.
-impl<T: ContextItem> ContextItemSet for T {}
-
-impl<T: BundleItem> BundleItemSet for T {
-    type Values = T::Value;
-    type Contexts = T::Context;
+impl<T: InferBundle> BundleItemSet for T {
+    type Values = T;
 }
 
-macro_rules! tuple {
-    ($($para:ident)*) => {
-        impl<$($para: ContextItemSet,)*> ContextItemSet for ($($para,)*) {}
+// This works because `InferBundle` has a negative impl for `&'_ T`.
+impl<'a, T: ContextItem> BundleItemSet for &'a T {
+    type Values = &'a T::Item;
+}
 
+impl<'a, T: ContextItem> KnownBundleItemSet for &'a T {
+    type Contexts = T;
+}
+
+// This works because `InferBundle` has a negative impl for `&'_ mut T`.
+impl<'a, T: ContextItem> BundleItemSet for &'a mut T {
+    type Values = &'a mut T::Item;
+}
+
+impl<'a, T: ContextItem> KnownBundleItemSet for &'a mut T {
+    type Contexts = T;
+}
+
+macro_rules! impl_bundle_items {
+    ($($para:ident)*) => {
         impl<$($para: BundleItemSet,)*> BundleItemSet for ($($para,)*) {
             type Values = ($($para::Values,)*);
-            type Contexts = ($($para::Contexts,)*);
         }
 
-        tuple!(@peel $($para)*);
-    };
-    (@peel) => {};
-    (@peel $first:ident $($rest:ident)*) => {
-        tuple!($($rest)*);
-    };
+        impl<$($para: KnownBundleItemSet,)*> KnownBundleItemSet for ($($para,)*) {
+            type Contexts = ($($para::Contexts,)*);
+        }
+    }
 }
 
-tuple!(A B C D E F G H I J K L);
+tuple!(impl_bundle_items);
+
+// === Bundle === //
 
 #[lang = "bundle"]
 #[derive(Debug)]
@@ -84,7 +116,7 @@ mod make_single_item_bundle {
     }
 
     pub trait BundleRef<Ctx: ContextItem> {
-        type BundleItem: BundleItem<Value = Self>;
+        type BundleItem: BundleItemSet<Values = Self>;
     }
 
     impl<'a, Ctx: ContextItem> BundleRef<Ctx> for &'a Ctx::Item {

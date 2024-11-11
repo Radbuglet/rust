@@ -208,6 +208,12 @@ where
         goal: Goal<I, Self>,
     ) -> Result<Candidate<I>, NoSolution>;
 
+    /// `InferBundle` is implemented if the `Self` type is an infer bundle.
+    fn consider_builtin_infer_bundle_candidate(
+        ecx: &mut EvalCtxt<'_, D>,
+        goal: Goal<I, Self>,
+    ) -> Result<Candidate<I>, NoSolution>;
+
     /// A coroutine (that comes from an `async` desugaring) is known to implement
     /// `Future<Output = O>`, where `O` is given by the coroutine's return type
     /// that was computed during type-checking.
@@ -442,6 +448,9 @@ where
                 }
                 Some(TraitSolverLangItem::ContextItemTrait) => {
                     G::consider_builtin_context_item_candidate(self, goal)
+                }
+                Some(TraitSolverLangItem::InferBundleTrait) => {
+                    G::consider_builtin_infer_bundle_candidate(self, goal)
                 }
                 Some(TraitSolverLangItem::Future) => {
                     G::consider_builtin_future_candidate(self, goal)

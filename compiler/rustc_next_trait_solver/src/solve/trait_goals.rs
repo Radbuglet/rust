@@ -458,6 +458,22 @@ where
         }
     }
 
+    fn consider_builtin_infer_bundle_candidate(
+        ecx: &mut EvalCtxt<'_, D>,
+        goal: Goal<I, Self>,
+    ) -> Result<Candidate<I>, NoSolution> {
+        if goal.predicate.polarity != ty::PredicatePolarity::Positive {
+            return Err(NoSolution);
+        }
+
+        if let ty::InferBundle(..) = goal.predicate.self_ty().kind() {
+            ecx.probe_builtin_trait_candidate(BuiltinImplSource::Misc)
+                .enter(|ecx| ecx.evaluate_added_goals_and_make_canonical_response(Certainty::Yes))
+        } else {
+            Err(NoSolution)
+        }
+    }
+
     fn consider_builtin_future_candidate(
         ecx: &mut EvalCtxt<'_, D>,
         goal: Goal<I, Self>,
