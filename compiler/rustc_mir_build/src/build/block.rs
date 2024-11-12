@@ -9,6 +9,8 @@ use crate::build::ForGuard::OutsideGuard;
 use crate::build::matches::{DeclareLetBindings, EmitStorageLive, ScheduleDrops};
 use crate::build::{BlockAnd, BlockAndExtension, BlockFrame, Builder};
 
+use ty::ContextSolveStage::MirBuilding;
+
 impl<'a, 'tcx> Builder<'a, 'tcx> {
     pub(crate) fn ast_block(
         &mut self,
@@ -345,7 +347,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                             let mut block = block;
 
                             let bundle_ty = this.thir.exprs[*bundle].ty;
-                            let bundle_reified = this.tcx.reified_bundle(bundle_ty);
+                            let bundle_reified = this.tcx.reified_bundle((bundle_ty, MirBuilding));
 
                             // Lower bundle expression
                             let bundle_out = this.temp(bundle_ty, bundle_span);
@@ -389,7 +391,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
 
             // We bind the context after this statement has been visited to ensure that it isn't
             // visible to expressions in the statement.
-            this.ctx_bind_tracker.bind_from_stmt(this.tcx, &this.thir, &this.thir[*stmt]);
+            this.ctx_bind_tracker.bind_from_stmt(this.tcx, MirBuilding, &this.thir, &this.thir[*stmt]);
 
             let popped = this.block_context.pop();
             assert!(popped.is_some_and(|bf| bf.is_statement()));

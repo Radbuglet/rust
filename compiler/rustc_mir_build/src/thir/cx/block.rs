@@ -124,8 +124,12 @@ impl<'tcx> Cx<'tcx> {
                     hir::StmtKind::BindContext(bind) => {
                         let bundle = self.mirror_expr(bind.bundle);
                         let full_ty = self.thir[bundle].ty;
-                        let reified = self.tcx.reified_bundle(full_ty);
+                        let reified = self.tcx.reified_bundle((
+                            full_ty,
+                            ty::ContextSolveStage::GraphSolving,
+                        ));
 
+                        // TODO: Should we move this elsewhere?
                         for generic_ty in reified.generic_types() {
                             self.tcx.dcx().emit_err(errors::ThirBuildGenericsInBind {
                                 span: bind.span,

@@ -21,6 +21,8 @@ use crate::build::expr::as_place::PlaceBase;
 use crate::build::expr::category::{Category, RvalueFunc};
 use crate::build::{BlockAnd, BlockAndExtension, Builder, NeedsTemporary};
 
+use ty::ContextSolveStage::MirBuilding;
+
 impl<'a, 'tcx> Builder<'a, 'tcx> {
     /// Returns an rvalue suitable for use until the end of the current
     /// scope expression.
@@ -548,7 +550,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 let bundle_did = this.tcx.lang_items().bundle().unwrap();
                 let shape = this.ctx_pack_shapes.resolve(
                     this.tcx,
-                    ty::ContextSolveStage::MirBuilding,
+                    MirBuilding,
                     this.thir,
                     expr,
                 );
@@ -565,7 +567,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     .collect::<Vec<Place<'tcx>>>();
 
                 let inner_ty = expr.ty.bundle_item_set(this.tcx);
-                let value_ty = this.tcx.reified_bundle(expr.ty).value_ty;
+                let value_ty = this.tcx.reified_bundle((expr.ty, MirBuilding)).value_ty;
                 let inner_operand = unpack!(block = this.build_pack_bundle_value(
                     block,
                     expr.span,
@@ -661,6 +663,10 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             }
             PackShape::Error(_err) => {
                 todo!()
+            }
+
+            PackShape::ExtractEnvInfer(..) | PackShape::ExtractLocalInferPlaceholder => {
+                bug!("{shape:?} does not show up after `GraphSolving`");
             }
         };
 

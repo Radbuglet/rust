@@ -591,3 +591,11 @@ impl<'tcx> Key for (ValidityRequirement, ty::ParamEnvAnd<'tcx, Ty<'tcx>>) {
         }
     }
 }
+
+impl<'tcx> Key for (Ty<'tcx>, ty::ContextSolveStage) {
+    type Cache<V> = DefaultCache<Self, V>;
+
+    fn default_span(&self, _tcx: TyCtxt<'_>) -> Span {
+        DUMMY_SP
+    }
+}

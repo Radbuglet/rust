@@ -11,6 +11,7 @@ use rustc_span::DUMMY_SP;
 use rustc_target::abi::FieldIdx;
 
 use thir_visit::Visitor as _;
+use ty::ContextSolveStage::MirBuilding;
 
 use super::Builder;
 
@@ -344,14 +345,14 @@ impl<'a, 'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for BinderUseVisitor<'a, 
 
         // We bind the context after this statement has been visited to ensure that it isn't
         // visible to expressions in the statement.
-        self.bind_tracker.bind_from_stmt(self.builder.tcx, self.builder.thir, stmt);
+        self.bind_tracker.bind_from_stmt(self.builder.tcx, MirBuilding, self.builder.thir, stmt);
     }
 
     fn visit_expr(&mut self, expr: &'thir thir::Expr<'tcx>) {
         let mut collector = Vec::new();
         ty::visit_context_used_by_expr(
             self.builder.tcx,
-            ty::ContextSolveStage::MirBuilding,
+            MirBuilding,
             &mut self.builder.ctx_pack_shapes,
             self.builder.thir,
             expr,
