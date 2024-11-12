@@ -348,9 +348,19 @@ impl<'a, 'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for BinderUseVisitor<'a, 
     }
 
     fn visit_expr(&mut self, expr: &'thir thir::Expr<'tcx>) {
-        ty::visit_context_used_by_expr(self.builder.tcx, expr, true, &mut |item, muta| {
+        let mut collector = Vec::new();
+        ty::visit_context_used_by_expr(
+            self.builder.tcx,
+            ty::ContextSolveStage::MirBuilding,
+            &mut self.builder.ctx_pack_shapes,
+            self.builder.thir,
+            expr,
+            &mut |item, muta| collector.push((item, muta)),
+        );
+
+        for (item, muta) in collector {
             self.introduce_use(item, muta);
-        });
+        }
 
         thir_visit::walk_expr(self, expr);
     }

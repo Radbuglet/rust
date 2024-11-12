@@ -541,13 +541,19 @@ pub enum ExprKind<'tcx> {
     },
     /// A `pack!` expression.
     Pack {
+        index: PackExprIndex,
+        flags: ty::PackFlags,
         exprs: Box<[ExprId]>,
-        shape: Box<ty::PackShape<'tcx>>,
     },
     /// A `yield` expression.
     Yield {
         value: ExprId,
     },
+}
+
+newtype_index! {
+    #[derive(HashStable)]
+    pub struct PackExprIndex {}
 }
 
 /// Represents the association of a field identifier and an expression.

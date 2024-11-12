@@ -225,6 +225,9 @@ struct Builder<'a, 'tcx> {
 
     /// Context bind tracker
     ctx_bind_tracker: ty::ContextBindTracker,
+
+    /// Pack shape tracker
+    ctx_pack_shapes: ty::PackShapeStore<'tcx>,
 }
 
 type CaptureMap<'tcx> = SortedIndexMultiMap<usize, HirId, Capture<'tcx>>;
@@ -786,6 +789,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             coverage_info: coverageinfo::CoverageInfoBuilder::new_if_enabled(tcx, def),
             ctx_bind_values: context::ContextBinderMap::default(),
             ctx_bind_tracker: ty::ContextBindTracker::default(),
+            ctx_pack_shapes: ty::PackShapeStore::new_store(),
         };
 
         assert_eq!(builder.cfg.start_new_block(), START_BLOCK);

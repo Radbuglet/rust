@@ -23,7 +23,7 @@ use std::{cmp, fmt, mem};
 
 pub use GenericArgs::*;
 pub use UnsafeSource::*;
-pub use rustc_ast_ir::{Movability, Mutability, PackMode};
+pub use rustc_ast_ir::{Movability, Mutability, PackFlags};
 use rustc_data_structures::packed::Pu128;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_data_structures::stack::ensure_sufficient_stack;
@@ -1581,7 +1581,7 @@ pub enum ExprKind {
     FormatArgs(P<FormatArgs>),
 
     /// A `pack!()` expression.
-    Pack(PackMode, ThinVec<P<Expr>>, Option<P<Ty>>),
+    Pack(PackFlags, ThinVec<P<Expr>>, Option<P<Ty>>),
 
     /// Placeholder for an expression that wasn't syntactically well formed in some way.
     Err(ErrorGuaranteed),

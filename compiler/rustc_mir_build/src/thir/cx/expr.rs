@@ -762,8 +762,8 @@ impl<'tcx> Cx<'tcx> {
                 ExprKind::OffsetOf { container, fields }
             }
 
-            hir::ExprKind::Pack(mode, exprs, _) => {
-                self.lower_pack_expr(expr_ty, mode, exprs)
+            hir::ExprKind::Pack(flags, exprs, _ty_hint) => {
+                self.lower_pack_expr(flags, exprs)
             }
 
             hir::ExprKind::ConstBlock(ref anon_const) => {
@@ -1260,7 +1260,7 @@ impl<'tcx> Cx<'tcx> {
                 let expr = Expr {
                     kind: match arg.kind {
                         AutoArgKind::PackBundle => {
-                            self.lower_pack_expr(arg.ty, hir::PackMode::AllowEnv, &[])
+                            self.lower_pack_expr(ty::PackFlags::AllowEnv, &[])
                         }
                     },
                     ty: arg.ty,
@@ -1274,28 +1274,20 @@ impl<'tcx> Cx<'tcx> {
 
     fn lower_pack_expr(
         &mut self,
-        expr_ty: Ty<'tcx>,
-        mode: hir::PackMode,
+        flags: ty::PackFlags,
         exprs: &'tcx [hir::Expr<'tcx>],
     ) -> ExprKind<'tcx> {
         let exprs = exprs.iter()
             .map(|expr| self.mirror_expr(expr))
             .collect::<Box<_>>();
 
-        let reified = exprs.iter()
-            .map(|&expr| self.tcx.reified_bundle(self.thir.exprs[expr].ty))
-            .collect::<Box<_>>();
-
-        let shape = ty::make_bundle_pack_shape(
-            self.tcx,
-            &reified,
-            mode.allows_env(),
-            expr_ty.bundle_item_set(self.tcx),
-        );
+        let index = self.pack_expr_idx;
+        self.pack_expr_idx = self.pack_expr_idx.plus(1);
 
         ExprKind::Pack {
+            index,
+            flags,
             exprs,
-            shape: Box::new(shape),
         }
     }
 }

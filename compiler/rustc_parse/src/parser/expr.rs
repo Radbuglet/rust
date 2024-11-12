@@ -2007,8 +2007,8 @@ impl<'a> Parser<'a> {
     pub(crate) fn parse_expr_pack(&mut self, lo: Span) -> PResult<'a, P<Expr>> {
         let mode = self.parse_ident()?;
         let mode = match mode.name {
-            sym::allow_env => ast::PackMode::AllowEnv,
-            sym::deny_env => ast::PackMode::DenyEnv,
+            sym::allow_env => ast::PackFlags::AllowEnv,
+            sym::deny_env => ast::PackFlags::DenyEnv,
             _ => unreachable!(),
         };
 

@@ -1,5 +1,8 @@
+use std::ops::Deref;
+
 use rustc_data_structures::fx::{FxHashMap, FxHashSet, FxIndexMap, FxIndexSet, IndexEntry};
 use rustc_data_structures::graph::{DirectedGraph, Successors, scc};
+use rustc_data_structures::sync::Lrc;
 use rustc_hir::def_id::{DefId, LocalDefId, LocalDefIdMap};
 use rustc_index::IndexVec;
 use rustc_macros::{HashStable, TyDecodable, TyEncodable};
@@ -379,10 +382,97 @@ pub enum PackShape<'tcx> {
     Error(ty::ErrorGuaranteed),
 }
 
+type PackShapeStoreMap<'tcx> = IndexVec<thir::PackExprIndex, Option<Lrc<PackShape<'tcx>>>>;
+
+pub struct PackShapeStore<'tcx> {
+    map: Option<PackShapeStoreMap<'tcx>>,
+}
+
+impl<'tcx> PackShapeStore<'tcx> {
+    pub fn new_ignore() -> Self {
+        Self { map: None }
+    }
+
+    pub fn new_store() -> Self {
+        Self { map: Some(IndexVec::new()) }
+    }
+
+    pub fn resolve(
+        &mut self,
+        tcx: TyCtxt<'tcx>,
+        stage: ContextSolveStage,
+        body: &thir::Thir<'tcx>,
+        expr: &thir::Expr<'tcx>,
+    ) -> PackShapeStoreRes<'tcx> {
+        let thir::ExprKind::Pack { index, flags, exprs } = &expr.kind else {
+            bug!("expected `Pack` expression, got {expr:?}");
+        };
+
+        let entry = self.map.as_mut().map(|map| map.ensure_contains_elem(*index, || None));
+
+        if let Some(Some(entry)) = entry {
+            return PackShapeStoreRes::Loan(entry.clone());
+        }
+
+        let ty = expr.ty.bundle_item_set(tcx);
+        let bundles = exprs.iter()
+            .map(|&expr| tcx.reified_bundle(body[expr].ty))
+            .collect::<Vec<_>>();
+
+        let shape = make_bundle_pack_shape(
+            tcx,
+            stage,
+            *flags,
+            &bundles,
+            ty,
+        );
+
+        if let Some(entry) = entry {
+            let shape = Lrc::new(shape);
+            PackShapeStoreRes::Loan(entry.insert(shape).clone())
+        } else {
+            PackShapeStoreRes::Owned(shape)
+        }
+    }
+}
+
+pub enum PackShapeStoreRes<'tcx> {
+    Owned(PackShape<'tcx>),
+    Loan(Lrc<PackShape<'tcx>>),
+}
+
+impl<'tcx> PackShapeStoreRes<'tcx> {
+    pub fn into_owned(self) -> PackShape<'tcx> {
+        match self {
+            Self::Owned(v) => v,
+            Self::Loan(_) => bug!("`into_owned` called on `PackShapeStoreRes::Loan`"),
+        }
+    }
+
+    pub fn into_rc(self) -> Lrc<PackShape<'tcx>> {
+        match self {
+            Self::Owned(v) => Lrc::new(v),
+            Self::Loan(v) => v,
+        }
+    }
+}
+
+impl<'tcx> Deref for PackShapeStoreRes<'tcx> {
+    type Target = PackShape<'tcx>;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Owned(v) => v,
+            Self::Loan(v) => v,
+        }
+    }
+}
+
 pub fn make_bundle_pack_shape<'tcx>(
     tcx: TyCtxt<'tcx>,
+    stage: ContextSolveStage,
+    flags: ty::PackFlags,
     bundles: &[&'tcx ty::ReifiedBundle<'tcx>],
-    allow_env: bool,
     ty: Ty<'tcx>,
 ) -> PackShape<'tcx> {
     match ty::ReifiedBundleItemSet::decode(ty) {
@@ -401,7 +491,7 @@ pub fn make_bundle_pack_shape<'tcx>(
                 return PackShape::ExtractLocalRef(muta, i, member.location);
             }
 
-            if allow_env {
+            if flags.allows_env() {
                 return PackShape::ExtractEnv(muta, def_id)
             }
 
@@ -409,7 +499,7 @@ pub fn make_bundle_pack_shape<'tcx>(
         }
         ty::ReifiedBundleItemSet::Tuple(items) => {
             let items = items.iter()
-                .map(|item| make_bundle_pack_shape(tcx, bundles, allow_env, item))
+                .map(|item| make_bundle_pack_shape(tcx, stage, flags, bundles, item))
                 .collect();
 
             PackShape::Tuple(items)
@@ -455,8 +545,10 @@ pub fn make_bundle_pack_shape<'tcx>(
 
 pub fn visit_context_used_by_expr<'tcx>(
     tcx: TyCtxt<'tcx>,
+    stage: ContextSolveStage,
+    pack_shape_store: &mut PackShapeStore<'tcx>,
+    body: &thir::Thir<'tcx>,
     expr: &thir::Expr<'tcx>,
-    visit_calls: bool,
     f: &mut impl FnMut(DefId, Mutability),
 ) {
     use thir::ExprKind::*;
@@ -465,12 +557,13 @@ pub fn visit_context_used_by_expr<'tcx>(
         &ContextRef { item, muta } => {
             f(item, muta);
         }
-        Pack { shape, .. } => {
-            visit_context_uses_by_pack_shape(tcx, shape, f);
+        Pack { .. } => {
+            let shape = pack_shape_store.resolve(tcx, stage, body, expr);
+            visit_context_uses_by_pack_shape(tcx, &shape, f);
         }
         &Call { ty, .. } => {
             if
-                visit_calls &&
+                stage == ContextSolveStage::MirBuilding &&
                 let Some(def_id) = extract_static_callee_for_context(tcx, ty)
             {
                 for (item, muta) in tcx.components_borrowed(def_id).iter() {
@@ -838,10 +931,16 @@ impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVi
     fn visit_expr(&mut self, expr: &'thir thir::Expr<'tcx>) {
         use thir::ExprKind::*;
 
-        visit_context_used_by_expr(self.tcx, expr, false, &mut |item, muta| {
-            if self.bind_tracker.resolve(item).is_env() {
-                self.local.add(item, muta);
-            }
+        visit_context_used_by_expr(
+            self.tcx,
+            ContextSolveStage::GraphSolving,
+            &mut PackShapeStore::new_ignore(),
+            self.thir,
+            expr,
+            &mut |item, muta| {
+                if self.bind_tracker.resolve(item).is_env() {
+                    self.local.add(item, muta);
+                }
         });
 
         match &expr.kind {

@@ -213,7 +213,7 @@ impl<'tcx> Cx<'tcx> {
                     );
                 }
             },
-            Pack { exprs, shape: _ } => {
+            Pack { index: _, flags: _, exprs } => {
                 for &mut expr in exprs {
                     self.adjust_context(expr, Mutability::Not);
                 }

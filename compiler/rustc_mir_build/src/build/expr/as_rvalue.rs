@@ -544,8 +544,14 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 );
                 block.and(Rvalue::Use(operand))
             }
-            ExprKind::Pack { ref exprs, ref shape } => {
+            ExprKind::Pack { ref exprs, .. } => {
                 let bundle_did = this.tcx.lang_items().bundle().unwrap();
+                let shape = this.ctx_pack_shapes.resolve(
+                    this.tcx,
+                    ty::ContextSolveStage::MirBuilding,
+                    this.thir,
+                    expr,
+                );
 
                 let exprs = exprs
                     .into_iter()

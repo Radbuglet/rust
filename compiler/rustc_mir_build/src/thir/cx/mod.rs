@@ -63,6 +63,7 @@ struct Cx<'tcx> {
     region_scope_tree: &'tcx region::ScopeTree,
     typeck_results: &'tcx ty::TypeckResults<'tcx>,
     rvalue_scopes: &'tcx RvalueScopes,
+    pack_expr_idx: PackExprIndex,
 
     /// False to indicate that adjustments should not be applied. Only used for `custom_mir`
     apply_adjustments: bool,
@@ -104,6 +105,7 @@ impl<'tcx> Cx<'tcx> {
             typeck_results,
             rvalue_scopes: &typeck_results.rvalue_scopes,
             body_owner: def.to_def_id(),
+            pack_expr_idx: PackExprIndex::ZERO,
             apply_adjustments: hir
                 .attrs(hir_id)
                 .iter()
