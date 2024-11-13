@@ -1008,6 +1008,17 @@ impl<'a, 'tcx> Visitor<'tcx> for TypeChecker<'a, 'tcx> {
                         self.fail(location, "raw pointer aggregate must have 2 fields");
                     }
                 }
+                AggregateKind::InferBundle(did, re) => {
+                    if let [field] = fields.raw.as_slice() {
+                        let dest = ty::resolve_infer_bundle(self.tcx, did, re);
+
+                        if !self.mir_assign_valid_types(field.ty(self.body, self.tcx), dest) {
+                            self.fail(location, "infer bundle wrapped value has the wrong type");
+                        }
+                    } else {
+                        self.fail(location, "infer bundle aggregate must have 1 field");
+                    }
+                }
             },
             Rvalue::Ref(_, BorrowKind::Fake(_), _) => {
                 if self.mir_phase >= MirPhase::Runtime(RuntimePhase::Initial) {

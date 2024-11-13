@@ -568,6 +568,9 @@ impl<'tcx> Stable<'tcx> for mir::AggregateKind<'tcx> {
             mir::AggregateKind::RawPtr(ty, mutability) => {
                 stable_mir::mir::AggregateKind::RawPtr(ty.stable(tables), mutability.stable(tables))
             }
+            mir::AggregateKind::InferBundle(..) => {
+                todo!("InferBundle aggregate kind not yet supported in SMIR");
+            }
         }
     }
 }

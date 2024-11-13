@@ -193,7 +193,7 @@ impl<'tcx> ReifiedBundleWalker<'tcx> {
             return out;
         }
 
-        let out = match ReifiedBundleItemSet::decode(ty, self.stage) {
+        let out = match ReifiedBundleItemSet::decode(ty) {
             ReifiedBundleItemSet::Ref(re, muta, did) => {
                 Ty::new_ref(
                     self.tcx,
@@ -233,8 +233,8 @@ impl<'tcx> ReifiedBundleWalker<'tcx> {
                     ),
                 )
             }
-            ReifiedBundleItemSet::InferSet(did, re) => {
-                Ty::new_infer_bundle(self.tcx, did, re)
+            ReifiedBundleItemSet::InferSet(..) => {
+                ty
             }
             ReifiedBundleItemSet::Error(err) => {
                 Ty::new_error(self.tcx, err)
@@ -246,7 +246,7 @@ impl<'tcx> ReifiedBundleWalker<'tcx> {
     }
 
     fn collect_fields_in_bundle_item_set(&mut self, ty: Ty<'tcx>) {
-        match ReifiedBundleItemSet::decode(ty, self.stage) {
+        match ReifiedBundleItemSet::decode(ty) {
             ReifiedBundleItemSet::Ref(_re, muta, did) => {
                 self.fields.entry(did).or_default().push(ReifiedBundleMember {
                     location: ReifiedBundleProjs(self.tcx.arena.alloc_from_iter(
@@ -282,13 +282,25 @@ impl<'tcx> ReifiedBundleWalker<'tcx> {
                     mutability: Mutability::Mut,
                 });
             }
-            ReifiedBundleItemSet::InferSet(did, _re) => {
-                self.infer_sets.entry(did).or_default().push(ReifiedBundleMember {
-                    location: ReifiedBundleProjs(self.tcx.arena.alloc_from_iter(
-                        self.proj_stack.iter().copied(),
-                    )),
-                    mutability: Mutability::Mut,
-                });
+            ReifiedBundleItemSet::InferSet(did, re) => {
+                if self.stage.fully_resolved() {
+                    let inner_ty = resolve_infer_bundle(self.tcx, did, re);
+                    let inner_val_ty = self.bundle_item_set_to_value(inner_ty);
+
+                    self.proj_stack.push(ReifiedBundleProj {
+                        field: ty::FieldIdx::ZERO,
+                        ty: inner_val_ty,
+                    });
+                    self.collect_fields_in_bundle_item_set(inner_ty);
+                    self.proj_stack.pop();
+                } else {
+                    self.infer_sets.entry(did).or_default().push(ReifiedBundleMember {
+                        location: ReifiedBundleProjs(self.tcx.arena.alloc_from_iter(
+                            self.proj_stack.iter().copied(),
+                        )),
+                        mutability: Mutability::Mut,
+                    });
+                }
             }
             ReifiedBundleItemSet::Error(_err) => {}
         }
@@ -318,7 +330,7 @@ pub enum ReifiedBundleItemSet<'tcx> {
 }
 
 impl<'tcx> ReifiedBundleItemSet<'tcx> {
-    pub fn decode(ty: Ty<'tcx>, stage: ContextSolveStage) -> Self {
+    pub fn decode(ty: Ty<'tcx>) -> Self {
         match ty.kind() {
             &ty::Ref(re, inner, muta) => {
                 match ReifiedContextItem::decode(inner) {
@@ -334,11 +346,7 @@ impl<'tcx> ReifiedBundleItemSet<'tcx> {
                 Self::GenericSet(ty)
             }
             &ty::InferBundle(did, re) => {
-                if stage.fully_resolved() {
-                    todo!();
-                } else {
-                    Self::InferSet(did, re)
-                }
+                Self::InferSet(did, re)
             }
             &ty::Error(err) => {
                 Self::Error(err)
@@ -455,7 +463,14 @@ pub enum PackShape<'tcx> {
     ExtractLocalInferPlaceholder,
 
     /// Constructs a tuple of sub-shapes.
-    Tuple(Box<[PackShape<'tcx>]>),
+    MakeTuple(Box<[PackShape<'tcx>]>),
+
+    /// Constructs an inference bundle containing the sub-values.
+    MakeInfer {
+        bundle: DefId,
+        inner_ty: Ty<'tcx>,
+        inner_shape: Box<PackShape<'tcx>>,
+    },
 
     /// An unrecoverable error ocurred and this field has no useful way to assign a value.
     Error(ty::ErrorGuaranteed),
@@ -554,7 +569,7 @@ fn make_bundle_pack_shape<'tcx>(
     bundles: &[&'tcx ty::ReifiedBundle<'tcx>],
     ty: Ty<'tcx>,
 ) -> PackShape<'tcx> {
-    match ty::ReifiedBundleItemSet::decode(ty, stage) {
+    match ty::ReifiedBundleItemSet::decode(ty) {
         ty::ReifiedBundleItemSet::Ref(_re, muta, def_id) => {
             for (i, bundle) in bundles.iter().enumerate() {
                 if !bundle.infer_sets.is_empty() && flags.allows_env() {
@@ -591,7 +606,7 @@ fn make_bundle_pack_shape<'tcx>(
                 .map(|item| make_bundle_pack_shape(tcx, stage, flags, bundles, item))
                 .collect();
 
-            PackShape::Tuple(items)
+            PackShape::MakeTuple(items)
         }
         ty::ReifiedBundleItemSet::GenericSet(ty) => {
             for (i, bundle) in bundles.iter().enumerate() {
@@ -635,21 +650,28 @@ fn make_bundle_pack_shape<'tcx>(
                 todo!("component not provided");
             }))
         }
-        ty::ReifiedBundleItemSet::InferSet(did, _re) => {
+        ty::ReifiedBundleItemSet::InferSet(did, re) => {
             if stage.fully_resolved() {
-                bug!("InferSets should not be present during {stage:?}");
-            }
+                let inner_ty = resolve_infer_bundle(tcx, did, re);
+                let inner_shape = make_bundle_pack_shape(tcx, stage, flags, bundles, inner_ty);
 
-            for bundle in bundles {
-                // Ambiguity errors will be handled by regular reference ambiguity semantics with
-                // tge desugaring of these infer bundles to regular component sets.
-                if bundle.infer_sets.contains_key(&did) {
-                    return PackShape::ExtractLocalInferPlaceholder;
-                };
-            }
+                PackShape::MakeInfer {
+                    bundle: did,
+                    inner_ty: inner_ty,
+                    inner_shape: Box::new(inner_shape)
+                }
+            } else {
+                for bundle in bundles {
+                    // Ambiguity errors will be handled by regular reference ambiguity semantics with
+                    // tge desugaring of these infer bundles to regular component sets.
+                    if bundle.infer_sets.contains_key(&did) {
+                        return PackShape::ExtractLocalInferPlaceholder;
+                    };
+                }
 
-            PackShape::ExtractEnvInfer(did)
-        },
+                PackShape::ExtractEnvInfer(did)
+            }
+        }
         ty::ReifiedBundleItemSet::Error(err) => PackShape::Error(err),
     }
 }
@@ -743,12 +765,19 @@ pub fn visit_context_uses_by_pack_shape<'tcx>(
             f(item, muta);
         }
         &PackShape::ExtractEnvInfer(_item) => {
-            todo!();
+            // TODO
         }
-        PackShape::Tuple(fields) => {
+        PackShape::MakeTuple(fields) => {
             for field in fields {
                 visit_context_uses_by_pack_shape(tcx, field, f);
             }
+        }
+        PackShape::MakeInfer {
+            bundle: _,
+            inner_ty: _,
+            inner_shape,
+        } => {
+            visit_context_uses_by_pack_shape(tcx, inner_shape, f);
         }
         PackShape::ExtractLocalRef(..)
         | PackShape::ExtractLocalMove(..)
@@ -891,6 +920,14 @@ pub struct ContextBindScope(usize);
 pub struct ContextSet(FxIndexMap<DefId, Mutability>);
 
 impl ContextSet {
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     pub fn add(&mut self, id: DefId, muta: Mutability) -> bool {
         match self.0.entry(id) {
             IndexEntry::Vacant(entry) => {
@@ -1432,5 +1469,27 @@ fn components_borrowed_graph<'tcx>(
 }
 
 fn components_borrowed<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> &'tcx ty::ContextSet {
-    tcx.components_borrowed_graph(())[&def_id]
+    if tcx.def_kind(def_id) == ty::DefKind::InferBundle {
+        // TODO
+        tcx.arena.alloc(ContextSet::default())
+    } else {
+        tcx.components_borrowed_graph(())[&def_id]
+    }
+}
+
+pub fn resolve_infer_bundle<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    def_id: DefId,
+    re: ty::Region<'tcx>,
+) -> Ty<'tcx> {
+    let orig_items = tcx.components_borrowed(def_id);
+    let mut items = orig_items
+        .iter()
+        .map(|(item, muta)| Ty::new_ref(tcx, re, tcx.context_ty(item), muta));
+
+    if orig_items.len() == 1 {
+        items.next().unwrap()
+    } else {
+        Ty::new_tup_from_iter(tcx, items)
+    }
 }

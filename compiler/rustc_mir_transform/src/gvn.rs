@@ -983,6 +983,7 @@ impl<'body, 'tcx> VnState<'body, 'tcx> {
                 // Coroutines are never ZST, as they at least contain the implicit states.
                 AggregateKind::Coroutine(..) => false,
                 AggregateKind::RawPtr(..) => bug!("MIR for RawPtr aggregate must have 2 fields"),
+                AggregateKind::InferBundle(..) => bug!("MIR for InferBundle aggregate must have 1 field"),
             };
 
             if is_zst {
@@ -1013,6 +1014,11 @@ impl<'body, 'tcx> VnState<'body, 'tcx> {
                 let data_pointer_ty = field_ops[FieldIdx::ZERO].ty(self.local_decls, self.tcx);
                 let output_pointer_ty = Ty::new_ptr(self.tcx, pointee_ty, mtbl);
                 (AggregateTy::RawPtr { data_pointer_ty, output_pointer_ty }, FIRST_VARIANT)
+            }
+
+            AggregateKind::InferBundle(..) => {
+                // TODO: missed optimization?
+                return None;
             }
         };
 

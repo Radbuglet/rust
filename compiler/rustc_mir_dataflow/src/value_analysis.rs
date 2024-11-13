@@ -1003,7 +1003,8 @@ impl<'tcx> Visitor<'tcx> for PlaceCollector<'_, 'tcx> {
                     | AggregateKind::Tuple
                     | AggregateKind::Closure(..)
                     | AggregateKind::Coroutine(..)
-                    | AggregateKind::CoroutineClosure(..) => {}
+                    | AggregateKind::CoroutineClosure(..)
+                    | AggregateKind::InferBundle(..) => {}
                 }
                 for (index, field) in fields.iter_enumerated() {
                     if let Some(rhs) = field.place()

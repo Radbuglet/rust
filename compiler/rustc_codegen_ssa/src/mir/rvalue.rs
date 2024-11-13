@@ -1115,6 +1115,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                     mir::AggregateKind::Closure(..) => true,
                     // FIXME: Can we do this for simple coroutines too?
                     mir::AggregateKind::Coroutine(..) | mir::AggregateKind::CoroutineClosure(..) => false,
+                    mir::AggregateKind::InferBundle(..) => todo!(),
                 };
                 allowed_kind && {
                 let ty = rvalue.ty(self.mir, self.cx.tcx());

@@ -203,6 +203,7 @@ impl<'tcx> Rvalue<'tcx> {
                     Ty::new_coroutine_closure(tcx, did, args)
                 }
                 AggregateKind::RawPtr(ty, mutability) => Ty::new_ptr(tcx, ty, mutability),
+                AggregateKind::InferBundle(def_id, re) => Ty::new_infer_bundle(tcx, def_id, re),
             },
             Rvalue::ShallowInitBox(_, ty) => Ty::new_box(tcx, ty),
             Rvalue::CopyForDeref(ref place) => place.ty(local_decls, tcx).ty,

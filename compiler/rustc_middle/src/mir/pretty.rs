@@ -1208,6 +1208,14 @@ impl<'tcx> Debug for Rvalue<'tcx> {
                         with_no_trimmed_paths!(write!(fmt, "*{kind_str} {pointee_ty} from "))?;
                         fmt_tuple(fmt, "")
                     }
+                    AggregateKind::InferBundle(def_id, _re) => {
+                        let name = ty::tls::with(|tcx| {
+                            FmtPrinter::print_string(tcx, Namespace::ValueNS, |cx| {
+                                cx.print_def_path(def_id, ty::GenericArgs::empty())
+                            })
+                        })?;
+                        fmt_tuple(fmt, &name)
+                    }
                 }
             }
 

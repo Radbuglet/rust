@@ -2296,7 +2296,7 @@ rustc_queries! {
     }
 
     query components_borrowed(def_id: DefId) -> &'tcx ty::ContextSet {
-        desc { "determining the components borrowed by a function" }
+        desc { "determining the components borrowed by a function or infer bundle" }
         cache_on_disk_if { def_id.is_local() }
         separate_provide_extern
     }

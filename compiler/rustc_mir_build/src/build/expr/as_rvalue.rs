@@ -645,7 +645,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     ),
                 )
             }
-            PackShape::Tuple(fields) => {
+            PackShape::MakeTuple(fields) => {
                 let fields = fields.iter()
                     .zip(ty.tuple_fields())
                     .map(|(shape, ty)| {
@@ -660,6 +660,24 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     .collect::<IndexVec<FieldIdx, _>>();
 
                 Rvalue::Aggregate(Box::new(AggregateKind::Tuple), fields)
+            }
+            PackShape::MakeInfer {
+                bundle,
+                inner_ty,
+                inner_shape,
+            } => {
+                let inner_op = unpack!(block = self.build_pack_bundle_value(
+                    block,
+                    span,
+                    exprs,
+                    *inner_ty,
+                    inner_shape,
+                ));
+
+                Rvalue::Aggregate(
+                    Box::new(AggregateKind::InferBundle(*bundle, self.tcx.lifetimes.re_erased)),
+                    IndexVec::from_iter([inner_op]),
+                )
             }
             PackShape::Error(_err) => {
                 todo!()

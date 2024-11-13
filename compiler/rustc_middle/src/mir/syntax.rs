@@ -1465,6 +1465,8 @@ pub enum AggregateKind<'tcx> {
     /// creating a thin pointer. If you're just converting between thin pointers,
     /// you may want an [`Rvalue::Cast`] with [`CastKind::PtrToPtr`] instead.
     RawPtr(Ty<'tcx>, Mutability),
+
+    InferBundle(DefId, Region<'tcx>),
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, TyEncodable, TyDecodable, Hash, HashStable)]

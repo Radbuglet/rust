@@ -1857,6 +1857,15 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
             AggregateKind::Tuple | AggregateKind::RawPtr(..) => {
                 unreachable!("This should have been covered in check_rvalues");
             }
+            AggregateKind::InferBundle(did, re) => {
+                if field_index == FieldIdx::ZERO {
+                    Ok(ty::resolve_infer_bundle(tcx, did, re))
+                } else {
+                    Err(FieldAccessError::OutOfRange {
+                        field_count: 1,
+                    })
+                }
+            }
         }
     }
 
@@ -2578,6 +2587,7 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
                 AggregateKind::Coroutine(_, _) => None,
                 AggregateKind::CoroutineClosure(_, _) => None,
                 AggregateKind::RawPtr(_, _) => None,
+                AggregateKind::InferBundle(_, _) => None,
             },
         }
     }
@@ -2821,7 +2831,10 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
                 ),
             ),
 
-            AggregateKind::Array(_) | AggregateKind::Tuple | AggregateKind::RawPtr(..) => {
+            AggregateKind::Array(_)
+            | AggregateKind::Tuple
+            | AggregateKind::RawPtr(..)
+            | AggregateKind::InferBundle(..) => {
                 (CRATE_DEF_ID.to_def_id(), ty::InstantiatedPredicates::empty())
             }
         };

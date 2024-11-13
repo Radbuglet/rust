@@ -765,6 +765,9 @@ macro_rules! make_mir_visitor {
                             AggregateKind::RawPtr(ty, _) => {
                                 self.visit_ty($(& $mutability)? *ty, TyContext::Location(location));
                             }
+                            AggregateKind::InferBundle(_, re) => {
+                                self.visit_region($(& $mutability)? *re, location);
+                            }
                         }
 
                         for operand in operands {
