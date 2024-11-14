@@ -90,7 +90,16 @@ pub struct ReifiedBundle<'tcx> {
 }
 
 impl<'tcx> ReifiedBundle<'tcx> {
+    pub fn concrete_items(&self) -> impl Iterator<Item = (DefId, Mutability)> + use<'_, 'tcx> {
+        self.fields.iter().map(|(def_id, list)| {
+            (*def_id, list.iter().map(|v| v.mutability).max().unwrap())
+        })
+    }
+
     pub fn generic_types(&self) -> FxIndexSet<Ty<'tcx>> {
+        // We expect to only run this during MirBuilding.
+        debug_assert!(self.infer_sets.is_empty());
+
         self.generic_fields
             .keys()
             .copied()
@@ -765,7 +774,7 @@ pub fn visit_context_uses_by_pack_shape<'tcx>(
             f(item, muta);
         }
         &PackShape::ExtractEnvInfer(_item) => {
-            // TODO
+            todo!();
         }
         PackShape::MakeTuple(fields) => {
             for field in fields {
@@ -788,13 +797,12 @@ pub fn visit_context_uses_by_pack_shape<'tcx>(
     }
 }
 
-pub fn visit_context_binds_by_stmt<'tcx>(
+pub fn context_binds_by_stmt<'tcx>(
     tcx: TyCtxt<'tcx>,
     stage: ContextSolveStage,
     body: &thir::Thir<'tcx>,
     stmt: &thir::Stmt<'tcx>,
-    f: &mut impl FnMut(ContextBinder, DefId, Mutability),
-) {
+) -> Option<(ContextBinder, &'tcx ReifiedBundle<'tcx>)> {
     use thir::StmtKind::*;
 
     match &stmt.kind {
@@ -802,21 +810,60 @@ pub fn visit_context_binds_by_stmt<'tcx>(
             let bundle_ty = body.exprs[bundle].ty;
             let reified = tcx.reified_bundle((bundle_ty, stage));
 
-            for (&item, members) in &reified.fields {
-                let muta = members.iter()
-                    .map(|member| member.mutability)
-                    .max()
-                    .unwrap();
-
-                f(ContextBinder::LocalBinder(self_id), item, muta);
-            }
-
-            for &_item in reified.infer_sets.keys() {
-                todo!();
-            }
+            Some((
+                ContextBinder::LocalBinder(self_id),
+                reified,
+            ))
         }
         Expr { .. } | Let { .. } => {
-            // (does not directly introduce context binds)
+            None
+        }
+    }
+}
+
+// TODO: Rename this because we have to check closures and other things that very much do not borrow
+//  context.
+pub fn can_def_borrow_extern_context<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> bool {
+    tcx.is_mir_available(def_id)
+        // The non-const condition is load bearing as it helps avoid recursive query calls.
+        && !tcx.is_const_fn_raw(def_id)
+}
+
+pub fn extract_static_callee_for_context<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Option<DefId> {
+    match ty.kind() {
+        &ty::FnDef(def_id, ..) => {
+            can_def_borrow_extern_context(tcx, def_id).then_some(def_id)
+        }
+        ty::Bool
+        | ty::Char
+        | ty::Int(..)
+        | ty::Uint(..)
+        | ty::Float(..)
+        | ty::Adt(..)
+        | ty::Foreign(..)
+        | ty::Str
+        | ty::Array(..)
+        | ty::Pat(..)
+        | ty::Slice(..)
+        | ty::RawPtr(..)
+        | ty::Ref(..)
+        | ty::FnPtr(..)
+        | ty::Dynamic(..)
+        | ty::Closure(..)
+        | ty::CoroutineClosure(..)
+        | ty::Coroutine(..)
+        | ty::CoroutineWitness(..)
+        | ty::Never
+        | ty::Tuple(..)
+        | ty::Alias(..)
+        | ty::Param(..)
+        | ty::Bound(..)
+        | ty::Placeholder(..)
+        | ty::Infer(..)
+        | ty::ContextMarker(..)
+        | ty::InferBundle(..)
+        | ty::Error(..) => {
+            None
         }
     }
 }
@@ -891,12 +938,16 @@ impl ContextBindTracker {
         body: &thir::Thir<'tcx>,
         stmt: &thir::Stmt<'tcx>,
     ) {
-        visit_context_binds_by_stmt(tcx, stage, body, stmt, &mut |binder, item, muta| {
+        let Some((binder, reified)) = context_binds_by_stmt(tcx, stage, body, stmt) else {
+            return;
+        };
+
+        for (item, muta) in reified.concrete_items() {
             self.bind(item, ContextBindInfo {
                 binder: binder.unwrap_local(),
                 muta,
             });
-        })
+        }
     }
 
     pub fn resolve(&self, item: DefId) -> ContextBinder {
@@ -914,7 +965,7 @@ impl ContextBindTracker {
 #[must_use]
 pub struct ContextBindScope(usize);
 
-// === Context Graph === //
+// === ContextSet === //
 
 #[derive(Debug, Default, HashStable, Eq, PartialEq, Clone, TyEncodable, TyDecodable)]
 pub struct ContextSet(FxIndexMap<DefId, Mutability>);
@@ -961,61 +1012,43 @@ impl ContextSet {
     }
 }
 
+// === Context Graph === //
+
 #[derive(Debug, HashStable, TyEncodable, TyDecodable)]
 pub struct ContextBorrowsLocal<'tcx> {
-    local: ContextSet,
-    calls: Vec<IndirectContextCall<'tcx>>,
+    /// Function calls and local borrows affecting the borrow set of the function itself.
+    pub entry: ContextBorrowsLocalNode<'tcx>,
+
+    /// Function calls and local borrows affecting the borrow set of each `InferBundle` binding.
+    pub infers: Vec<(DefId, ContextBorrowsLocalNode<'tcx>)>,
 }
 
 #[derive(Debug, HashStable, TyEncodable, TyDecodable)]
-struct IndirectContextCall<'tcx> {
-    target: DefId,
-    absorbs: &'tcx ContextSet,
+pub struct ContextBorrowsLocalNode<'tcx> {
+    /// The context being borrowed directly by the function (or the infer bundle binding) from
+    /// its environment.
+    pub local: ContextSet,
+
+    /// The set of functions called called directly by the function (or the infer bundle binding)
+    /// from its environment.
+    pub calls: Vec<IndirectContextCall<'tcx>>,
 }
 
-pub fn can_def_borrow_extern_context<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> bool {
-    tcx.def_kind(def_id) == ty::DefKind::Fn
-        && tcx.is_mir_available(def_id)
-        // The non-const condition is load bearing as it helps avoid recursive query calls.
-        && !tcx.is_const_fn_raw(def_id)
+#[derive(Debug, HashStable, TyEncodable, TyDecodable)]
+pub struct IndirectContextCall<'tcx> {
+    /// The `DefId` of the function being called.
+    pub target: DefId,
+
+    /// The set of context items absorbed by `let static` bindings between the call and the function
+    /// entry (or the infer bundle binding).
+    pub absorbs: &'tcx ContextSet,
 }
 
-pub fn extract_static_callee_for_context<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Option<DefId> {
-    match ty.kind() {
-        &ty::FnDef(def_id, ..) => {
-            can_def_borrow_extern_context(tcx, def_id).then_some(def_id)
-        }
-        ty::Bool
-        | ty::Char
-        | ty::Int(..)
-        | ty::Uint(..)
-        | ty::Float(..)
-        | ty::Adt(..)
-        | ty::Foreign(..)
-        | ty::Str
-        | ty::Array(..)
-        | ty::Pat(..)
-        | ty::Slice(..)
-        | ty::RawPtr(..)
-        | ty::Ref(..)
-        | ty::FnPtr(..)
-        | ty::Dynamic(..)
-        | ty::Closure(..)
-        | ty::CoroutineClosure(..)
-        | ty::Coroutine(..)
-        | ty::CoroutineWitness(..)
-        | ty::Never
-        | ty::Tuple(..)
-        | ty::Alias(..)
-        | ty::Param(..)
-        | ty::Bound(..)
-        | ty::Placeholder(..)
-        | ty::Infer(..)
-        | ty::ContextMarker(..)
-        | ty::InferBundle(..)
-        | ty::Error(..) => {
-            None
-        }
+impl<'tcx> ContextBorrowsLocal<'tcx> {
+    pub fn nodes(&self) -> impl Iterator<Item = (Option<DefId>, &ContextBorrowsLocalNode<'tcx>)> {
+        [(None, &self.entry)]
+            .into_iter()
+            .chain(self.infers.iter().map(|(k, v)| (Some(*k), v)))
     }
 }
 
@@ -1028,8 +1061,11 @@ fn components_borrowed_local<'tcx>(
 
     let Ok((thir, entry)) = tcx.thir_body(def_id) else {
         return tcx.arena.alloc(ContextBorrowsLocal {
-            local: ContextSet::default(),
-            calls: Vec::new(),
+            entry: ContextBorrowsLocalNode {
+                local: ContextSet::default(),
+                calls: Vec::new(),
+            },
+            infers: Vec::new(),
         });
     };
 
@@ -1040,15 +1076,24 @@ fn components_borrowed_local<'tcx>(
         tcx,
         thir,
         bind_tracker: ContextBindTracker::default(),
-        local: ContextSet::default(),
-        calls: Vec::new(),
         curr_absorb: empty_set,
+        borrows_nodes: vec![
+            (None, ContextBorrowsLocalNode {
+                local: ContextSet::default(),
+                calls: Vec::new(),
+            }),
+        ],
+        curr_borrows_node: 0,
     };
     visitor.visit_expr(&visitor.thir.exprs[entry]);
 
+    let mut borrow_nodes_iter = visitor.borrows_nodes.into_iter();
+
     tcx.arena.alloc(ContextBorrowsLocal {
-        local: visitor.local,
-        calls: visitor.calls,
+        entry: borrow_nodes_iter.next().unwrap().1,
+        infers: borrow_nodes_iter
+            .map(|(did, info)| (did.unwrap(), info))
+            .collect(),
     })
 }
 
@@ -1056,9 +1101,9 @@ struct ComponentsBorrowedLocalVisitor<'thir, 'tcx> {
     tcx: TyCtxt<'tcx>,
     thir: &'thir thir::Thir<'tcx>,
     bind_tracker: ContextBindTracker,
-    local: ContextSet,
-    calls: Vec<IndirectContextCall<'tcx>>,
     curr_absorb: &'tcx ContextSet,
+    borrows_nodes: Vec<(Option<DefId>, ContextBorrowsLocalNode<'tcx>)>,
+    curr_borrows_node: usize,
 }
 
 impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVisitor<'thir, 'tcx> {
@@ -1069,32 +1114,68 @@ impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVi
     fn visit_block(&mut self, block: &'thir thir::Block) {
         let old_absorb = self.curr_absorb;
         let old_scope = self.bind_tracker.push_scope();
+        let old_borrows_node = self.curr_borrows_node;
+
         thir_visit::walk_block(self, block);
+
         self.curr_absorb = old_absorb;
         self.bind_tracker.pop_scope(old_scope);
+        self.curr_borrows_node = old_borrows_node;
     }
 
     fn visit_stmt(&mut self, stmt: &'thir thir::Stmt<'tcx>) {
+        thir_visit::walk_stmt(self, stmt);
+
+        // Update the set of binds to which the rest of this block is subjected.
+        //
+        // We do this after visiting the statement to ensure that expressions used in the statement
+        // don't see the bindings to which they're subjected.
+        if let Some((_binder, reified)) = context_binds_by_stmt(
+            self.tcx,
+            ContextSolveStage::GraphSolving,
+            self.thir,
+            stmt,
+        ) {
+            // TODO: Consider enforcing no-generics and no-ambiguity rules here instead of in
+            // THIR building.
+
+            // See if we have an infer set binder.
+            if !reified.infer_sets.is_empty() {
+                // TODO: Ensure that there is only one origin.
+
+                // We begin by clearing the `curr_absorb` list since the infer set now collects all
+                // of these unabsorbed borrows.
+                self.curr_absorb = self.tcx.arena.alloc(ContextSet::default());
+
+                // Start collecting to a new `ContextBorrowsLocalNode`
+                self.curr_borrows_node = self.borrows_nodes.len();
+                self.borrows_nodes.push((
+                    Some(*reified.infer_sets.get_index(0).unwrap().0),
+                    ContextBorrowsLocalNode {
+                        local: ContextSet::default(),
+                        calls: Vec::new(),
+                    },
+                ));
+            }
+
+            // Update the set of absorbers we're subject to.
+            let mut absorb = self.curr_absorb.clone();
+
+            for (item, muta) in reified.concrete_items() {
+                absorb.add(item, muta);
+            }
+
+            self.curr_absorb = self.tcx.arena.alloc(absorb);
+        }
+
+        // We apply regular binds after infer set binds because the inverse would cause those binds
+        // to be immediately shadowed by the inference set.
         self.bind_tracker.bind_from_stmt(
             self.tcx,
             ContextSolveStage::GraphSolving,
             self.thir,
             stmt,
         );
-
-        visit_context_binds_by_stmt(
-            self.tcx,
-            ContextSolveStage::GraphSolving,
-            self.thir,
-            stmt,
-            &mut |_binder, item, muta| {
-                let mut absorb = self.curr_absorb.clone();
-                absorb.add(item, muta);
-                self.curr_absorb = self.tcx.arena.alloc(absorb);
-            },
-        );
-
-        thir_visit::walk_stmt(self, stmt);
     }
 
     fn visit_expr(&mut self, expr: &'thir thir::Expr<'tcx>) {
@@ -1108,17 +1189,23 @@ impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVi
             expr,
             &mut |item, muta| {
                 if self.bind_tracker.resolve(item).is_env() {
-                    self.local.add(item, muta);
+                    self.borrows_nodes[self.curr_borrows_node]
+                        .1
+                        .local
+                        .add(item, muta);
                 }
         });
 
         match &expr.kind {
             &Call { ty, .. } => {
                 if let Some(def_id) = extract_static_callee_for_context(self.tcx, ty) {
-                    self.calls.push(IndirectContextCall {
-                        target: def_id,
-                        absorbs: self.curr_absorb,
-                    });
+                    self.borrows_nodes[self.curr_borrows_node]
+                        .1
+                        .calls
+                        .push(IndirectContextCall {
+                            target: def_id,
+                            absorbs: self.curr_absorb,
+                        });
                 }
             }
 
@@ -1203,7 +1290,7 @@ struct ComponentsBorrowedGraph<'tcx> {
 
 struct FuncNodeWeight<'tcx> {
     local: &'tcx ContextSet,
-    calls: Box<[FuncEdgeWeight<'tcx>]>,
+    calls: Vec<FuncEdgeWeight<'tcx>>,
 }
 
 struct FuncEdgeWeight<'tcx> {
@@ -1266,41 +1353,58 @@ fn components_borrowed_graph<'tcx>(
             continue;
         }
 
-        let info = tcx.components_borrowed_local(def_id);
-        let calls = info.calls.iter()
-            .map(|call| {
-                let callee_entry = graph.nodes.entry(call.target);
-                let callee = callee_entry.index();
+        for (node_def_id, info) in tcx.components_borrowed_local(def_id).nodes() {
+            let node_def_id = node_def_id.unwrap_or(def_id.to_def_id());
 
-                if call.target.is_local() {
-                    callee_entry.or_insert(FuncNodeWeight {
-                        // Initialize to some bogus data to reserve the entry.
+            let calls = info.calls.iter()
+                .map(|call| {
+                    let callee_entry = graph.nodes.entry(call.target);
+                    let callee = callee_entry.index();
+
+                    if call.target.is_local() {
+                        callee_entry.or_insert(FuncNodeWeight {
+                            // Initialize to some bogus data to reserve the entry.
+                            local: &info.local,
+                            calls: Vec::new(),
+                        });
+                    } else {
+                        // We won't be initializing this callee later in the loop so we have to
+                        // initialize it immediately. In any case, the way these are initialized is
+                        // fundamentally different from the way we initialize local nodes.
+                        callee_entry.or_insert(FuncNodeWeight {
+                            local: tcx.components_borrowed(call.target),
+                            // We can treat it as if this foreign function borrowed all of its context
+                            // items directly since this graph is not directly used for diagnostics.
+                            calls: Vec::new(),
+                        });
+                    }
+
+                    FuncEdgeWeight {
+                        target: FuncIdx::from_usize(callee),
+                        absorbs: &call.absorbs,
+                    }
+                })
+                .collect();
+
+            match graph.nodes.entry(node_def_id) {
+                IndexEntry::Vacant(entry) => {
+                    entry.insert(FuncNodeWeight {
                         local: &info.local,
-                        calls: Box::new([]),
-                    });
-                } else {
-                    // We won't be initializing this callee later in the loop so we have to
-                    // initialize it immediately. In any case, the way these are initialized is
-                    // fundamentally different from the way we initialize local nodes.
-                    callee_entry.or_insert(FuncNodeWeight {
-                        local: tcx.components_borrowed(call.target),
-                        // We can treat it as if this foreign function borrowed all of its context
-                        // items directly since this graph is not directly used for diagnostics.
-                        calls: Box::new([]),
+                        calls,
                     });
                 }
+                IndexEntry::Occupied(mut entry) => {
+                    let entry = entry.get_mut();
 
-                FuncEdgeWeight {
-                    target: FuncIdx::from_usize(callee),
-                    absorbs: &call.absorbs,
+                    let mut local = entry.local.clone();
+                    for (comp, muta) in info.local.iter() {
+                        local.add(comp, muta);
+                    }
+                    entry.local = tcx.arena.alloc(local);
+                    entry.calls.extend(calls);
                 }
-            })
-            .collect();
-
-        graph.nodes.insert(def_id.to_def_id(), FuncNodeWeight {
-            local: &info.local,
-            calls,
-        });
+            }
+        }
     }
 
     // Iterate through strongly connected components in dependency order. The main algorithm for
@@ -1469,12 +1573,7 @@ fn components_borrowed_graph<'tcx>(
 }
 
 fn components_borrowed<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> &'tcx ty::ContextSet {
-    if tcx.def_kind(def_id) == ty::DefKind::InferBundle {
-        // TODO
-        tcx.arena.alloc(ContextSet::default())
-    } else {
-        tcx.components_borrowed_graph(())[&def_id]
-    }
+    tcx.components_borrowed_graph(())[&def_id]
 }
 
 pub fn resolve_infer_bundle<'tcx>(
