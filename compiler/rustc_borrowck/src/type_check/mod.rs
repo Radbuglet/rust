@@ -828,6 +828,13 @@ impl<'a, 'b, 'tcx> TypeVerifier<'a, 'b, 'tcx> {
                         None => Err(FieldAccessError::OutOfRange { field_count: tys.len() }),
                     };
                 }
+                ty::InferBundle(did, re) => {
+                    return if field == FieldIdx::ZERO {
+                        Ok(ty::resolve_infer_bundle_values(tcx, did, re))
+                    } else {
+                        Err(FieldAccessError::OutOfRange { field_count: 1 })
+                    };
+                }
                 _ => {
                     return Ok(span_mirbug_and_err!(
                         self,
@@ -1859,7 +1866,7 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
             }
             AggregateKind::InferBundle(did, re) => {
                 if field_index == FieldIdx::ZERO {
-                    Ok(ty::resolve_infer_bundle(tcx, did, re))
+                    Ok(ty::resolve_infer_bundle_values(tcx, did, re))
                 } else {
                     Err(FieldAccessError::OutOfRange {
                         field_count: 1,

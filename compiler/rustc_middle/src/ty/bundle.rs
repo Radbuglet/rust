@@ -293,8 +293,8 @@ impl<'tcx> ReifiedBundleWalker<'tcx> {
             }
             ReifiedBundleItemSet::InferSet(did, re) => {
                 if self.stage.fully_resolved() {
-                    let inner_ty = resolve_infer_bundle(self.tcx, did, re);
-                    let inner_val_ty = self.bundle_item_set_to_value(inner_ty);
+                    let inner_ty = resolve_infer_bundle_set(self.tcx, did, re);
+                    let inner_val_ty = resolve_infer_bundle_values(self.tcx, did, re);
 
                     self.proj_stack.push(ReifiedBundleProj {
                         field: ty::FieldIdx::ZERO,
@@ -661,7 +661,7 @@ fn make_bundle_pack_shape<'tcx>(
         }
         ty::ReifiedBundleItemSet::InferSet(did, re) => {
             if stage.fully_resolved() {
-                let inner_ty = resolve_infer_bundle(tcx, did, re);
+                let inner_ty = resolve_infer_bundle_set(tcx, did, re);
                 let inner_shape = make_bundle_pack_shape(tcx, stage, flags, bundles, inner_ty);
 
                 PackShape::MakeInfer {
@@ -1576,7 +1576,24 @@ fn components_borrowed<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> &'tcx ty:
     tcx.components_borrowed_graph(())[&def_id]
 }
 
-pub fn resolve_infer_bundle<'tcx>(
+pub fn resolve_infer_bundle_set<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    def_id: DefId,
+    re: ty::Region<'tcx>,
+) -> Ty<'tcx> {
+    let orig_items = tcx.components_borrowed(def_id);
+    let mut items = orig_items
+        .iter()
+        .map(|(item, muta)| Ty::new_ref(tcx, re, Ty::new_context_marker(tcx, item), muta));
+
+    if orig_items.len() == 1 {
+        items.next().unwrap()
+    } else {
+        Ty::new_tup_from_iter(tcx, items)
+    }
+}
+
+pub fn resolve_infer_bundle_values<'tcx>(
     tcx: TyCtxt<'tcx>,
     def_id: DefId,
     re: ty::Region<'tcx>,

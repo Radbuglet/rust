@@ -1668,7 +1668,8 @@ impl<'a, 'tcx> MirBorrowckCtxt<'a, '_, 'tcx> {
                     ty::Closure(..)
                     | ty::CoroutineClosure(..)
                     | ty::Coroutine(_, _)
-                    | ty::Tuple(_) => (),
+                    | ty::Tuple(_)
+                    | ty::InferBundle(..) => (),
                     ty::Bool
                     | ty::Char
                     | ty::Int(_)
@@ -1692,7 +1693,6 @@ impl<'a, 'tcx> MirBorrowckCtxt<'a, '_, 'tcx> {
                     | ty::Infer(_)
                     | ty::Error(_)
                     | ty::ContextMarker(_)
-                    | ty::InferBundle(..)
                     | ty::Placeholder(_) => bug!(
                         "When Place contains ProjectionElem::Field it's type shouldn't be {place_ty:#?}"
                     ),

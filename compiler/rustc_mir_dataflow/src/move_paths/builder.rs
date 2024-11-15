@@ -191,7 +191,8 @@ impl<'a, 'tcx, F: Fn(Ty<'tcx>) -> bool> MoveDataBuilder<'a, 'tcx, F> {
                     ty::Closure(..)
                     | ty::CoroutineClosure(..)
                     | ty::Coroutine(_, _)
-                    | ty::Tuple(_) => (),
+                    | ty::Tuple(_)
+                    | ty::InferBundle(..) => (),
                     ty::Bool
                     | ty::Char
                     | ty::Int(_)
@@ -218,7 +219,6 @@ impl<'a, 'tcx, F: Fn(Ty<'tcx>) -> bool> MoveDataBuilder<'a, 'tcx, F> {
                     | ty::Placeholder(_) => bug!(
                         "When Place contains ProjectionElem::Field it's type shouldn't be {place_ty:#?}"
                     ),
-                    ty::InferBundle(..) => bug!("InferBundle types should not appear in the MIR"),
                 },
                 ProjectionElem::ConstantIndex { .. } | ProjectionElem::Subslice { .. } => {
                     match place_ty.kind() {

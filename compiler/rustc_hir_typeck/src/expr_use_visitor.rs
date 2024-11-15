@@ -1410,7 +1410,7 @@ impl<'tcx, Cx: TypeInformationCtxt<'tcx>, D: Delegate<'tcx>> ExprUseVisitor<'tcx
             )
             | Res::SelfCtor(..) => Ok(self.cat_rvalue(hir_id, expr_ty)),
 
-            Res::Def(DefKind::Static { .. }, _) => {
+            Res::Def(DefKind::Static { .. } | DefKind::Context, _) => {
                 Ok(PlaceWithHirId::new(hir_id, expr_ty, PlaceBase::StaticItem, Vec::new()))
             }
 
