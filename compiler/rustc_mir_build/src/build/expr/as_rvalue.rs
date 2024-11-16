@@ -683,7 +683,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 todo!()
             }
 
-            PackShape::ExtractEnvInfer(..) | PackShape::ExtractLocalInferPlaceholder => {
+            PackShape::ExtractEnvInfer(..) | PackShape::ExtractLocalInferPlaceholder(..) => {
                 bug!("{shape:?} does not show up after `GraphSolving`");
             }
         };

@@ -374,8 +374,95 @@ impl<'tcx, Cx: TypeInformationCtxt<'tcx>, D: Delegate<'tcx>> ExprUseVisitor<'tcx
                 self.walk_struct_expr(fields, opt_with)?;
             }
 
-            hir::ExprKind::Tup(exprs) | hir::ExprKind::Pack(_, exprs, _) => {
+            hir::ExprKind::Tup(exprs) => {
                 self.consume_exprs(exprs)?;
+            }
+
+            hir::ExprKind::Pack(flags, exprs, _) => {
+                #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+                enum BorrowOrOwned {
+                    ImmBorrow,
+                    MutBorrow,
+                    Consume,
+                }
+
+                let tcx = self.cx.tcx();
+                let mut borrow_kinds = (0..exprs.len())
+                    .map(|_| BorrowOrOwned::ImmBorrow)
+                    .collect::<Vec<_>>();
+
+                let mut exprs_reified_owned = Vec::new();
+                for expr in exprs {
+                    exprs_reified_owned.push(ty::reified_bundle_owned(
+                        tcx,
+                        self.expr_ty(expr)?,
+                        ty::ContextSolveStage::ClosureUpVars,
+                    ));
+                }
+
+                let exprs_reified = exprs_reified_owned.iter().collect::<Vec<_>>();
+                let out_ty = self.expr_ty(expr)?.bundle_item_set(tcx);
+
+                let pack_shape = ty::make_bundle_pack_shape(
+                    tcx,
+                    ty::ContextSolveStage::ClosureUpVars,
+                    flags,
+                    &exprs_reified,
+                    out_ty,
+                );
+
+                // TODO: Borrow each path individually.
+                fn visit_pack_shape(kinds: &mut [BorrowOrOwned], shape: &ty::PackShape<'_>) {
+                    match shape {
+                        &ty::PackShape::ExtractLocalRef(muta, field, _) => {
+                            kinds[field] = kinds[field].max(match muta {
+                                hir::Mutability::Not => BorrowOrOwned::ImmBorrow,
+                                hir::Mutability::Mut => BorrowOrOwned::MutBorrow,
+                            });
+                        }
+                        &ty::PackShape::ExtractLocalMove(field, _) => {
+                            kinds[field] = kinds[field].max(BorrowOrOwned::Consume);
+                        }
+                        &ty::PackShape::ExtractLocalInferPlaceholder(field) => {
+                            // These are lowered to regular `ExtractLocalRef`s so the bundle won't be
+                            // consumed. However, we still have to assume the worst case scenario
+                            // where the bundle borrow requires a mutable borrow.
+                            kinds[field] = kinds[field].max(BorrowOrOwned::MutBorrow);
+                        }
+                        ty::PackShape::MakeTuple(fields) => {
+                            for field in fields {
+                                visit_pack_shape(kinds, field);
+                            }
+                        }
+
+                        ty::PackShape::MakeInfer { .. } => {
+                            // (does not show up during this stage)
+                            unreachable!();
+                        }
+                        ty::PackShape::ExtractEnv(..) | ty::PackShape::ExtractEnvInfer(..) => {
+                            // (environment borrows do not introduce borrows on `exprs`)
+                        }
+                        ty::PackShape::Error(..) => {
+                            // (there's not much we can do here; just assume the best)
+                        }
+                    }
+                }
+
+                visit_pack_shape(&mut borrow_kinds, &pack_shape);
+
+                for (expr, kind) in exprs.iter().zip(borrow_kinds) {
+                    match kind {
+                        BorrowOrOwned::ImmBorrow => {
+                            self.borrow_expr(expr, ty::ImmBorrow)?;
+                        }
+                        BorrowOrOwned::MutBorrow => {
+                            self.borrow_expr(expr, ty::MutBorrow)?;
+                        }
+                        BorrowOrOwned::Consume => {
+                            self.consume_expr(expr)?;
+                        }
+                    }
+                }
             }
 
             hir::ExprKind::If(cond_expr, then_expr, ref opt_else_expr) => {
@@ -522,8 +609,30 @@ impl<'tcx, Cx: TypeInformationCtxt<'tcx>, D: Delegate<'tcx>> ExprUseVisitor<'tcx
 
             hir::StmtKind::Let(_) => {}
 
+            // TODO: Borrow each path individually.
             hir::StmtKind::BindContext(bind) => {
-                self.consume_expr(bind.bundle)?;
+                let tcx = self.cx.tcx();
+                let bind_ty = ty::reified_bundle_owned(
+                    tcx,
+                    self.expr_ty(bind.bundle)?,
+                    ty::ContextSolveStage::ClosureUpVars,
+                );
+
+                let mut kind = ty::BorrowKind::ImmBorrow;
+
+                for field in bind_ty.fields.values() {
+                    for member in field {
+                        if member.mutability.is_mut() {
+                            kind = ty::BorrowKind::MutBorrow;
+                        }
+                    }
+                }
+
+                // Same as with `Pack`, we have to assume the worst case scenario where an inferred
+                // bundle contains a mutable reference.
+                if !bind_ty.infer_sets.is_empty() {
+                    kind = ty::BorrowKind::MutBorrow;
+                }
             },
 
             hir::StmtKind::Item(_) => {

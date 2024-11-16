@@ -32,6 +32,7 @@ pub fn provide(providers: &mut Providers) {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[derive(HashStable, Encodable, Decodable)]
 pub enum ContextSolveStage {
+    ClosureUpVars,
     GraphSolving,
     MirBuilding,
 }
@@ -150,6 +151,14 @@ fn reified_bundle<'tcx>(
     tcx: TyCtxt<'tcx>,
     (ty, stage): (Ty<'tcx>, ContextSolveStage),
 ) -> &'tcx ReifiedBundle<'tcx> {
+    tcx.arena.alloc(reified_bundle_owned(tcx, ty, stage))
+}
+
+pub fn reified_bundle_owned<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    ty: Ty<'tcx>,
+    stage: ContextSolveStage,
+) -> ReifiedBundle<'tcx> {
     // Extract the inner type.
     let bundle_arg = ty.bundle_item_set(tcx);
 
@@ -171,14 +180,14 @@ fn reified_bundle<'tcx>(
     });
     walker.collect_fields_in_bundle_item_set(bundle_arg);
 
-    tcx.arena.alloc(ReifiedBundle {
+    ReifiedBundle {
         original_bundle: ty,
         value_ty,
         fields: walker.fields,
         generic_fields: walker.generic_fields,
         generic_sets: walker.generic_sets,
         infer_sets: walker.infer_sets,
-    })
+    }
 }
 
 struct ReifiedBundleWalker<'tcx> {
@@ -469,12 +478,13 @@ pub enum PackShape<'tcx> {
 
     /// A placeholder for local infer bundle reborrows. Does not show up after the `GraphSolving`
     /// solving stage.
-    ExtractLocalInferPlaceholder,
+    ExtractLocalInferPlaceholder(usize),
 
     /// Constructs a tuple of sub-shapes.
     MakeTuple(Box<[PackShape<'tcx>]>),
 
-    /// Constructs an inference bundle containing the sub-values.
+    /// Constructs an inference bundle containing the sub-values. Does not show up until after the
+    /// `GraphSolving` stage.
     MakeInfer {
         bundle: DefId,
         inner_ty: Ty<'tcx>,
@@ -571,11 +581,11 @@ impl<'tcx> Deref for PackShapeStoreRes<'tcx> {
     }
 }
 
-fn make_bundle_pack_shape<'tcx>(
+pub fn make_bundle_pack_shape<'tcx>(
     tcx: TyCtxt<'tcx>,
     stage: ContextSolveStage,
     flags: ty::PackFlags,
-    bundles: &[&'tcx ty::ReifiedBundle<'tcx>],
+    bundles: &[&ty::ReifiedBundle<'tcx>],
     ty: Ty<'tcx>,
 ) -> PackShape<'tcx> {
     match ty::ReifiedBundleItemSet::decode(ty) {
@@ -670,11 +680,11 @@ fn make_bundle_pack_shape<'tcx>(
                     inner_shape: Box::new(inner_shape)
                 }
             } else {
-                for bundle in bundles {
+                for (i, bundle) in bundles.iter().enumerate() {
                     // Ambiguity errors will be handled by regular reference ambiguity semantics with
                     // tge desugaring of these infer bundles to regular component sets.
                     if bundle.infer_sets.contains_key(&did) {
-                        return PackShape::ExtractLocalInferPlaceholder;
+                        return PackShape::ExtractLocalInferPlaceholder(i);
                     };
                 }
 
@@ -790,7 +800,7 @@ pub fn visit_context_uses_by_pack_shape<'tcx>(
         }
         PackShape::ExtractLocalRef(..)
         | PackShape::ExtractLocalMove(..)
-        | PackShape::ExtractLocalInferPlaceholder
+        | PackShape::ExtractLocalInferPlaceholder(..)
         | PackShape::Error(..) => {
             // (does not directly introduce context uses)
         }

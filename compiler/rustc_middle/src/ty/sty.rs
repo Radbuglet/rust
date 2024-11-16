@@ -1414,6 +1414,7 @@ impl<'tcx> Ty<'tcx> {
             ty::Adt(def, args) if Some(def.did()) == bundle_did => {
                 args[0].expect_ty()
             }
+            ty::Error(..) => self,
             _ => bug!("reified_bundle expected bundle type, got {self}"),
         }
     }
