@@ -112,11 +112,15 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         }
 
         // Limit their lifetimes to the scope of the bind.
-        let equate_refs = [lt_limiter].into_iter()
+        let relate_refs = [lt_limiter].into_iter()
             .chain(binders.values().map(|item_info| Place::from(item_info.ref_local())))
             .collect::<Vec<_>>();
 
-        self.equate_ref_lifetimes(block, source_info, &equate_refs);
+        let relate_csts = (1..relate_refs.len())
+            .map(|binder| (0, binder))
+            .collect::<Vec<_>>();
+
+        self.relate_lifetimes(block, source_info, &relate_refs, &relate_csts);
     }
 
     pub(crate) fn lookup_context_binder(
@@ -130,15 +134,35 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             .unwrap_or_else(|| panic!("unknown context item {item:?} under binder {binder:?}"))
     }
 
-    pub(crate) fn equate_ref_lifetimes(
+    pub(crate) fn relate_lifetimes(
         &mut self,
         block: BasicBlock,
         source_info: SourceInfo,
         refs: &[Place<'tcx>],
+        constraints: &[(usize, usize)],
     ) {
+        // Determine the type of the constraint marker. This will have the form...
+        // `[(&'erased &'erased (), ..., &'erased &'erased ()); 0]`
+
+        // Type: &'erased &'erased ()
+        let single_constraint_ty = Ty::new_imm_ref(
+            self.tcx,
+            self.tcx.lifetimes.re_erased,
+            Ty::new_imm_ref(self.tcx, self.tcx.lifetimes.re_erased, self.tcx.types.unit)
+        );
+
+        // Type: `(&'erased &'erased (), ..., &'erased &'erased ())`
+        let constraints_inner_ty = (0..constraints.len()).map(|_| single_constraint_ty);
+        let constraints_inner_ty = Ty::new_tup_from_iter(self.tcx, constraints_inner_ty);
+
+        // Type: `[(&'erased &'erased (), ..., &'erased &'erased ()); 0]`
+        let constraints_ty = Ty::new_array(self.tcx, constraints_inner_ty, 0);
+
         // Create `ascribe_temp` temporary and give it the type...
-        // `(&'erased {refs[0].muta} {refs[0].pointee}, ...)`
-        let ascribe_temp_ty = refs.iter().map(|&ref_| ref_.ty(&self.local_decls, self.tcx).ty);
+        // `(&'erased {refs[0].muta} {refs[0].pointee}, ..., constraints_ty)`
+        let ascribe_temp_ty = refs.iter()
+            .map(|&ref_| ref_.ty(&self.local_decls, self.tcx).ty)
+            .chain([constraints_ty]);
         let ascribe_temp_ty = Ty::new_tup_from_iter(self.tcx, ascribe_temp_ty);
         let refs_tys = match ascribe_temp_ty.kind() {
             ty::Tuple(tys) => tys,
@@ -156,6 +180,21 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             assign_fields.push(mir::Operand::Move(ref_));
         }
 
+        let empty_array = self.local_decls.push(mir::LocalDecl::new(
+            constraints_ty,
+            source_info.span,
+        ));
+        self.cfg.push_assign(
+            block,
+            source_info,
+            empty_array.into(),
+            Rvalue::Aggregate(
+                Box::new(mir::AggregateKind::Array(constraints_inner_ty)),
+                IndexVec::new(),
+            ),
+        );
+        assign_fields.push(mir::Operand::Move(empty_array.into()));
+
         self.cfg.push_assign(
             block,
             source_info,
@@ -167,47 +206,75 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         );
 
         // Ascribe the appropriate type of `ascribe_temp`
-        let mut var_count = 1;
-        let ascribe_temp_var_ty = refs.iter()
-            .zip(refs_tys.iter())
-            .map(|(&ref_, ref_ty)| {
-                let (pointee, muta) = match ref_ty.kind() {
-                    &ty::Ref(_re, pointee, muta) => (pointee, muta),
-                    _ => unreachable!("expected reference, got {ref_ty}"),
+        let mut var_count = 0;
+        let mut ascribe_temp_var_tys = Vec::new();
+
+        for (&ref_, ref_ty) in refs.iter().zip(refs_tys.iter()) {
+            let (pointee, muta) = match ref_ty.kind() {
+                &ty::Ref(_re, pointee, muta) => (pointee, muta),
+                _ => unreachable!("expected reference, got {ref_ty}"),
+            };
+
+            let re = ty::Region::new_bound(
+                self.tcx,
+                ty::DebruijnIndex::ZERO,
+                ty::BoundRegion {
+                    var: ty::BoundVar::from_u32(var_count),
+                    kind: ty::BoundRegionKind::BrAnon,
+                }
+            );
+            var_count += 1;
+
+            // N.B. This old folds *free* regions.
+            let pointee = pointee.fold_with(&mut ty::fold::RegionFolder::new(
+                self.tcx,
+                &mut |_, debrujin| {
+                    let re = ty::Region::new_bound(
+                        self.tcx,
+                        debrujin,
+                        ty::BoundRegion {
+                            var: ty::BoundVar::from_u32(var_count),
+                            kind: ty::BoundRegionKind::BrAnon,
+                        },
+                    );
+                    var_count += 1;
+                    re
+                },
+            ));
+
+            ascribe_temp_var_tys.push(Ty::new_ref(self.tcx, re, pointee, muta));
+        }
+
+        let constraints_ascribe_ty = constraints.iter()
+            .map(|(sub, sup)| {
+                let outer_region = |idx: usize| {
+                    let ty::Ref(re, _ty, _muta) = ascribe_temp_var_tys[idx].kind() else {
+                        unreachable!();
+                    };
+                    *re
                 };
 
-                let re = ty::Region::new_bound(
-                    self.tcx,
-                    ty::DebruijnIndex::ZERO,
-                    ty::BoundRegion {
-                        var: ty::BoundVar::ZERO,
-                        kind: ty::BoundRegionKind::BrAnon,
-                    }
-                );
+                let sub = outer_region(*sub);
+                let sup = outer_region(*sup);
 
-                // N.B. This old folds *free* regions.
-                let pointee = pointee.fold_with(&mut ty::fold::RegionFolder::new(
+                // We want `sub` to outlive `sup`. Recall that `&'a &'b ()` is only W.F. if `'b: 'a`.
+                // In other words, the annotation is only allowed to make choices where `'b` outlives
+                // `'a`. Substituting variable names, we need to use the type `&'sup &'sub`.
+                Ty::new_imm_ref(
                     self.tcx,
-                    &mut |_, debrujin| {
-                        let re = ty::Region::new_bound(
-                            self.tcx,
-                            debrujin,
-                            ty::BoundRegion {
-                                var: ty::BoundVar::from_u32(var_count),
-                                kind: ty::BoundRegionKind::BrAnon,
-                            },
-                        );
-                        var_count += 1;
-                        re
-                    },
-                ));
-
-                Ty::new_ref(self.tcx, re, pointee, muta)
+                    sup,
+                    Ty::new_imm_ref(self.tcx, sub, self.tcx.types.unit),
+                )
             });
-        let ascribe_temp_var_ty = Ty::new_tup_from_iter(self.tcx, ascribe_temp_var_ty);
+
+        let constraints_ascribe_ty = Ty::new_tup_from_iter(self.tcx, constraints_ascribe_ty);
+        let constraints_ascribe_ty = Ty::new_array(self.tcx, constraints_ascribe_ty, 0);
+        ascribe_temp_var_tys.push(constraints_ascribe_ty);
+
+        let ascribe_temp_var_ty = Ty::new_tup_from_iter(self.tcx, ascribe_temp_var_tys.into_iter());
 
         let ascribe_variables = (0..var_count).map(|_| ty::CanonicalVarInfo {
-            kind: ty::CanonicalVarKind::Region(ty::UniverseIndex::ROOT)
+            kind: ty::CanonicalVarKind::Region(ty::UniverseIndex::ROOT),
         });
         let ascribe_variables = self.tcx.mk_canonical_var_infos_from_iter(ascribe_variables);
 

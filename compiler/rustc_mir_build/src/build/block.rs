@@ -355,7 +355,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
 
                             // Limit lifetimes
                             let lt_limiter = this.new_lt_limiter(block, source_info);
-                            let equated_places = [lt_limiter].into_iter()
+                            let relate_refs = [lt_limiter].into_iter()
                                 .chain(bundle_reified.fields.values().flat_map(|fields| {
                                     fields.iter().map(|field| {
                                         field.location.project_place(
@@ -367,7 +367,11 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                                 }))
                                 .collect::<Vec<_>>();
 
-                            this.equate_ref_lifetimes(block, source_info, &equated_places);
+                            let relate_csts = (1..relate_refs.len())
+                                .map(|binder| (binder, 0))
+                                .collect::<Vec<_>>();
+
+                            this.relate_lifetimes(block, source_info, &relate_refs, &relate_csts);
 
                             // Prepare context
                             this.init_and_borrow_context_binder_locals(
