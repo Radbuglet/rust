@@ -209,7 +209,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         let mut var_count = 0;
         let mut ascribe_temp_var_tys = Vec::new();
 
-        for (&ref_, ref_ty) in refs.iter().zip(refs_tys.iter()) {
+        // `.take()` ensures that we avoid the constraint marker.
+        for ref_ty in refs_tys.iter().take(refs.len()) {
             let (pointee, muta) = match ref_ty.kind() {
                 &ty::Ref(_re, pointee, muta) => (pointee, muta),
                 _ => unreachable!("expected reference, got {ref_ty}"),
