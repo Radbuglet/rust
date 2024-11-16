@@ -127,6 +127,10 @@ pub struct ReifiedBundleProj<'tcx> {
 }
 
 impl<'tcx> ReifiedBundleProjs<'tcx> {
+    pub fn ty(&self) -> Ty<'tcx> {
+        self.0.last().unwrap().ty
+    }
+
     pub fn project_place(
         &self,
         tcx: TyCtxt<'tcx>,

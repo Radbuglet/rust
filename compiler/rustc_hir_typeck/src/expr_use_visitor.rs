@@ -633,6 +633,8 @@ impl<'tcx, Cx: TypeInformationCtxt<'tcx>, D: Delegate<'tcx>> ExprUseVisitor<'tcx
                 if !bind_ty.infer_sets.is_empty() {
                     kind = ty::BorrowKind::MutBorrow;
                 }
+
+                self.borrow_expr(bind.bundle, kind)?;
             },
 
             hir::StmtKind::Item(_) => {

@@ -350,21 +350,48 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                             let bundle_reified = this.tcx.reified_bundle((bundle_ty, MirBuilding));
 
                             // Lower bundle expression
-                            let bundle_out = this.temp(bundle_ty, bundle_span);
-                            let _ = unpack!(block = this.expr_into_dest(bundle_out, block, *bundle));
+                            let bundle_place = unpack!(block = this.as_place(block, *bundle));
+
+                            // Reborrow the fields that we need
+                            let borrowed_fields = bundle_reified
+                                .fields
+                                .values()
+                                .map(|fields| {
+                                    let field = &fields[0];
+
+                                    let reborrow = this.local_decls.push(LocalDecl::new(
+                                        field.location.ty(),
+                                        bundle_span,
+                                    ));
+
+                                    this.cfg.push_assign(
+                                        block,
+                                        source_info,
+                                        Place::from(reborrow),
+                                        Rvalue::Ref(
+                                            this.tcx.lifetimes.re_erased,
+                                            match field.mutability {
+                                                Mutability::Not => BorrowKind::Shared,
+                                                Mutability::Mut => BorrowKind::Mut {
+                                                    kind: MutBorrowKind::Default,
+                                                }
+                                            },
+                                            field.location.project_place(
+                                                this.tcx,
+                                                bundle_place,
+                                                [PlaceElem::Deref],
+                                            ),
+                                        ),
+                                    );
+
+                                    reborrow
+                                })
+                                .collect::<Vec<_>>();
 
                             // Limit lifetimes
                             let lt_limiter = this.new_lt_limiter_static(block, source_info);
                             let relate_refs = [lt_limiter].into_iter()
-                                .chain(bundle_reified.fields.values().flat_map(|fields| {
-                                    fields.iter().map(|field| {
-                                        field.location.project_place(
-                                            this.tcx,
-                                            bundle_out,
-                                            [],
-                                        )
-                                    })
-                                }))
+                                .chain(borrowed_fields.iter().copied().map(Place::from))
                                 .collect::<Vec<_>>();
 
                             let relate_csts = (1..relate_refs.len())
