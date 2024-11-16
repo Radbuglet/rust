@@ -995,7 +995,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             let source_info = self.source_info(rustc_span::DUMMY_SP);
             self.define_context_locals(source_info, expr_id);
 
-            let lt_limiter = self.new_lt_limiter(block, source_info);
+            let lt_limiter = self.new_lt_limiter_func(block, source_info);
             self.init_and_borrow_context_binder_locals(
                 block,
                 source_info,

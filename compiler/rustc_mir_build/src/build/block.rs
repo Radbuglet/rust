@@ -354,7 +354,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                             let _ = unpack!(block = this.expr_into_dest(bundle_out, block, *bundle));
 
                             // Limit lifetimes
-                            let lt_limiter = this.new_lt_limiter(block, source_info);
+                            let lt_limiter = this.new_lt_limiter_static(block, source_info);
                             let relate_refs = [lt_limiter].into_iter()
                                 .chain(bundle_reified.fields.values().flat_map(|fields| {
                                     fields.iter().map(|field| {

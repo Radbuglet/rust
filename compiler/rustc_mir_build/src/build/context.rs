@@ -318,7 +318,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         }
     }
 
-    pub(crate) fn new_lt_limiter(&mut self, block: BasicBlock, source_info: SourceInfo) -> Place<'tcx> {
+    pub(crate) fn new_lt_limiter_func(&mut self, block: BasicBlock, source_info: SourceInfo) -> Place<'tcx> {
         let lt_limiter = self.temp(self.tcx.types.unit, source_info.span);
         self.cfg.push_assign_unit(block, source_info, lt_limiter, self.tcx);
 
@@ -336,6 +336,43 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     kind: mir::MutBorrowKind::Default,
                 },
                 lt_limiter,
+            ),
+        );
+
+        lt_limiter_ref
+    }
+
+    pub(crate) fn new_lt_limiter_static(
+        &mut self,
+        block: BasicBlock,
+        source_info: SourceInfo,
+    ) -> Place<'tcx> {
+        let lt_limiter_ty = Ty::new_mut_ref(
+            self.tcx,
+            self.tcx.lifetimes.re_erased,
+            self.tcx.types.unit,
+        );
+
+        let lt_limiter_ref = self.temp(lt_limiter_ty, source_info.span);
+
+        self.cfg.push_assign(
+            block,
+            source_info,
+            lt_limiter_ref,
+            Rvalue::Use(
+                Operand::Constant(Box::new(mir::ConstOperand {
+                    span: source_info.span,
+                    user_ty: None,
+                    const_: mir::Const::Val(
+                        mir::ConstValue::Scalar(
+                            mir::interpret::Scalar::Int(
+                                // Use 1 as the dangling pointer's address.
+                                ty::ScalarInt::try_from_target_usize(1u32, self.tcx).unwrap(),
+                            ),
+                        ),
+                        lt_limiter_ty,
+                    ),
+                })),
             ),
         );
 
