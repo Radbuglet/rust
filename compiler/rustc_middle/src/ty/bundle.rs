@@ -463,7 +463,7 @@ impl<'tcx> ReifiedContextItem<'tcx> {
     }
 }
 
-// === THIR Parsing === //
+// === PackShape Parsing === //
 
 #[derive(Clone, Debug, HashStable)]
 pub enum PackShape<'tcx> {
@@ -676,11 +676,12 @@ pub fn make_bundle_pack_shape<'tcx>(
         ty::ReifiedBundleItemSet::InferSet(did, re) => {
             if stage.fully_resolved() {
                 let inner_ty = resolve_infer_bundle_set(tcx, did, re);
+                let inner_values_ty = resolve_infer_bundle_values(tcx, did, re);
                 let inner_shape = make_bundle_pack_shape(tcx, stage, flags, bundles, inner_ty);
 
                 PackShape::MakeInfer {
                     bundle: did,
-                    inner_ty: inner_ty,
+                    inner_ty: inner_values_ty,
                     inner_shape: Box::new(inner_shape)
                 }
             } else {
@@ -699,32 +700,60 @@ pub fn make_bundle_pack_shape<'tcx>(
     }
 }
 
-pub fn visit_context_used_by_expr<'tcx>(
+// === THIR Parsing === //
+
+#[derive(Debug, Clone)]
+pub struct ContextUsedByExpr {
+    pub concrete: Vec<(DefId, Mutability)>,
+    pub infer: Option<DefId>,
+}
+
+pub fn context_used_by_expr<'tcx>(
     tcx: TyCtxt<'tcx>,
     stage: ContextSolveStage,
     pack_shape_store: &mut PackShapeStore<'tcx>,
     body: &thir::Thir<'tcx>,
     expr: &thir::Expr<'tcx>,
-    f: &mut impl FnMut(DefId, Mutability),
+) -> ContextUsedByExpr {
+    let mut uses = ContextUsedByExpr {
+        concrete: Vec::new(),
+        infer: None,
+    };
+    context_used_by_expr_inner(
+        tcx,
+        stage,
+        pack_shape_store,
+        body,
+        expr,
+        &mut uses,
+    );
+    uses
+}
+
+fn context_used_by_expr_inner<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    stage: ContextSolveStage,
+    pack_shape_store: &mut PackShapeStore<'tcx>,
+    body: &thir::Thir<'tcx>,
+    expr: &thir::Expr<'tcx>,
+    uses: &mut ContextUsedByExpr,
 ) {
     use thir::ExprKind::*;
 
     match &expr.kind {
         &ContextRef { item, muta } => {
-            f(item, muta);
+            uses.concrete.push((item, muta));
         }
         Pack { .. } => {
             let shape = pack_shape_store.resolve(tcx, stage, body, expr);
-            visit_context_uses_by_pack_shape(tcx, &shape, f);
+            context_used_by_pack_shape(tcx, &shape, uses);
         }
         &Call { ty, .. } => {
             if
                 stage == ContextSolveStage::MirBuilding &&
                 let Some(def_id) = extract_static_callee_for_context(tcx, ty)
             {
-                for (item, muta) in tcx.components_borrowed(def_id).iter() {
-                    f(item, muta);
-                }
+                uses.concrete.extend(tcx.components_borrowed(def_id).iter());
             }
         }
 
@@ -778,21 +807,21 @@ pub fn visit_context_used_by_expr<'tcx>(
     }
 }
 
-pub fn visit_context_uses_by_pack_shape<'tcx>(
+pub fn context_used_by_pack_shape<'tcx>(
     tcx: TyCtxt<'tcx>,
     shape: &PackShape<'tcx>,
-    f: &mut impl FnMut(DefId, Mutability),
+    uses: &mut ContextUsedByExpr,
 ) {
     match shape {
         &PackShape::ExtractEnv(muta, item) => {
-            f(item, muta);
+            uses.concrete.push((item, muta));
         }
-        &PackShape::ExtractEnvInfer(_item) => {
-            todo!();
+        &PackShape::ExtractEnvInfer(item) => {
+            uses.infer = Some(item);
         }
         PackShape::MakeTuple(fields) => {
             for field in fields {
-                visit_context_uses_by_pack_shape(tcx, field, f);
+                context_used_by_pack_shape(tcx, field, uses);
             }
         }
         PackShape::MakeInfer {
@@ -800,7 +829,7 @@ pub fn visit_context_uses_by_pack_shape<'tcx>(
             inner_ty: _,
             inner_shape,
         } => {
-            visit_context_uses_by_pack_shape(tcx, inner_shape, f);
+            context_used_by_pack_shape(tcx, inner_shape, uses);
         }
         PackShape::ExtractLocalRef(..)
         | PackShape::ExtractLocalMove(..)
@@ -1043,18 +1072,18 @@ pub struct ContextBorrowsLocalNode<'tcx> {
     /// its environment.
     pub local: ContextSet,
 
-    /// The set of functions called called directly by the function (or the infer bundle binding)
-    /// from its environment.
+    /// The set of functions called (or infer bundle sets inherited) directly by the function (or
+    /// the infer bundle binding) from its environment.
     pub calls: Vec<IndirectContextCall<'tcx>>,
 }
 
 #[derive(Debug, HashStable, TyEncodable, TyDecodable)]
 pub struct IndirectContextCall<'tcx> {
-    /// The `DefId` of the function being called.
+    /// The `DefId` of the function being called (or the infer bundle being inherited).
     pub target: DefId,
 
-    /// The set of context items absorbed by `let static` bindings between the call and the function
-    /// entry (or the infer bundle binding).
+    /// The set of context items absorbed by `let static` bindings between the call (or the infer
+    /// bundle being inherited) and the function entry (or the infer bundle binding).
     pub absorbs: &'tcx ContextSet,
 }
 
@@ -1195,20 +1224,32 @@ impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVi
     fn visit_expr(&mut self, expr: &'thir thir::Expr<'tcx>) {
         use thir::ExprKind::*;
 
-        visit_context_used_by_expr(
+        let uses = context_used_by_expr(
             self.tcx,
             ContextSolveStage::GraphSolving,
             &mut PackShapeStore::new_ignore(),
             self.thir,
             expr,
-            &mut |item, muta| {
-                if self.bind_tracker.resolve(item).is_env() {
-                    self.borrows_nodes[self.curr_borrows_node]
-                        .1
-                        .local
-                        .add(item, muta);
-                }
-        });
+        );
+
+        for (item, muta) in uses.concrete {
+            if self.bind_tracker.resolve(item).is_env() {
+                self.borrows_nodes[self.curr_borrows_node]
+                    .1
+                    .local
+                    .add(item, muta);
+            }
+        }
+
+        if let Some(infer) = uses.infer {
+            self.borrows_nodes[self.curr_borrows_node]
+                .1
+                .calls
+                .push(IndirectContextCall {
+                    target: infer,
+                    absorbs: self.curr_absorb,
+                });
+        }
 
         match &expr.kind {
             &Call { ty, .. } => {

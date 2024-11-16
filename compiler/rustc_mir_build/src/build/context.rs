@@ -1,4 +1,4 @@
-#![expect(unused)]
+#![expect(unused)]  // TODO: Remove
 
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap, IndexEntry};
 use rustc_hir::def_id::DefId;
@@ -454,17 +454,15 @@ impl<'a, 'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for BinderUseVisitor<'a, 
     }
 
     fn visit_expr(&mut self, expr: &'thir thir::Expr<'tcx>) {
-        let mut collector = Vec::new();
-        ty::visit_context_used_by_expr(
+        let uses = ty::context_used_by_expr(
             self.builder.tcx,
             MirBuilding,
             &mut self.builder.ctx_pack_shapes,
             self.builder.thir,
             expr,
-            &mut |item, muta| collector.push((item, muta)),
         );
 
-        for (item, muta) in collector {
+        for (item, muta) in uses.concrete {
             self.introduce_use(item, muta);
         }
 
