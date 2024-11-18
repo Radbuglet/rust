@@ -2676,6 +2676,8 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                     lang_items.clone_trait(),
                     lang_items.deref_trait(),
                     lang_items.deref_mut_trait(),
+                    lang_items.deref_cx_trait(),
+                    lang_items.deref_cx_mut_trait(),
                     self.tcx.get_diagnostic_item(sym::AsRef),
                     self.tcx.get_diagnostic_item(sym::AsMut),
                     self.tcx.get_diagnostic_item(sym::Borrow),
@@ -3452,6 +3454,8 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 self.tcx.lang_items().clone_trait(),
                 self.tcx.lang_items().deref_trait(),
                 self.tcx.lang_items().deref_mut_trait(),
+                self.tcx.lang_items().deref_cx_trait(),
+                self.tcx.lang_items().deref_cx_mut_trait(),
                 self.tcx.lang_items().drop_trait(),
                 self.tcx.get_diagnostic_item(sym::AsRef),
             ];

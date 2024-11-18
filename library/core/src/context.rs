@@ -151,3 +151,27 @@ pub macro unpack {
 pub macro infer_bundle {
     ($lt:lifetime) => { builtin # infer_bundle($lt) },
 }
+
+// === Contextual Operations === //
+
+#[lang = "deref_cx"]
+#[doc(alias = "*")]
+#[doc(alias = "&*")]
+pub trait DerefCx<'i, 'o> {
+    type ContextRef: BundleItemSet;
+
+    #[lang = "deref_cx_target"]
+    type TargetCx: ?Sized;
+
+    #[must_use]
+    fn deref_cx(&'i self, cx: Bundle<Self::ContextRef>) -> &'o Self::TargetCx;
+}
+
+#[lang = "deref_cx_mut"]
+#[doc(alias = "*")]
+pub trait DerefCxMut<'i, 'o>: DerefCx<'i, 'o> {
+    type ContextMut: BundleItemSet;
+
+    #[must_use]
+    fn deref_cx_mut(&'i mut self, cx: Bundle<Self::ContextMut>) -> &'o mut Self::TargetCx;
+}

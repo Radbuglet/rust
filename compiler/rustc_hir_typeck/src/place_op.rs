@@ -1,5 +1,6 @@
 use rustc_errors::Applicability;
 use rustc_hir_analysis::autoderef::Autoderef;
+use rustc_hir::def_id::DefId;
 use rustc_infer::infer::InferOk;
 use rustc_middle::span_bug;
 use rustc_middle::ty::adjustment::{
@@ -8,7 +9,7 @@ use rustc_middle::ty::adjustment::{
 };
 use rustc_middle::ty::{self, Ty};
 use rustc_span::Span;
-use rustc_span::symbol::{Ident, sym};
+use rustc_span::symbol::{Ident, Symbol, sym};
 use tracing::debug;
 use {rustc_ast as ast, rustc_hir as hir};
 
@@ -194,21 +195,40 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     ) -> Option<InferOk<'tcx, MethodCallee<'tcx>>> {
         debug!("try_overloaded_place_op({:?},{:?},{:?})", span, base_ty, op);
 
-        let (Some(imm_tr), imm_op) = (match op {
-            PlaceOp::Deref => (self.tcx.lang_items().deref_trait(), sym::deref),
-            PlaceOp::Index => (self.tcx.lang_items().index_trait(), sym::index),
-        }) else {
-            // Bail if `Deref` or `Index` isn't defined.
-            return None;
+        let lookup = |imm_tr: DefId, imm_op: Symbol| {
+            self.lookup_method_in_trait(
+                self.misc(span),
+                Ident::with_dummy_span(imm_op),
+                imm_tr,
+                base_ty,
+                Some(arg_tys),
+            )
         };
 
-        self.lookup_method_in_trait(
-            self.misc(span),
-            Ident::with_dummy_span(imm_op),
-            imm_tr,
-            base_ty,
-            Some(arg_tys),
-        )
+        match op {
+            PlaceOp::Deref => {
+                if let Some(imm_tr) = self.tcx.lang_items().deref_cx_trait()
+                    && let Some(res) = lookup(imm_tr, sym::deref_cx)
+                {
+                    return Some(res);
+                }
+
+                if let Some(imm_tr) = self.tcx.lang_items().deref_trait()
+                    && let Some(res) = lookup(imm_tr, sym::deref)
+                {
+                    return Some(res);
+                }
+            }
+            PlaceOp::Index => {
+                if let Some(imm_tr) = self.tcx.lang_items().index_trait()
+                    && let Some(res) = lookup(imm_tr, sym::index)
+                {
+                    return Some(res);
+                }
+            }
+        }
+
+        None
     }
 
     fn try_mutable_overloaded_place_op(
@@ -220,21 +240,40 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     ) -> Option<InferOk<'tcx, MethodCallee<'tcx>>> {
         debug!("try_mutable_overloaded_place_op({:?},{:?},{:?})", span, base_ty, op);
 
-        let (Some(mut_tr), mut_op) = (match op {
-            PlaceOp::Deref => (self.tcx.lang_items().deref_mut_trait(), sym::deref_mut),
-            PlaceOp::Index => (self.tcx.lang_items().index_mut_trait(), sym::index_mut),
-        }) else {
-            // Bail if `DerefMut` or `IndexMut` isn't defined.
-            return None;
+        let lookup = |mut_tr: DefId, mut_op: Symbol| {
+            self.lookup_method_in_trait(
+                self.misc(span),
+                Ident::with_dummy_span(mut_op),
+                mut_tr,
+                base_ty,
+                Some(arg_tys),
+            )
         };
 
-        self.lookup_method_in_trait(
-            self.misc(span),
-            Ident::with_dummy_span(mut_op),
-            mut_tr,
-            base_ty,
-            Some(arg_tys),
-        )
+        match op {
+            PlaceOp::Deref => {
+                if let Some(mut_tr) = self.tcx.lang_items().deref_cx_mut_trait()
+                    && let Some(res) = lookup(mut_tr, sym::deref_cx_mut)
+                {
+                    return Some(res);
+                }
+
+                if let Some(mut_tr) = self.tcx.lang_items().deref_mut_trait()
+                    && let Some(res) = lookup(mut_tr, sym::deref_mut)
+                {
+                    return Some(res);
+                }
+            }
+            PlaceOp::Index => {
+                if let Some(mut_tr) = self.tcx.lang_items().index_mut_trait()
+                    && let Some(res) = lookup(mut_tr, sym::index_mut)
+                {
+                    return Some(res);
+                }
+            }
+        }
+
+        None
     }
 
     /// Convert auto-derefs, indices, etc of an expression from `Deref` and `Index`

@@ -1,4 +1,4 @@
-use rustc_infer::infer::InferCtxt;
+use rustc_infer::infer::{InferCtxt, RegionVariableOrigin};
 use rustc_middle::ty::{self, Ty, TyCtxt, TypeVisitableExt};
 use rustc_session::Limit;
 use rustc_span::Span;
@@ -83,6 +83,9 @@ impl<'a, 'tcx> Iterator for Autoderef<'a, 'tcx> {
                 } else {
                     (AutoderefKind::Builtin, ty)
                 }
+            } else if let Some(ty) = self.overloaded_deref_cx_ty(self.state.cur_ty) {
+                // The overloaded deref cx check already normalizes the pointee type.
+                (AutoderefKind::Overloaded, ty)
             } else if let Some(ty) = self.overloaded_deref_ty(self.state.cur_ty) {
                 // The overloaded deref check already normalizes the pointee type.
                 (AutoderefKind::Overloaded, ty)
@@ -156,6 +159,47 @@ impl<'a, 'tcx> Autoderef<'a, 'tcx> {
             [ty],
         ))?;
         debug!("overloaded_deref_ty({:?}) = ({:?}, {:?})", ty, normalized_ty, obligations);
+        self.state.obligations.extend(obligations);
+
+        Some(self.infcx.resolve_vars_if_possible(normalized_ty))
+    }
+
+    fn overloaded_deref_cx_ty(&mut self, ty: Ty<'tcx>) -> Option<Ty<'tcx>> {
+        debug!("overloaded_deref_cx_ty({:?})", ty);
+        let tcx = self.infcx.tcx;
+
+        if ty.references_error() {
+            return None;
+        }
+
+        // <ty as DerefCx>
+        let in_re_var = self.infcx.next_region_var(RegionVariableOrigin::Autoref(self.span));
+        let out_re_var = self.infcx.next_region_var(RegionVariableOrigin::Autoref(self.span));
+        let trait_args: [ty::GenericArg<'_>; 3] = [
+            ty.into(),
+            in_re_var.into(),
+            out_re_var.into(),
+        ];
+
+        let trait_ref = ty::TraitRef::new(tcx, tcx.lang_items().deref_cx_trait()?, trait_args);
+        let cause = traits::ObligationCause::misc(self.span, self.body_id);
+        let obligation = traits::Obligation::new(
+            tcx,
+            cause.clone(),
+            self.param_env,
+            ty::Binder::dummy(trait_ref),
+        );
+        if !self.infcx.predicate_may_hold(&obligation) {
+            debug!("overloaded_deref_cx_ty: cannot match obligation");
+            return None;
+        }
+
+        let (normalized_ty, obligations) = self.structurally_normalize(Ty::new_projection(
+            tcx,
+            tcx.lang_items().deref_cx_target()?,
+            trait_args,
+        ))?;
+        debug!("overloaded_deref_cx_ty({:?}) = ({:?}, {:?})", ty, normalized_ty, obligations);
         self.state.obligations.extend(obligations);
 
         Some(self.infcx.resolve_vars_if_possible(normalized_ty))
