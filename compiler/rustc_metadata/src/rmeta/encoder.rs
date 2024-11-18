@@ -1759,7 +1759,7 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
                 record!(self.tables.mir_coroutine_witnesses[def_id.to_def_id()] <- witnesses);
             }
 
-            if ty::can_def_borrow_extern_context(tcx, def_id.to_def_id()) {
+            if ty::has_components_borrowed_entry(tcx, def_id.to_def_id()) {
                 record!(self.tables.components_borrowed[def_id.to_def_id()] <-
                     tcx.components_borrowed(def_id));
             }

@@ -219,8 +219,13 @@ fn layout_of_uncached<'tcx>(
             univariant(IndexSlice::empty(), &ReprOptions::default(), StructKind::AlwaysSized)?
         },
 
-        ty::InferBundle(..) => {
-            todo!();
+        ty::InferBundle(def_id, re) => {
+            let values = ty::resolve_infer_bundle_values(
+                tcx,
+                def_id,
+                re,
+            );
+            layout_of_uncached(cx, values)?
         }
 
         // Potentially-wide pointers.

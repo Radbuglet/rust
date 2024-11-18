@@ -4,7 +4,7 @@ use std::panic::Location;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet, FxIndexMap, FxIndexSet, IndexEntry};
 use rustc_data_structures::graph::{DirectedGraph, Successors, scc};
 use rustc_data_structures::sync::Lrc;
-use rustc_hir::def_id::{DefId, LocalDefId, LocalDefIdMap};
+use rustc_hir::{def_id::{DefId, LocalDefId, LocalDefIdMap}, def::DefKind};
 use rustc_index::IndexVec;
 use rustc_macros::{HashStable, TyDecodable, TyEncodable, Encodable, Decodable};
 
@@ -864,9 +864,12 @@ pub fn context_binds_by_stmt<'tcx>(
     }
 }
 
-// TODO: Rename this because we have to check closures and other things that very much do not borrow
-//  context.
-pub fn can_def_borrow_extern_context<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> bool {
+pub fn has_components_borrowed_entry<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> bool {
+    tcx.def_kind(def_id) == DefKind::InferBundle
+        || can_participate_in_context_solving(tcx, def_id)
+}
+
+pub fn can_participate_in_context_solving<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> bool {
     tcx.is_mir_available(def_id)
         // The non-const condition is load bearing as it helps avoid recursive query calls.
         && !tcx.is_const_fn_raw(def_id)
@@ -875,7 +878,7 @@ pub fn can_def_borrow_extern_context<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> 
 pub fn extract_static_callee_for_context<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Option<DefId> {
     match ty.kind() {
         &ty::FnDef(def_id, ..) => {
-            can_def_borrow_extern_context(tcx, def_id).then_some(def_id)
+            can_participate_in_context_solving(tcx, def_id).then_some(def_id)
         }
         ty::Bool
         | ty::Char
@@ -1401,10 +1404,11 @@ fn components_borrowed_graph<'tcx>(
         nodes: FxIndexMap::default(),
     };
 
-    // `can_def_borrow_extern_context` contains a check for `is_mir_available`, which uses
-    // `tcx.mir_keys` to make its determination. Hence, this will not miss any important `LocalDefId`s.
+    // `can_participate_in_context_solving` contains a check for `is_mir_available`, which uses
+    // `tcx.mir_keys` to make its determination. Hence, this will not miss any important
+    // `LocalDefId`s.
     for &def_id in tcx.mir_keys(()) {
-        if !can_def_borrow_extern_context(tcx, def_id.to_def_id()) {
+        if !can_participate_in_context_solving(tcx, def_id.to_def_id()) {
             continue;
         }
 
@@ -1624,11 +1628,26 @@ fn components_borrowed_graph<'tcx>(
         map.insert(node_def_id, weight.local);
     }
 
+    // Validate function borrows
+    // TODO
+
     tcx.arena.alloc(map)
 }
 
-fn components_borrowed<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> &'tcx ty::ContextSet {
-    tcx.components_borrowed_graph(())[&def_id]
+fn components_borrowed<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> &'tcx ContextSet {
+    assert!(has_components_borrowed_entry(tcx, def_id.to_def_id()));
+
+    tcx.components_borrowed_graph(())
+        .get(&def_id)
+        .copied()
+        .unwrap_or_else(|| {
+            assert_eq!(
+                tcx.def_kind(def_id.to_def_id()),
+                DefKind::InferBundle,
+                "only infer bundles can lack an entry in the context borrow graph, got {def_id:?}",
+            );
+            tcx.arena.alloc(ContextSet::default())
+        })
 }
 
 pub fn resolve_infer_bundle_set<'tcx>(
