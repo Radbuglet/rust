@@ -149,9 +149,9 @@ impl<'tcx> Cx<'tcx> {
                     },
                 };
 
-                let expr = Box::new([self.thir.exprs.push(expr)]);
+                let expr = [self.thir.exprs.push(expr)];
 
-                self.overloaded_place(hir_expr, adjustment.target, Some(call), expr, deref.span)
+                self.overloaded_place(hir_expr, adjustment.target, Some(call), &expr, deref.span)
             }
             Adjust::Borrow(AutoBorrow::Ref(_, m)) => ExprKind::Borrow {
                 borrow_kind: m.to_borrow_kind(),
@@ -507,7 +507,7 @@ impl<'tcx> Cx<'tcx> {
                 if self.typeck_results().is_method_call(expr) {
                     let lhs = self.mirror_expr(lhs);
                     let rhs = self.mirror_expr(rhs);
-                    self.overloaded_operator(expr, Box::new([lhs, rhs]))
+                    self.overloaded_operator(expr, &[lhs, rhs])
                 } else {
                     ExprKind::AssignOp {
                         op: bin_op(op.node),
@@ -523,7 +523,7 @@ impl<'tcx> Cx<'tcx> {
                 if self.typeck_results().is_method_call(expr) {
                     let lhs = self.mirror_expr(lhs);
                     let rhs = self.mirror_expr(rhs);
-                    self.overloaded_operator(expr, Box::new([lhs, rhs]))
+                    self.overloaded_operator(expr, &[lhs, rhs])
                 } else {
                     match op.node {
                         hir::BinOpKind::And => ExprKind::LogicalOp {
@@ -556,7 +556,7 @@ impl<'tcx> Cx<'tcx> {
                         expr,
                         expr_ty,
                         None,
-                        Box::new([lhs, index]),
+                        &[lhs, index],
                         brackets_span,
                     )
                 } else {
@@ -567,7 +567,7 @@ impl<'tcx> Cx<'tcx> {
             hir::ExprKind::Unary(hir::UnOp::Deref, arg) => {
                 if self.typeck_results().is_method_call(expr) {
                     let arg = self.mirror_expr(arg);
-                    self.overloaded_place(expr, expr_ty, None, Box::new([arg]), expr.span)
+                    self.overloaded_place(expr, expr_ty, None, &[arg], expr.span)
                 } else {
                     ExprKind::Deref { arg: self.mirror_expr(arg) }
                 }
@@ -576,7 +576,7 @@ impl<'tcx> Cx<'tcx> {
             hir::ExprKind::Unary(hir::UnOp::Not, arg) => {
                 if self.typeck_results().is_method_call(expr) {
                     let arg = self.mirror_expr(arg);
-                    self.overloaded_operator(expr, Box::new([arg]))
+                    self.overloaded_operator(expr, &[arg])
                 } else {
                     ExprKind::Unary { op: UnOp::Not, arg: self.mirror_expr(arg) }
                 }
@@ -585,7 +585,7 @@ impl<'tcx> Cx<'tcx> {
             hir::ExprKind::Unary(hir::UnOp::Neg, arg) => {
                 if self.typeck_results().is_method_call(expr) {
                     let arg = self.mirror_expr(arg);
-                    self.overloaded_operator(expr, Box::new([arg]))
+                    self.overloaded_operator(expr, &[arg])
                 } else if let hir::ExprKind::Lit(lit) = arg.kind {
                     ExprKind::Literal { lit, neg: true }
                 } else {
@@ -1096,13 +1096,52 @@ impl<'tcx> Cx<'tcx> {
         }
     }
 
+    fn overloaded_method_args(
+        &mut self,
+        span: Span,
+        callee: Ty<'tcx>,
+        args: &[ExprId],
+    ) -> Box<[ExprId]> {
+        // TODO: I don't think this is the correct way to resolve these types...
+        let callee = self.tcx.normalize_erasing_regions(
+            self.param_env,
+            callee.fn_sig(self.tcx),
+        );
+
+        Box::from_iter(callee.inputs()
+            .iter()
+            .enumerate()
+            .map(|(i, ty)| {
+                if let Some(arg) = args.get(i) {
+                    return *arg;
+                }
+
+                // TODO: Unify with other auto-arg system.
+                match ty.skip_binder().kind() {
+                    ty::Adt(def, _) if Some(def.did()) == self.tcx.lang_items().bundle() => {
+                        let expr = Expr {
+                            kind: self.lower_pack_expr(ty::PackFlags::AllowEnv, &[]),
+                            ty: *ty.skip_binder(),
+                            temp_lifetime: None,
+                            span,
+                        };
+                        self.thir.exprs.push(expr)
+                    }
+                    _ => panic!("unknown auto-argument type {ty:?}"),
+                }
+            }))
+    }
+
     fn overloaded_operator(
         &mut self,
         expr: &'tcx hir::Expr<'tcx>,
-        args: Box<[ExprId]>,
+        args: &[ExprId],
     ) -> ExprKind<'tcx> {
         let fun = self.method_callee(expr, expr.span, None);
         let fun = self.thir.exprs.push(fun);
+
+        let args = self.overloaded_method_args(expr.span, self.thir[fun].ty, args);
+
         ExprKind::Call {
             ty: self.thir[fun].ty,
             fun,
@@ -1117,7 +1156,7 @@ impl<'tcx> Cx<'tcx> {
         expr: &'tcx hir::Expr<'tcx>,
         place_ty: Ty<'tcx>,
         overloaded_callee: Option<Ty<'tcx>>,
-        args: Box<[ExprId]>,
+        args: &[ExprId],
         span: Span,
     ) -> ExprKind<'tcx> {
         // For an overloaded *x or x[y] expression of type T, the method
@@ -1139,6 +1178,9 @@ impl<'tcx> Cx<'tcx> {
         let fun = self.method_callee(expr, span, overloaded_callee);
         let fun = self.thir.exprs.push(fun);
         let fun_ty = self.thir[fun].ty;
+
+        let args = self.overloaded_method_args(expr.span, fun_ty, args);
+
         let ref_expr = self.thir.exprs.push(Expr {
             temp_lifetime,
             ty: ref_ty,

@@ -10,18 +10,20 @@ use crate::errors::AutoDerefReachedRecursionLimit;
 use crate::traits;
 use crate::traits::query::evaluate_obligation::InferCtxtExt;
 
+use ty::adjustment::OverloadedDerefKind;
+
 #[derive(Copy, Clone, Debug)]
-pub enum AutoderefKind {
+pub enum AutoderefKind<'tcx> {
     /// A true pointer type, such as `&T` and `*mut T`.
     Builtin,
     /// A type which must dispatch to a `Deref` implementation.
-    Overloaded,
+    Overloaded(OverloadedDerefKind<'tcx>),
 }
 
 struct AutoderefSnapshot<'tcx> {
     at_start: bool,
     reached_recursion_limit: bool,
-    steps: Vec<(Ty<'tcx>, AutoderefKind)>,
+    steps: Vec<(Ty<'tcx>, AutoderefKind<'tcx>)>,
     cur_ty: Ty<'tcx>,
     obligations: Vec<traits::PredicateObligation<'tcx>>,
 }
@@ -83,12 +85,18 @@ impl<'a, 'tcx> Iterator for Autoderef<'a, 'tcx> {
                 } else {
                     (AutoderefKind::Builtin, ty)
                 }
-            } else if let Some(ty) = self.overloaded_deref_cx_ty(self.state.cur_ty) {
+            } else if let Some((ty, in_re, out_re)) = self.overloaded_deref_cx_ty(self.state.cur_ty) {
                 // The overloaded deref cx check already normalizes the pointee type.
-                (AutoderefKind::Overloaded, ty)
+                (
+                    AutoderefKind::Overloaded(OverloadedDerefKind::Contextual {
+                        in_re,
+                        out_re,
+                    }),
+                    ty,
+                )
             } else if let Some(ty) = self.overloaded_deref_ty(self.state.cur_ty) {
                 // The overloaded deref check already normalizes the pointee type.
-                (AutoderefKind::Overloaded, ty)
+                (AutoderefKind::Overloaded(OverloadedDerefKind::Regular), ty)
             } else {
                 return None;
             };
@@ -164,7 +172,11 @@ impl<'a, 'tcx> Autoderef<'a, 'tcx> {
         Some(self.infcx.resolve_vars_if_possible(normalized_ty))
     }
 
-    fn overloaded_deref_cx_ty(&mut self, ty: Ty<'tcx>) -> Option<Ty<'tcx>> {
+    fn overloaded_deref_cx_ty(&mut self, ty: Ty<'tcx>) -> Option<(
+        Ty<'tcx>,
+        ty::Region<'tcx>,
+        ty::Region<'tcx>,
+    )> {
         debug!("overloaded_deref_cx_ty({:?})", ty);
         let tcx = self.infcx.tcx;
 
@@ -202,7 +214,11 @@ impl<'a, 'tcx> Autoderef<'a, 'tcx> {
         debug!("overloaded_deref_cx_ty({:?}) = ({:?}, {:?})", ty, normalized_ty, obligations);
         self.state.obligations.extend(obligations);
 
-        Some(self.infcx.resolve_vars_if_possible(normalized_ty))
+        Some((
+            self.infcx.resolve_vars_if_possible(normalized_ty),
+            self.infcx.resolve_vars_if_possible(in_re_var),
+            self.infcx.resolve_vars_if_possible(out_re_var),
+        ))
     }
 
     #[instrument(level = "debug", skip(self), ret)]
@@ -256,7 +272,7 @@ impl<'a, 'tcx> Autoderef<'a, 'tcx> {
         self.state.obligations.clone()
     }
 
-    pub fn steps(&self) -> &[(Ty<'tcx>, AutoderefKind)] {
+    pub fn steps(&self) -> &[(Ty<'tcx>, AutoderefKind<'tcx>)] {
         &self.state.steps
     }
 

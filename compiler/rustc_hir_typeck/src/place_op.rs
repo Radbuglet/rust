@@ -329,7 +329,12 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                     {
                         let method = self.register_infer_ok_obligations(ok);
                         if let ty::Ref(region, _, mutbl) = *method.sig.output().kind() {
-                            *deref = OverloadedDeref { region, mutbl, span: deref.span };
+                            *deref = OverloadedDeref {
+                                kind: deref.kind,
+                                region,
+                                mutbl,
+                                span: deref.span,
+                            };
                         }
                         // If this is a union field, also throw an error for `DerefMut` of `ManuallyDrop` (see RFC 2514).
                         // This helps avoid accidental drops.

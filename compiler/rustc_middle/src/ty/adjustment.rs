@@ -116,6 +116,7 @@ pub enum Adjust<'tcx> {
 #[derive(Copy, Clone, PartialEq, Debug, TyEncodable, TyDecodable, HashStable)]
 #[derive(TypeFoldable, TypeVisitable)]
 pub struct OverloadedDeref<'tcx> {
+    pub kind: OverloadedDerefKind<'tcx>,
     pub region: ty::Region<'tcx>,
     pub mutbl: hir::Mutability,
     /// The `Span` associated with the field access or method call
@@ -123,12 +124,29 @@ pub struct OverloadedDeref<'tcx> {
     pub span: Span,
 }
 
+#[derive(Copy, Clone, PartialEq, Debug, TyEncodable, TyDecodable, HashStable)]
+#[derive(TypeFoldable, TypeVisitable)]
+pub enum OverloadedDerefKind<'tcx> {
+    Regular,
+    Contextual {
+        in_re: ty::Region<'tcx>,
+        out_re: ty::Region<'tcx>,
+    },
+}
+
 impl<'tcx> OverloadedDeref<'tcx> {
     /// Get the zst function item type for this method call.
     pub fn method_call(&self, tcx: TyCtxt<'tcx>, source: Ty<'tcx>) -> Ty<'tcx> {
-        let trait_def_id = match self.mutbl {
-            hir::Mutability::Not => tcx.require_lang_item(LangItem::Deref, None),
-            hir::Mutability::Mut => tcx.require_lang_item(LangItem::DerefMut, None),
+        use OverloadedDerefKind::*;
+
+        let trait_def_id = match (self.mutbl, self.kind) {
+            (hir::Mutability::Not, Regular) => tcx.require_lang_item(LangItem::Deref, None),
+            (hir::Mutability::Mut, Regular) => tcx.require_lang_item(LangItem::DerefMut, None),
+            (hir::Mutability::Not, Contextual { .. }) =>
+                tcx.require_lang_item(LangItem::DerefCx, None),
+
+            (hir::Mutability::Mut, Contextual { .. }) =>
+                tcx.require_lang_item(LangItem::DerefCxMut, None),
         };
         let method_def_id = tcx
             .associated_items(trait_def_id)
@@ -136,7 +154,22 @@ impl<'tcx> OverloadedDeref<'tcx> {
             .find(|m| m.kind == ty::AssocKind::Fn)
             .unwrap()
             .def_id;
-        Ty::new_fn_def(tcx, method_def_id, [source])
+
+        let generic_args_contextual;
+        let generic_args = [ty::GenericArg::from(source)]
+            .into_iter()
+            .chain(match self.kind {
+                Regular => [].iter().copied(),
+                Contextual { in_re, out_re } => {
+                    generic_args_contextual = [
+                        ty::GenericArg::from(in_re),
+                        ty::GenericArg::from(out_re),
+                    ];
+                    generic_args_contextual.iter().copied()
+                },
+            });
+
+        Ty::new_fn_def(tcx, method_def_id, generic_args)
     }
 }
 
