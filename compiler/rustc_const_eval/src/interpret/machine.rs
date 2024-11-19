@@ -315,6 +315,14 @@ pub trait Machine<'tcx>: Sized {
         throw_unsup!(ThreadLocalStatic(def_id))
     }
 
+    /// Resolve the currently bound context item.
+    fn context_item_pointer(
+        _ecx: &mut InterpCx<'tcx, Self>,
+        def_id: DefId,
+    ) -> InterpResult<'tcx, Pointer<Self::Provenance>> {
+        throw_unsup!(ContextRef(def_id))
+    }
+
     /// Return the `AllocId` for the given `extern static`.
     fn extern_static_pointer(
         ecx: &InterpCx<'tcx, Self>,

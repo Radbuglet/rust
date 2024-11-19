@@ -352,6 +352,8 @@ const_eval_thread_local_access =
 
 const_eval_thread_local_static =
     cannot access thread local static ({$did})
+const_eval_context_ref =
+    cannot access context item inherited from the environment ({$did})
 const_eval_too_generic =
     encountered overly generic constant
 const_eval_too_many_caller_args =

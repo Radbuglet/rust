@@ -191,8 +191,6 @@ where
                 }
             }
 
-            mir::Rvalue::ContextRef(_) => todo!(),
-
             mir::Rvalue::Cast(..)
             | mir::Rvalue::ShallowInitBox(..)
             | mir::Rvalue::Use(..)
@@ -204,7 +202,8 @@ where
             | mir::Rvalue::NullaryOp(..)
             | mir::Rvalue::UnaryOp(..)
             | mir::Rvalue::Discriminant(..)
-            | mir::Rvalue::Aggregate(..) => {}
+            | mir::Rvalue::Aggregate(..)
+            | mir::Rvalue::ContextRef(..) => {}
         }
     }
 

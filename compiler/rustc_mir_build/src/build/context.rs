@@ -1,12 +1,14 @@
 #![expect(unused)]  // TODO: Remove
 
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap, IndexEntry};
+use rustc_errors::ErrorGuaranteed;
 use rustc_hir::def_id::DefId;
 use rustc_hir::Mutability;
 use rustc_index::{Idx as _, IndexVec};
+use rustc_middle::bug;
 use rustc_middle::mir::{self, BasicBlock, Local, Operand, Place, Rvalue, SourceInfo};
 use rustc_middle::thir::{self, visit::{self as thir_visit, Visitor as _}};
-use rustc_middle::ty::{self, ContextBinder, Ty, TypeFoldable as _};
+use rustc_middle::ty::{self, ContextBinder, Ty, TyCtxt, TypeFoldable as _};
 use rustc_span::DUMMY_SP;
 use rustc_target::abi::FieldIdx;
 
@@ -14,6 +16,8 @@ use thir_visit::Visitor as _;
 use ty::ContextSolveStage::MirBuilding;
 
 use super::Builder;
+
+use crate::errors;
 
 // Inner index map allows for deterministic iteration.
 type BinderMap = FxHashMap<ContextBinder, FxIndexMap<DefId, ContextBinderItemInfo>>;
@@ -56,6 +60,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         root_expr: thir::ExprId,
     ) {
         assert!(self.ctx_bind_values.0.is_none(), "`define_context_locals` called twice");
+        assert!(!self.ctx_const_restrictions);
 
         let root_expr = &self.thir[root_expr];
         let mut visitor = BinderUseVisitor {
@@ -75,6 +80,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         binder: ContextBinder,
         lt_limiter: Place<'tcx>,
     ) {
+        assert!(!self.ctx_const_restrictions);
+
         let Some(binders) = self.ctx_bind_values.expect_init().get(&binder) else {
             return;
         };
@@ -128,6 +135,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         item: DefId,
         binder: ContextBinder,
     ) -> ContextBinderItemInfo {
+        assert!(!self.ctx_const_restrictions);
+
         *self.ctx_bind_values.expect_init()
             .get(&binder)
             .and_then(|v| v.get(&item))
@@ -141,6 +150,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         refs: &[Place<'tcx>],
         constraints: &[(usize, usize)],
     ) {
+        assert!(!self.ctx_const_restrictions);
+
         // Determine the type of the constraint marker. This will have the form...
         // `[(&'erased &'erased (), ..., &'erased &'erased ()); 0]`
 
@@ -320,6 +331,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
     }
 
     pub(crate) fn new_lt_limiter_func(&mut self, block: BasicBlock, source_info: SourceInfo) -> Place<'tcx> {
+        assert!(!self.ctx_const_restrictions);
+
         let lt_limiter = self.temp(self.tcx.types.unit, source_info.span);
         self.cfg.push_assign_unit(block, source_info, lt_limiter, self.tcx);
 
@@ -348,6 +361,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         block: BasicBlock,
         source_info: SourceInfo,
     ) -> Place<'tcx> {
+        assert!(!self.ctx_const_restrictions);
+
         let lt_limiter_ty = Ty::new_mut_ref(
             self.tcx,
             self.tcx.lifetimes.re_erased,
@@ -471,5 +486,179 @@ impl<'a, 'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for BinderUseVisitor<'a, 
 
     fn thir(&self) -> &'thir thir::Thir<'tcx> {
         self.builder.thir
+    }
+}
+
+// === Validation === //
+
+pub(crate) fn check_for_fatal_context_use<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    thir: &thir::Thir<'tcx>,
+    pack_shapes: &mut ty::PackShapeStore<'tcx>,
+    const_restrictions: bool,
+    expr: thir::ExprId,
+) -> Result<(), ErrorGuaranteed> {
+    let mut visitor = ContextFatalUseValidator {
+        tcx,
+        thir,
+        pack_shapes,
+        const_restrictions,
+        err: None,
+    };
+
+    visitor.visit_expr(&thir[expr]);
+
+    if let Some(err) = visitor.err {
+        Err(err)
+    } else {
+        Ok(())
+    }
+}
+
+struct ContextFatalUseValidator<'a, 'thir, 'tcx> {
+    tcx: TyCtxt<'tcx>,
+    thir: &'thir thir::Thir<'tcx>,
+    pack_shapes: &'a mut ty::PackShapeStore<'tcx>,
+    const_restrictions: bool,
+    err: Option<ErrorGuaranteed>,
+}
+
+impl<'a, 'thir, 'tcx> ContextFatalUseValidator<'a, 'thir, 'tcx> {
+    fn fatal(&mut self, err: ErrorGuaranteed) {
+        self.err = Some(err);
+    }
+
+    fn visit_shape(&mut self, shape: &ty::PackShape<'_>) {
+        match shape {
+            ty::PackShape::Error(err) => {
+                self.fatal(*err);
+            }
+            ty::PackShape::MakeTuple(fields) => {
+                for field in fields {
+                    self.visit_shape(field);
+                }
+            }
+            ty::PackShape::MakeInfer { inner_shape, .. } => {
+                self.visit_shape(inner_shape);
+            }
+
+            ty::PackShape::ExtractEnv(..)
+            | ty::PackShape::ExtractLocalMove(..)
+            | ty::PackShape::ExtractLocalRef(..) => {
+                // (no additional validation)
+            }
+
+            ty::PackShape::ExtractEnvInfer(..)
+            | ty::PackShape::ExtractLocalInferPlaceholder(..) => {
+                bug!("{shape:?} does not show up after `GraphSolving`");
+            }
+        };
+    }
+}
+
+impl<'a, 'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ContextFatalUseValidator<'a, 'thir, 'tcx> {
+    fn visit_stmt(&mut self, stmt: &'thir thir::Stmt<'tcx>) {
+        match &stmt.kind {
+            &thir::StmtKind::BindContext { span, .. } => {
+                if self.const_restrictions {
+                    let err = self.tcx.dcx().emit_err(errors::ConstBindContextStmtUse {
+                        span,
+                    });
+                    self.fatal(err);
+                }
+            }
+            thir::StmtKind::Expr { .. } | thir::StmtKind::Let { .. } => {
+                // (no additional validation)
+            }
+        }
+
+        thir_visit::walk_stmt(self, stmt);
+    }
+
+    fn visit_expr(&mut self, expr: &'thir thir::Expr<'tcx>) {
+        use thir::ExprKind;
+
+        match &expr.kind {
+            ExprKind::ContextRef { .. } => {
+                if self.const_restrictions {
+                    let err = self.tcx.dcx().emit_err(errors::ConstContextItemUse {
+                        span: expr.span,
+                    });
+                    self.fatal(err);
+                }
+            }
+            ExprKind::Pack { .. } => {
+                if self.const_restrictions {
+                    let err = self.tcx.dcx().emit_err(errors::ConstPackExprUse {
+                        span: expr.span,
+                    });
+                    self.fatal(err);
+                }
+
+                let shape = self.pack_shapes.resolve(
+                    self.tcx,
+                    MirBuilding,
+                    self.thir,
+                    expr,
+                );
+
+                self.visit_shape(&shape);
+            }
+
+            ExprKind::Scope { .. }
+            | ExprKind::Box { .. }
+            | ExprKind::If { .. }
+            | ExprKind::Call { .. }
+            | ExprKind::Deref { .. }
+            | ExprKind::Binary { .. }
+            | ExprKind::LogicalOp { .. }
+            | ExprKind::Unary { .. }
+            | ExprKind::Cast { .. }
+            | ExprKind::Use { .. }
+            | ExprKind::NeverToAny { .. }
+            | ExprKind::PointerCoercion { .. }
+            | ExprKind::Loop { .. }
+            | ExprKind::Let { .. }
+            | ExprKind::Match { .. }
+            | ExprKind::Block { .. }
+            | ExprKind::Assign { .. }
+            | ExprKind::AssignOp { .. }
+            | ExprKind::Field { .. }
+            | ExprKind::Index { .. }
+            | ExprKind::VarRef { .. }
+            | ExprKind::UpvarRef { .. }
+            | ExprKind::Borrow { .. }
+            | ExprKind::RawBorrow { .. }
+            | ExprKind::Break { .. }
+            | ExprKind::Continue { .. }
+            | ExprKind::Return { .. }
+            | ExprKind::Become { .. }
+            | ExprKind::ConstBlock { .. }
+            | ExprKind::Repeat { .. }
+            | ExprKind::Array { .. }
+            | ExprKind::Tuple { .. }
+            | ExprKind::Adt { .. }
+            | ExprKind::PlaceTypeAscription { .. }
+            | ExprKind::ValueTypeAscription { .. }
+            | ExprKind::Closure { .. }
+            | ExprKind::Literal { .. }
+            | ExprKind::NonHirLiteral { .. }
+            | ExprKind::ZstLiteral { .. }
+            | ExprKind::NamedConst { .. }
+            | ExprKind::ConstParam { .. }
+            | ExprKind::StaticRef { .. }
+            | ExprKind::InlineAsm { .. }
+            | ExprKind::OffsetOf { .. }
+            | ExprKind::ThreadLocalRef { .. }
+            | ExprKind::Yield { .. } => {
+                // (no additional validation)
+            }
+        }
+
+        thir_visit::walk_expr(self, expr);
+    }
+
+    fn thir(&self) -> &'thir thir::Thir<'tcx> {
+        self.thir
     }
 }

@@ -806,6 +806,7 @@ impl ReportErrorExt for UnsupportedOpInfo {
             UnsupportedOpInfo::ReadPartialPointer(_) => const_eval_partial_pointer_copy,
             UnsupportedOpInfo::ReadPointerAsInt(_) => const_eval_read_pointer_as_int,
             UnsupportedOpInfo::ThreadLocalStatic(_) => const_eval_thread_local_static,
+            UnsupportedOpInfo::ContextRef(_) => const_eval_context_ref,
             UnsupportedOpInfo::ExternStatic(_) => const_eval_extern_static,
         }
     }
@@ -828,7 +829,7 @@ impl ReportErrorExt for UnsupportedOpInfo {
             OverwritePartialPointer(ptr) | ReadPartialPointer(ptr) => {
                 diag.arg("ptr", ptr);
             }
-            ThreadLocalStatic(did) | ExternStatic(did) => {
+            ThreadLocalStatic(did) | ContextRef(did) | ExternStatic(did) => {
                 diag.arg("did", format!("{did:?}"));
             }
         }

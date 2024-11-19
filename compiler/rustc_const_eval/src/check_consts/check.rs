@@ -381,7 +381,12 @@ impl<'tcx> Visitor<'tcx> for Checker<'_, 'tcx> {
 
         match rvalue {
             Rvalue::ThreadLocalRef(_) => self.check_op(ops::ThreadLocalAccess),
-            Rvalue::ContextRef(_) => todo!(),
+            Rvalue::ContextRef(_) => {
+                unreachable!(
+                    "ContextRef should not have been lowered during `rustc_mir_build` when \
+                     building const bodies",
+                );
+            }
 
             Rvalue::Use(_)
             | Rvalue::CopyForDeref(..)

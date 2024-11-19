@@ -327,6 +327,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     last_remainder_scope = *remainder_scope;
                 }
                 StmtKind::BindContext { remainder_scope, init_scope, bundle, span: _, self_id: _ } => {
+                    assert!(!this.ctx_const_restrictions);
+
                     this.block_context.push(BlockFrame::Statement { ignores_expr_result: false });
 
                     // Enter the remainder scope, i.e., the bindings' destruction scope.

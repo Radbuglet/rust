@@ -54,9 +54,42 @@ pub(crate) fn mir_build<'tcx>(tcx: TyCtxtAt<'tcx>, def: LocalDefId) -> Body<'tcx
     let body = match tcx.thir_body_compute_cx(def) {
         Err(error_reported) => construct_error(tcx, def, error_reported),
         Ok((thir, expr)) => {
+            let thir = thir.borrow();
+            let mut ctx_pack_shapes = ty::PackShapeStore::new_store();
+            let ctx_const_restrictions = match thir.body_type {
+                thir::BodyTy::Fn(..) => tcx.is_const_fn(def.to_def_id()),
+                thir::BodyTy::Const(..) => true,
+            };
+
+            if let Err(e) = context::check_for_fatal_context_use(
+                tcx,
+                &thir,
+                &mut ctx_pack_shapes,
+                ctx_const_restrictions,
+                expr,
+            ) {
+                return construct_error(tcx, def, e);
+            }
+
             let build_mir = |thir: &Thir<'tcx>| match thir.body_type {
-                thir::BodyTy::Fn(fn_sig) => construct_fn(tcx, def, thir, expr, fn_sig),
-                thir::BodyTy::Const(ty) => construct_const(tcx, def, thir, expr, ty),
+                thir::BodyTy::Fn(fn_sig) => construct_fn(
+                    tcx,
+                    def,
+                    thir,
+                    expr,
+                    fn_sig,
+                    ctx_pack_shapes,
+                    ctx_const_restrictions,
+                ),
+                thir::BodyTy::Const(ty) => construct_const(
+                    tcx,
+                    def,
+                    thir,
+                    expr,
+                    ty,
+                    ctx_pack_shapes,
+                    ctx_const_restrictions,
+                ),
             };
 
             // this must run before MIR dump, because
@@ -68,7 +101,7 @@ pub(crate) fn mir_build<'tcx>(tcx: TyCtxtAt<'tcx>, def: LocalDefId) -> Body<'tcx
             // Don't steal here, instead steal in unsafeck. This is so that
             // pattern inline constants can be evaluated as part of building the
             // THIR of the parent function without a cycle.
-            build_mir(&thir.borrow())
+            build_mir(&thir)
         }
     };
 
@@ -228,6 +261,9 @@ struct Builder<'a, 'tcx> {
 
     /// Pack shape tracker
     ctx_pack_shapes: ty::PackShapeStore<'tcx>,
+
+    /// Whether the special restrictions for `const` functions are enforced for the current body.
+    ctx_const_restrictions: bool,
 }
 
 type CaptureMap<'tcx> = SortedIndexMultiMap<usize, HirId, Capture<'tcx>>;
@@ -454,6 +490,8 @@ fn construct_fn<'tcx>(
     thir: &Thir<'tcx>,
     expr: ExprId,
     fn_sig: ty::FnSig<'tcx>,
+    ctx_pack_shapes: ty::PackShapeStore<'tcx>,
+    ctx_const_restrictions: bool,
 ) -> Body<'tcx> {
     let span = tcx.def_span(fn_def);
     let fn_id = tcx.local_def_id_to_hir_id(fn_def);
@@ -520,6 +558,8 @@ fn construct_fn<'tcx>(
         return_ty,
         return_ty_span,
         coroutine,
+        ctx_pack_shapes,
+        ctx_const_restrictions,
     );
 
     let call_site_scope =
@@ -563,6 +603,8 @@ fn construct_const<'a, 'tcx>(
     thir: &'a Thir<'tcx>,
     expr: ExprId,
     const_ty: Ty<'tcx>,
+    ctx_pack_shapes: ty::PackShapeStore<'tcx>,
+    ctx_const_restrictions: bool,
 ) -> Body<'tcx> {
     let hir_id = tcx.local_def_id_to_hir_id(def);
 
@@ -588,8 +630,19 @@ fn construct_const<'a, 'tcx>(
     };
 
     let infcx = tcx.infer_ctxt().build();
-    let mut builder =
-        Builder::new(thir, infcx, def, hir_id, span, 0, const_ty, const_ty_span, None);
+    let mut builder = Builder::new(
+        thir,
+        infcx,
+        def,
+        hir_id,
+        span,
+        0,
+        const_ty,
+        const_ty_span,
+        None,
+        ctx_pack_shapes,
+        ctx_const_restrictions,
+    );
 
     let mut block = START_BLOCK;
     block = builder.expr_into_dest(Place::return_place(), block, expr).into_block();
@@ -741,6 +794,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         return_ty: Ty<'tcx>,
         return_span: Span,
         coroutine: Option<Box<CoroutineInfo<'tcx>>>,
+        ctx_pack_shapes: ty::PackShapeStore<'tcx>,
+        ctx_const_restrictions: bool,
     ) -> Builder<'a, 'tcx> {
         let tcx = infcx.tcx;
         let attrs = tcx.hir().attrs(hir_id);
@@ -789,7 +844,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             coverage_info: coverageinfo::CoverageInfoBuilder::new_if_enabled(tcx, def),
             ctx_bind_values: context::ContextBinderMap::default(),
             ctx_bind_tracker: ty::ContextBindTracker::default(),
-            ctx_pack_shapes: ty::PackShapeStore::new_store(),
+            ctx_pack_shapes,
+            ctx_const_restrictions,
         };
 
         assert_eq!(builder.cfg.start_new_block(), START_BLOCK);
@@ -992,16 +1048,18 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             self.cfg.terminate(block, source_info, TerminatorKind::Unreachable);
             self.cfg.start_new_block().unit()
         } else {
-            let source_info = self.source_info(rustc_span::DUMMY_SP);
-            self.define_context_locals(source_info, expr_id);
+            if !self.ctx_const_restrictions {
+                let source_info = self.source_info(expr_span);
+                self.define_context_locals(source_info, expr_id);
 
-            let lt_limiter = self.new_lt_limiter_func(block, source_info);
-            self.init_and_borrow_context_binder_locals(
-                block,
-                source_info,
-                ty::ContextBinder::FuncEnv,
-                lt_limiter,
-            );
+                let lt_limiter = self.new_lt_limiter_func(block, source_info);
+                self.init_and_borrow_context_binder_locals(
+                    block,
+                    source_info,
+                    ty::ContextBinder::FuncEnv,
+                    lt_limiter,
+                );
+            }
 
             self.expr_into_dest(Place::return_place(), block, expr_id)
         }

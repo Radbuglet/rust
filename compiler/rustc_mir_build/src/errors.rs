@@ -1009,3 +1009,24 @@ impl Subdiagnostic for Rust2024IncompatiblePatSugg {
         diag.multipart_suggestion("desugar the match ergonomics", self.suggestion, applicability);
     }
 }
+
+#[derive(Diagnostic)]
+#[diag(mir_build_const_context_item_use)]
+pub(crate) struct ConstContextItemUse {
+    #[primary_span]
+    pub(crate) span: Span,
+}
+
+#[derive(Diagnostic)]
+#[diag(mir_build_const_pack_expr_use)]
+pub(crate) struct ConstPackExprUse {
+    #[primary_span]
+    pub(crate) span: Span,
+}
+
+#[derive(Diagnostic)]
+#[diag(mir_build_const_bind_context_stmt_use)]
+pub(crate) struct ConstBindContextStmtUse {
+    #[primary_span]
+    pub(crate) span: Span,
+}

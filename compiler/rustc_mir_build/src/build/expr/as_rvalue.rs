@@ -547,6 +547,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 block.and(Rvalue::Use(operand))
             }
             ExprKind::Pack { ref exprs, .. } => {
+                assert!(!this.ctx_const_restrictions);
+
                 let bundle_did = this.tcx.lang_items().bundle().unwrap();
                 let shape = this.ctx_pack_shapes.resolve(
                     this.tcx,
@@ -680,7 +682,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 )
             }
             PackShape::Error(_err) => {
-                todo!()
+                unreachable!();
             }
 
             PackShape::ExtractEnvInfer(..) | PackShape::ExtractLocalInferPlaceholder(..) => {

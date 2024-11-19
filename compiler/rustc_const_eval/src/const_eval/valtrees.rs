@@ -164,13 +164,12 @@ fn const_to_valtree_inner<'tcx>(
             branches(ecx, place, def.variant(variant).fields.len(), def.is_enum().then_some(variant), num_nodes)
         }
 
-        ty::InferBundle(..) => todo!(),
-
         ty::Never
         | ty::Error(_)
         | ty::Foreign(..)
         | ty::Infer(ty::FreshIntTy(_))
         | ty::Infer(ty::FreshFloatTy(_))
+        | ty::InferBundle(..)
         // FIXME(oli-obk): we could look behind opaque types
         | ty::Alias(..)
         | ty::Param(_)
@@ -342,7 +341,6 @@ pub fn valtree_to_const_value<'tcx>(
 
             op_to_const(&ecx, &place.into(), /* for diagnostics */ false)
         }
-        ty::InferBundle(..) => todo!(),
         ty::Never
         | ty::Error(_)
         | ty::Foreign(..)
@@ -360,7 +358,8 @@ pub fn valtree_to_const_value<'tcx>(
         | ty::FnPtr(..)
         | ty::Str
         | ty::Slice(_)
-        | ty::Dynamic(..) => bug!("no ValTree should have been created for type {:?}", ty.kind()),
+        | ty::Dynamic(..)
+        | ty::InferBundle(..) => bug!("no ValTree should have been created for type {:?}", ty.kind()),
     }
 }
 
