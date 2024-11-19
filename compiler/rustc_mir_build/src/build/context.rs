@@ -1,5 +1,3 @@
-#![expect(unused)]  // TODO: Remove
-
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap, IndexEntry};
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::def_id::DefId;
@@ -9,10 +7,8 @@ use rustc_middle::bug;
 use rustc_middle::mir::{self, BasicBlock, Local, Operand, Place, Rvalue, SourceInfo};
 use rustc_middle::thir::{self, visit::{self as thir_visit, Visitor as _}};
 use rustc_middle::ty::{self, ContextBinder, Ty, TyCtxt, TypeFoldable as _};
-use rustc_span::DUMMY_SP;
 use rustc_target::abi::FieldIdx;
 
-use thir_visit::Visitor as _;
 use ty::ContextSolveStage::MirBuilding;
 
 use super::Builder;
@@ -99,7 +95,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         // Borrow each context item.
         let deref_proj = self.tcx.mk_place_elems(&[mir::PlaceElem::Deref]);
 
-        for (&item, &item_info) in binders {
+        for &item_info in binders.values() {
             let kind = match item_info.muta() {
                 Mutability::Not => mir::BorrowKind::Shared,
                 Mutability::Mut => mir::BorrowKind::Mut {
