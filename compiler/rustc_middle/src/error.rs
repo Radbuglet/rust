@@ -164,3 +164,11 @@ pub struct TypeLengthLimit {
     pub path: PathBuf,
     pub type_length: usize,
 }
+
+pub use crate::fluent_generated::{
+    middle_entry_fn_uses_ctx,
+    middle_extern_fn_uses_ctx,
+    middle_async_fn_uses_ctx,
+    middle_closure_uses_ctx,
+    middle_trait_member_uses_ctx,
+};

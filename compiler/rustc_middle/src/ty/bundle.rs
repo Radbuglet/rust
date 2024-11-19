@@ -4,9 +4,11 @@ use std::panic::Location;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet, FxIndexMap, FxIndexSet, IndexEntry};
 use rustc_data_structures::graph::{DirectedGraph, Successors, scc};
 use rustc_data_structures::sync::Lrc;
+use rustc_errors::DiagMessage;
 use rustc_hir::{def_id::{DefId, LocalDefId, LocalDefIdMap}, def::DefKind};
 use rustc_index::IndexVec;
 use rustc_macros::{HashStable, TyDecodable, TyEncodable, Encodable, Decodable};
+use rustc_target::spec::abi::Abi;
 
 use crate::mir;
 use crate::thir::{self, visit as thir_visit};
@@ -16,6 +18,8 @@ use crate::query::Providers;
 // TODO: needed for `delay_bug`; upstream versions of rustc have this as an inherent method
 use ty::Interner as _;
 use thir_visit::Visitor as _;
+
+use crate::error as errors;
 
 pub fn provide(providers: &mut Providers) {
     *providers = Providers {
@@ -878,7 +882,10 @@ pub fn can_participate_in_context_solving<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId
 pub fn extract_static_callee_for_context<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Option<DefId> {
     match ty.kind() {
         &ty::FnDef(def_id, ..) => {
-            can_participate_in_context_solving(tcx, def_id).then_some(def_id)
+            let include = can_participate_in_context_solving(tcx, def_id)
+                && def_can_borrow_context(tcx, def_id).is_ok();
+
+            include.then_some(def_id)
         }
         ty::Bool
         | ty::Char
@@ -1395,6 +1402,42 @@ impl<'a, 'tcx> Successors for ComponentsBorrowedSccSubgraph<'a, 'tcx> {
     }
 }
 
+fn def_can_borrow_context<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    func: DefId,
+) -> Result<(), DiagMessage> {
+    let kind = tcx.def_kind(func);
+
+    if kind == DefKind::InferBundle {
+        return Ok(());
+    }
+
+    if tcx.entry_fn(()).is_some_and(|(did, _)| did == func) {
+        return Err(errors::middle_entry_fn_uses_ctx);
+    }
+
+    if
+        kind == DefKind::AssocFn
+        && let DefKind::Impl { of_trait: true } | DefKind::Trait = tcx.def_kind(tcx.parent(func))
+    {
+        return Err(errors::middle_trait_member_uses_ctx);
+    }
+
+    if tcx.is_closure_like(func) {
+        return Err(errors::middle_closure_uses_ctx);
+    }
+
+    if tcx.is_coroutine(func) {
+        return Err(errors::middle_async_fn_uses_ctx);
+    }
+
+    if kind == DefKind::Fn && tcx.fn_sig(func).skip_binder().abi() != Abi::Rust {
+        return Err(errors::middle_extern_fn_uses_ctx);
+    }
+
+    Ok(())
+}
+
 fn components_borrowed_graph<'tcx>(
     tcx: TyCtxt<'tcx>,
     _: (),
@@ -1626,10 +1669,17 @@ fn components_borrowed_graph<'tcx>(
             continue;
         };
         map.insert(node_def_id, weight.local);
-    }
 
-    // Validate function borrows
-    // TODO
+        if
+            !weight.local.is_empty()
+            && let Err(msg) = def_can_borrow_context(tcx, node_def_id.to_def_id())
+        {
+            let span = tcx.span_of_impl(node_def_id.to_def_id()).unwrap();
+            let diag = tcx.dcx().struct_span_err(span, msg);
+            // TODO: Add much more context
+            diag.emit();
+        }
+    }
 
     tcx.arena.alloc(map)
 }

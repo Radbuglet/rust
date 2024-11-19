@@ -105,3 +105,13 @@ middle_unknown_layout =
 middle_values_too_big =
     values of the type `{$ty}` are too big for the target architecture
 middle_written_to_path = the full type name has been written to '{$path}'
+
+middle_entry_fn_uses_ctx = `main` cannot implicitly borrow context from its caller
+
+middle_extern_fn_uses_ctx = `extern` functions cannot implicitly borrow context from their callers
+
+middle_async_fn_uses_ctx = `async` functions cannot implicitly borrow context from their callers
+
+middle_closure_uses_ctx = closures cannot implicitly borrow context from their callers
+
+middle_trait_member_uses_ctx = `trait` members cannot implicitly borrow context from their callers
