@@ -12,7 +12,7 @@ use rustc_middle::thir::*;
 use rustc_middle::ty::adjustment::{
     Adjust, Adjustment, AutoBorrow, AutoBorrowMutability, PointerCoercion,
 };
-use rustc_middle::ty::auto_arg::AutoArgKind;
+use rustc_middle::ty::auto_arg::{AutoArg, AutoArgKind};
 use rustc_middle::ty::{
     self, AdtKind, GenericArgs, InlineConstArgs, InlineConstArgsParts, ScalarInt, Ty,
     UpvarArgs, UserType,
@@ -1113,21 +1113,15 @@ impl<'tcx> Cx<'tcx> {
             .enumerate()
             .map(|(i, ty)| {
                 if let Some(arg) = args.get(i) {
-                    return *arg;
-                }
+                    // Provided input
+                    *arg
+                } else {
+                    // Auto-arg input
+                    let ty = *ty.skip_binder();
+                    let auto_arg = AutoArg::of(self.tcx, ty)
+                        .unwrap_or_else(|| bug!("unknown auto-arg type: {ty}"));
 
-                // TODO: Unify with other auto-arg system.
-                match ty.skip_binder().kind() {
-                    ty::Adt(def, _) if Some(def.did()) == self.tcx.lang_items().bundle() => {
-                        let expr = Expr {
-                            kind: self.lower_pack_expr(ty::PackFlags::AllowEnv, &[]),
-                            ty: *ty.skip_binder(),
-                            temp_lifetime: None,
-                            span,
-                        };
-                        self.thir.exprs.push(expr)
-                    }
-                    _ => panic!("unknown auto-argument type {ty:?}"),
+                    self.lower_auto_arg(span, auto_arg)
                 }
             }))
     }
@@ -1298,20 +1292,22 @@ impl<'tcx> Cx<'tcx> {
         self.typeck_results
             .expr_auto_args(expr)
             .iter()
-            .map(|arg| {
-                let expr = Expr {
-                    kind: match arg.kind {
-                        AutoArgKind::PackBundle => {
-                            self.lower_pack_expr(ty::PackFlags::AllowEnv, &[])
-                        }
-                    },
-                    ty: arg.ty,
-                    temp_lifetime: None,
-                    span,
-                };
-                self.thir.exprs.push(expr)
-            })
+            .map(|arg| self.lower_auto_arg(span, *arg))
             .collect()
+    }
+
+    fn lower_auto_arg(&mut self, span: Span, arg: AutoArg<'tcx>) -> ExprId {
+        let expr = Expr {
+            kind: match arg.kind {
+                AutoArgKind::PackBundle => {
+                    self.lower_pack_expr(ty::PackFlags::AllowEnv, &[])
+                }
+            },
+            ty: arg.ty,
+            temp_lifetime: None,
+            span,
+        };
+        self.thir.exprs.push(expr)
     }
 
     fn lower_pack_expr(
