@@ -567,8 +567,12 @@ impl<'a, 'tcx> ThirPrinter<'a, 'tcx> {
                 print_indented!(self, format!("muta: {:?}", muta), depth_lvl + 1);
                 print_indented!(self, "}", depth_lvl);
             }
-            Pack { .. } => {
-                todo!()
+            Pack { index, flags, .. } => {
+                print_indented!(self, "Pack {", depth_lvl);
+                print_indented!(self, format!("index: {:?}", index), depth_lvl + 1);
+                print_indented!(self, format!("flags: {:?}", flags), depth_lvl + 1);
+                // TODO: print shape
+                print_indented!(self, "}", depth_lvl);
             }
             Yield { value } => {
                 print_indented!(self, "Yield {", depth_lvl);

@@ -2300,6 +2300,11 @@ rustc_queries! {
         cache_on_disk_if { def_id.is_local() }
         separate_provide_extern
     }
+
+    query components_borrowed_fn_reify_check(_: ()) {
+        desc { "validating function pointer unsizes" }
+        eval_always
+    }
 }
 
 rustc_query_append! { define_callbacks! }

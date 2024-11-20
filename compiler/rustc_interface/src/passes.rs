@@ -782,6 +782,7 @@ fn run_required_analyses(tcx: TyCtxt<'_>) {
                 tcx.ensure().limits(());
                 tcx.ensure().stability_index(());
                 tcx.ensure().components_borrowed_graph(());
+                tcx.ensure().components_borrowed_fn_reify_check(());
             }
         );
     });

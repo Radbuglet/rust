@@ -115,3 +115,5 @@ middle_async_fn_uses_ctx = `async` functions cannot implicitly borrow context fr
 middle_closure_uses_ctx = closures cannot implicitly borrow context from their callers
 
 middle_trait_member_uses_ctx = `trait` members cannot implicitly borrow context from their callers
+
+middle_reified_fn_using_ctx = cannot transform a function which implicitly borrows context from its caller into a function pointer

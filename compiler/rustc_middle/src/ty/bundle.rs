@@ -5,6 +5,7 @@ use rustc_data_structures::fx::{FxHashMap, FxHashSet, FxIndexMap, FxIndexSet, In
 use rustc_data_structures::graph::{DirectedGraph, Successors, scc};
 use rustc_data_structures::sync::Lrc;
 use rustc_errors::DiagMessage;
+use rustc_hir as hir;
 use rustc_hir::{def_id::{DefId, LocalDefId, LocalDefIdMap}, def::DefKind};
 use rustc_index::IndexVec;
 use rustc_macros::{HashStable, TyDecodable, TyEncodable, Encodable, Decodable};
@@ -27,6 +28,7 @@ pub fn provide(providers: &mut Providers) {
         components_borrowed_local,
         components_borrowed_graph,
         components_borrowed,
+        components_borrowed_fn_reify_check,
         ..*providers
     };
 }
@@ -1731,5 +1733,79 @@ pub fn resolve_infer_bundle_values<'tcx>(
         items.next().unwrap()
     } else {
         Ty::new_tup_from_iter(tcx, items)
+    }
+}
+
+fn components_borrowed_fn_reify_check<'tcx>(tcx: TyCtxt<'tcx>, (): ()) {
+    for &def_id in tcx.mir_keys(()) {
+        // Ignore definitions whose type-check results come from another function.
+        let typeck_root_def_id = tcx.typeck_root_def_id(def_id.to_def_id());
+        if typeck_root_def_id != def_id.to_def_id() {
+            continue;
+        }
+
+        // Ignore functions without type-check results.
+        if !tcx.has_typeck_results(def_id) {
+            continue;
+        }
+        let owner_id = hir::OwnerId { def_id };
+        let typeck_results = tcx.typeck(def_id);
+
+        // Go through each adjustment and ensure that it doesn't unsize a function borrowing
+        // context.
+        for (node_local_id, adjustments) in typeck_results.adjustments().items_in_stable_order() {
+            let node_hir_id = hir::HirId {
+                owner: owner_id,
+                local_id: node_local_id,
+            };
+            let mut curr_ty = typeck_results.node_type(node_hir_id);
+
+            for adjustment in adjustments {
+                use ty::adjustment::{Adjust::*, PointerCoercion::*};
+
+                // Figure out the type of the expression before the adjustment is applied.
+                let pre_adjust_ty = curr_ty;
+                curr_ty = adjustment.target;
+
+                // Determine whether the adjustment unsizes a function.
+                let unsized_def_id = match &adjustment.kind {
+                    Pointer(ReifyFnPointer) => {
+                        match pre_adjust_ty.kind() {
+                            ty::FnDef(def_id, _) => *def_id,
+                            _ => bug!("ReifyFnPointer was not expected to be used against {pre_adjust_ty:?}"),
+                        }
+                    },
+                    Pointer(ClosureFnPointer(_)) => {
+                        // Although this does potentially turn a `FnTy` into a `FnPtr`, closures
+                        // are already prevented from borrowing any context so no need to emit
+                        // additional diagnostics.
+                        continue;
+                    }
+
+                    Pointer(UnsafeFnPointer)
+                    | Pointer(MutToConstPointer)
+                    | Pointer(ArrayToPointer)
+                    | Pointer(Unsize)
+                    | Pointer(DynStar)
+                    | NeverToAny
+                    | Deref(..)
+                    | Borrow(..)
+                    | ReborrowPin(..) => {
+                        // Cannot unsize fns to fn-pointers
+                        continue;
+                    }
+                };
+
+                // See whether the unsized function borrowed any context.
+                let comps = tcx.components_borrowed(unsized_def_id);
+                if comps.is_empty() {
+                    continue;
+                }
+
+                // If it did, report the error!
+                let span = tcx.hir().span(node_hir_id);
+                tcx.dcx().emit_err(errors::ReifiedFnUsingCtx { span });
+            }
+        }
     }
 }

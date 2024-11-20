@@ -165,6 +165,13 @@ pub struct TypeLengthLimit {
     pub type_length: usize,
 }
 
+#[derive(Diagnostic)]
+#[diag(middle_reified_fn_using_ctx)]
+pub struct ReifiedFnUsingCtx {
+    #[primary_span]
+    pub span: Span,
+}
+
 pub use crate::fluent_generated::{
     middle_entry_fn_uses_ctx,
     middle_extern_fn_uses_ctx,
