@@ -1469,15 +1469,17 @@ fn components_borrowed_graph<'tcx>(
 
                     if call.target.is_local() {
                         callee_entry.or_insert(FuncNodeWeight {
-                            // Initialize to some bogus data to reserve the entry.
-                            local: &info.local,
+                            // We initialize this node's weight as an empty set. This will be
+                            // extended later with all the local components it needs when we create
+                            // the node for that target.
+                            local: tcx.arena.alloc(ContextSet::default()),
                             calls: Vec::new(),
                         });
                     } else {
                         // We won't be initializing this callee later in the loop so we have to
                         // initialize it immediately. In any case, the way these are initialized is
                         // fundamentally different from the way we initialize local nodes.
-                        callee_entry.or_insert(FuncNodeWeight {
+                        callee_entry.or_insert_with(|| FuncNodeWeight {
                             local: tcx.components_borrowed(call.target),
                             // We can treat it as if this foreign function borrowed all of its context
                             // items directly since this graph is not directly used for diagnostics.
@@ -1890,8 +1892,16 @@ fn borrows_fmt_part<'tcx>(
 ) -> impl fmt::Display + use<'tcx> {
     fmt::from_fn(move |f| {
         for (i, (item, muta)) in set.iter().enumerate() {
+            if i > 0 && set.len() > 2 {
+                f.write_str(",")?;
+            }
+
+            if set.len() > 1 && i == set.len() - 1 {
+                f.write_str(" and")?;
+            }
+
             if i > 0 {
-                f.write_str(", ")?;
+                f.write_str(" ")?;
             }
 
             write!(f, "`{}`", Ty::new_ref(
