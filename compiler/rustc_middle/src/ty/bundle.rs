@@ -1864,8 +1864,8 @@ fn format_borrow_origins<'tcx>(
                 }
 
                 let child_fmt = fmt_nodes.push(TreeFmtNode::new(format!(
-                    "...because it inherits the components of `{}`,\n\
-                    which borrows {}",
+                    "...because it inherits the components of `{}`,\n   \
+                        which borrows {}",
                     tcx.def_path_str(call.target),
                     borrows_fmt_part(tcx, call_borrows),
                 )));
@@ -1882,7 +1882,7 @@ fn format_borrow_origins<'tcx>(
     }
 
     let mut target = String::new();
-    tree_fmt_write(&fmt_nodes, root_fmt, &mut target);
+    TreeFmtWriter::new(&mut target, &fmt_nodes).write(root_fmt);
     target
 }
 
@@ -1935,46 +1935,62 @@ impl TreeFmtNode {
     }
 }
 
-fn tree_fmt_write(
-    nodes: &IndexSlice<TreeFmtIdx, TreeFmtNode>,
-    start: TreeFmtIdx,
-    target: &mut impl TreeFmtTarget,
-) {
-    tree_fmt_write_inner(nodes, start, target, 1);
+struct TreeFmtWriter<'a, T: ?Sized> {
+    target: &'a mut T,
+    nodes: &'a IndexSlice<TreeFmtIdx, TreeFmtNode>,
+    pipes: Vec<bool>,
 }
 
-fn tree_fmt_write_inner(
-    nodes: &IndexSlice<TreeFmtIdx, TreeFmtNode>,
-    node: TreeFmtIdx,
-    target: &mut impl TreeFmtTarget,
-    depth: u32,
-) {
-    let node = &nodes[node];
-
-    // Draw main portion
-    for (i, line) in node.main.lines().enumerate() {
-        if i == 0 {
-            target.write_pipe(depth);
-            target.write_no_line("-- ");
-        } else {
-            target.write_pipe(depth + 1);
-            target.write_no_line(" ");
+impl<'a, T: ?Sized + TreeFmtTarget> TreeFmtWriter<'a, T> {
+    fn new(target: &'a mut T, nodes: &'a IndexSlice<TreeFmtIdx, TreeFmtNode>) -> Self {
+        Self {
+            target,
+            nodes,
+            pipes: Vec::new(),
         }
-
-        target.write_no_line(line);
-        target.write_newline();
     }
 
-    // Draw children
-    for &child in &node.children {
-        target.write_pipe(depth + 1);
-        target.write_newline();
-        tree_fmt_write_inner(nodes, child, target, depth + 1);
+    fn write(&mut self, start: TreeFmtIdx) {
+        self.write_inner(start);
+    }
+
+    fn write_inner(&mut self, node: TreeFmtIdx) {
+        let node = &self.nodes[node];
+
+        self.pipes.push(true);
+
+        // Draw main portion
+        for (i, line) in node.main.lines().enumerate() {
+            if i == 0 {
+                self.target.write_pipes(&self.pipes[..self.pipes.len() - 1], true);
+                self.target.write_no_line("-- ");
+            } else {
+                self.target.write_pipes(&self.pipes, false);
+                self.target.write_no_line(" ");
+            }
+
+            self.target.write_no_line(line);
+            self.target.write_newline();
+        }
+
+        // Draw children
+        for (i, &child) in node.children.iter().enumerate() {
+            self.target.write_pipes(&self.pipes, false);
+            self.target.write_newline();
+
+            if i == node.children.len() - 1 {
+                *self.pipes.last_mut().unwrap() = false;
+            }
+
+            self.write_inner(child);
+        }
+
+        self.pipes.pop();
     }
 }
 
 trait TreeFmtTarget {
-    fn write_pipe(&mut self, depth: u32);
+    fn write_pipes(&mut self, pipes: &[bool], force_last_pipe: bool);
 
     fn write_no_line(&mut self, text: &str);
 
@@ -1982,12 +1998,16 @@ trait TreeFmtTarget {
 }
 
 impl TreeFmtTarget for String {
-    fn write_pipe(&mut self, depth: u32) {
-        for i in 0..depth {
+    fn write_pipes(&mut self, pipes: &[bool], force_last_pipe: bool) {
+        for (i, &pipe) in pipes.iter().enumerate() {
             if i > 0 {
                 self.push(' ');
             }
-            self.push('|');
+            self.push(if pipe || (force_last_pipe && i == pipes.len() - 1) {
+                '|'
+            } else {
+                ' '
+            });
         }
     }
 
@@ -2001,7 +2021,7 @@ impl TreeFmtTarget for String {
 }
 
 impl TreeFmtTarget for u32 {
-    fn write_pipe(&mut self, _depth: u32) {
+    fn write_pipes(&mut self, _pipes: &[bool], _force_last_pipe: bool) {
         // (does not introduce newlines)
     }
 
