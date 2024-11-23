@@ -213,6 +213,7 @@ pub enum Style {
     NoStyle,
     Level(Level),
     Highlight,
+    Highlight2,
     Addition,
     Removal,
 }

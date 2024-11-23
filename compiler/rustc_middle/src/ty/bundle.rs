@@ -1827,7 +1827,7 @@ fn format_borrow_origins<'tcx>(
 
     let root_fmt = fmt_nodes.push(TreeFmtNode::new(format!(
         "`{}` borrows {}",
-        tcx.def_path_str(root_func),
+        Sty::Highlight(tcx.def_path_str(root_func)),
         borrows_fmt_part(tcx, tcx.components_borrowed(root_func)),
     )));
 
@@ -1845,7 +1845,9 @@ fn format_borrow_origins<'tcx>(
 
             for (local_did, local_muta) in entry.local.iter() {
                 let child_fmt = fmt_nodes.push(TreeFmtNode::new(format!(
-                    "...because it borrows `{}` explicitly",
+                    "...{}because `{}` borrows `{}` explicitly",
+                    if fmt_nodes[curr_fmt].children.len() > 0 { "and " } else { "" },
+                    Sty::Highlight2(tcx.def_path_str(curr_func)),
                     Sty::Highlight(Ty::new_ref(
                         tcx,
                         tcx.lifetimes.re_erased,
@@ -1864,8 +1866,10 @@ fn format_borrow_origins<'tcx>(
                 }
 
                 let child_fmt = fmt_nodes.push(TreeFmtNode::new(format!(
-                    "...because it inherits the components of `{}`,\n   \
+                    "...{}because `{}` inherits the components of `{}`,\n   \
                         which borrows {}",
+                    if fmt_nodes[curr_fmt].children.len() > 0 { "and " } else { "" },
+                    Sty::Highlight2(tcx.def_path_str(curr_func)),
                     Sty::Highlight(tcx.def_path_str(call.target)),
                     borrows_fmt_part(tcx, call_borrows),
                 )));
@@ -1904,7 +1908,7 @@ fn borrows_fmt_part<'tcx>(
                 f.write_str(" ")?;
             }
 
-            write!(f, "`{}`", Sty::Highlight(Ty::new_ref(
+            write!(f, "`{}`", Sty::Highlight2(Ty::new_ref(
                 tcx,
                 tcx.lifetimes.re_erased,
                 Ty::new_context_marker(tcx, item),
@@ -1962,8 +1966,10 @@ impl<'a, T: ?Sized + TreeFmtTarget> TreeFmtWriter<'a, T> {
         // Draw main portion
         for (i, line) in node.main.lines().enumerate() {
             if i == 0 {
-                self.target.write_pipes(&self.pipes[..self.pipes.len() - 1], true);
-                self.target.write_no_line(format_args!("{}", Sty::Gutter("-- ")));
+                if self.pipes.len() > 1 {
+                    self.target.write_pipes(&self.pipes[..self.pipes.len() - 1], true);
+                    self.target.write_no_line(format_args!("{}", Sty::LineNumber("--- ")));
+                }
             } else {
                 self.target.write_pipes(&self.pipes, false);
                 self.target.write_no_line(" ");
@@ -2001,9 +2007,9 @@ impl TreeFmtTarget for String {
     fn write_pipes(&mut self, pipes: &[bool], force_last_pipe: bool) {
         for (i, &pipe) in pipes.iter().enumerate() {
             if i > 0 {
-                self.push(' ');
+                self.push_str("  ");
             }
-            self.write_no_line(format_args!("{}", Sty::Gutter(
+            self.write_no_line(format_args!("{}", Sty::LineNumber(
                 if pipe || (force_last_pipe && i == pipes.len() - 1) {
                     '|'
                 } else {

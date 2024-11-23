@@ -233,7 +233,8 @@ pub struct IsLint {
 pub enum StyledSection<T> {
     Normal(T),
     Highlight(T),
-    Gutter(T),
+    Highlight2(T),
+    LineNumber(T),
 }
 
 impl<T> StyledSection<T> {
@@ -250,7 +251,7 @@ impl<T: fmt::Display> fmt::Display for StyledSection<T> {
         f.write_char(style_op_to_char(1 + self.discriminant()))?;
 
         // Write the inner text
-        let (Normal(v) | Highlight(v) | Gutter(v)) = self;
+        let (Normal(v) | Highlight(v) | Highlight2(v) | LineNumber(v)) = self;
         v.fmt(f)?;
 
         // Write the directive to pop the style.
@@ -261,9 +262,10 @@ impl<T: fmt::Display> fmt::Display for StyledSection<T> {
 }
 
 const PUA_START: char = '\u{F0000}';
-const STYLED_SECTION_STYLES: [Style; 3] = [
+const STYLED_SECTION_STYLES: [Style; 4] = [
     Style::NoStyle,
     Style::Highlight,
+    Style::Highlight2,
     Style::LineNumber,
 ];
 

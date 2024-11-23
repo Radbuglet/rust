@@ -2865,6 +2865,9 @@ impl Style {
             Style::Highlight => {
                 spec.set_bold(true).set_fg(Some(Color::Magenta));
             }
+            Style::Highlight2 => {
+                spec.set_fg(Some(Color::Magenta));
+            }
         }
         spec
     }
