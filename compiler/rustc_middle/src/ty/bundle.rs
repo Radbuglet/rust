@@ -1,3 +1,5 @@
+use std::fmt;
+use std::mem;
 use std::ops::Deref;
 use std::panic::Location;
 
@@ -7,7 +9,7 @@ use rustc_data_structures::sync::Lrc;
 use rustc_errors::DiagMessage;
 use rustc_hir as hir;
 use rustc_hir::{def_id::{DefId, LocalDefId, LocalDefIdMap}, def::DefKind};
-use rustc_index::IndexVec;
+use rustc_index::{IndexVec, IndexSlice};
 use rustc_macros::{HashStable, TyDecodable, TyEncodable, Encodable, Decodable};
 use rustc_target::spec::abi::Abi;
 
@@ -1804,8 +1806,200 @@ fn components_borrowed_fn_reify_check<'tcx>(tcx: TyCtxt<'tcx>, (): ()) {
 
                 // If it did, report the error!
                 let span = tcx.hir().span(node_hir_id);
-                tcx.dcx().emit_err(errors::ReifiedFnUsingCtx { span });
+                let mut diag = tcx.dcx().create_err(errors::ReifiedFnUsingCtx { span });
+                diag.note(format_borrow_origins(tcx, unsized_def_id));
+                diag.emit();
             }
         }
+    }
+}
+
+// === Diagnostic Formatting === //
+
+fn format_borrow_origins<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    root_func: DefId,
+) -> String {
+    let mut fmt_nodes = IndexVec::<TreeFmtIdx, TreeFmtNode>::new();
+    let mut nodes_expanded = FxHashSet::default();
+
+    let root_fmt = fmt_nodes.push(TreeFmtNode::new(format!(
+        "`{}` borrows {}",
+        tcx.def_path_str(root_func),
+        borrows_fmt_part(tcx, tcx.components_borrowed(root_func)),
+    )));
+
+    let mut nodes_to_expand = Vec::new();
+    if let Some(root_func) = root_func.as_local() {
+        nodes_to_expand.push((root_fmt, root_func));
+        nodes_expanded.insert(root_func);
+    }
+
+    while !nodes_to_expand.is_empty() {
+        let curr_expand = mem::take(&mut nodes_to_expand);
+
+        for (curr_fmt, curr_func) in curr_expand {
+            let entry = &tcx.components_borrowed_local(curr_func).entry;
+
+            for (local_did, local_muta) in entry.local.iter() {
+                let child_fmt = fmt_nodes.push(TreeFmtNode::new(format!(
+                    "...because it borrows `{}` explicitly",
+                    Ty::new_ref(
+                        tcx,
+                        tcx.lifetimes.re_erased,
+                        Ty::new_context_marker(tcx, local_did),
+                        local_muta,
+                    ),
+                )));
+
+                fmt_nodes[curr_fmt].children.push(child_fmt);
+            }
+
+            for call in &entry.calls {
+                let call_borrows = tcx.components_borrowed(call.target);
+                if call_borrows.is_empty() {
+                    continue;
+                }
+
+                let child_fmt = fmt_nodes.push(TreeFmtNode::new(format!(
+                    "...because it inherits the components of `{}`,\n\
+                    which borrows {}",
+                    tcx.def_path_str(call.target),
+                    borrows_fmt_part(tcx, call_borrows),
+                )));
+
+                fmt_nodes[curr_fmt].children.push(child_fmt);
+
+                if let Some(child_func) = call.target.as_local()
+                    && nodes_expanded.insert(child_func)
+                {
+                    nodes_to_expand.push((child_fmt, child_func));
+                }
+            }
+        }
+    }
+
+    let mut target = String::new();
+    tree_fmt_write(&fmt_nodes, root_fmt, &mut target);
+    target
+}
+
+fn borrows_fmt_part<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    set: &'tcx ContextSet,
+) -> impl fmt::Display + use<'tcx> {
+    fmt::from_fn(move |f| {
+        for (i, (item, muta)) in set.iter().enumerate() {
+            if i > 0 {
+                f.write_str(", ")?;
+            }
+
+            write!(f, "`{}`", Ty::new_ref(
+                tcx,
+                tcx.lifetimes.re_erased,
+                Ty::new_context_marker(tcx, item),
+                muta,
+            ))?;
+        }
+
+        Ok(())
+    })
+}
+
+rustc_index::newtype_index! {
+    #[derive(Ord, PartialOrd)]
+    struct TreeFmtIdx {}
+}
+
+struct TreeFmtNode {
+    main: String,
+    children: Vec<TreeFmtIdx>,
+}
+
+impl TreeFmtNode {
+    fn new(main: String) -> Self {
+        Self {
+            main,
+            children: Vec::new(),
+        }
+    }
+}
+
+fn tree_fmt_write(
+    nodes: &IndexSlice<TreeFmtIdx, TreeFmtNode>,
+    start: TreeFmtIdx,
+    target: &mut impl TreeFmtTarget,
+) {
+    tree_fmt_write_inner(nodes, start, target, 1);
+}
+
+fn tree_fmt_write_inner(
+    nodes: &IndexSlice<TreeFmtIdx, TreeFmtNode>,
+    node: TreeFmtIdx,
+    target: &mut impl TreeFmtTarget,
+    depth: u32,
+) {
+    let node = &nodes[node];
+
+    // Draw main portion
+    for (i, line) in node.main.lines().enumerate() {
+        if i == 0 {
+            target.write_pipe(depth);
+            target.write_no_line("-- ");
+        } else {
+            target.write_pipe(depth + 1);
+            target.write_no_line(" ");
+        }
+
+        target.write_no_line(line);
+        target.write_newline();
+    }
+
+    // Draw children
+    for &child in &node.children {
+        target.write_pipe(depth + 1);
+        target.write_newline();
+        tree_fmt_write_inner(nodes, child, target, depth + 1);
+    }
+}
+
+trait TreeFmtTarget {
+    fn write_pipe(&mut self, depth: u32);
+
+    fn write_no_line(&mut self, text: &str);
+
+    fn write_newline(&mut self);
+}
+
+impl TreeFmtTarget for String {
+    fn write_pipe(&mut self, depth: u32) {
+        for i in 0..depth {
+            if i > 0 {
+                self.push(' ');
+            }
+            self.push('|');
+        }
+    }
+
+    fn write_no_line(&mut self, text: &str) {
+        self.push_str(text);
+    }
+
+    fn write_newline(&mut self) {
+        self.push('\n');
+    }
+}
+
+impl TreeFmtTarget for u32 {
+    fn write_pipe(&mut self, _depth: u32) {
+        // (does not introduce newlines)
+    }
+
+    fn write_no_line(&mut self, _text: &str) {
+        // (does not introduce newlines)
+    }
+
+    fn write_newline(&mut self) {
+        *self += 1;
     }
 }
