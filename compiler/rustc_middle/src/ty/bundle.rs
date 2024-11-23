@@ -1,4 +1,4 @@
-use std::fmt;
+use std::fmt::{self, Write as _};
 use std::mem;
 use std::ops::Deref;
 use std::panic::Location;
@@ -6,7 +6,7 @@ use std::panic::Location;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet, FxIndexMap, FxIndexSet, IndexEntry};
 use rustc_data_structures::graph::{DirectedGraph, Successors, scc};
 use rustc_data_structures::sync::Lrc;
-use rustc_errors::DiagMessage;
+use rustc_errors::{DiagMessage, DiagStyledString, StyledSection as Sty};
 use rustc_hir as hir;
 use rustc_hir::{def_id::{DefId, LocalDefId, LocalDefIdMap}, def::DefKind};
 use rustc_index::{IndexVec, IndexSlice};
@@ -1809,7 +1809,7 @@ fn components_borrowed_fn_reify_check<'tcx>(tcx: TyCtxt<'tcx>, (): ()) {
                 // If it did, report the error!
                 let span = tcx.hir().span(node_hir_id);
                 let mut diag = tcx.dcx().create_err(errors::ReifiedFnUsingCtx { span });
-                diag.note(format_borrow_origins(tcx, unsized_def_id));
+                diag.highlighted_note(format_borrow_origins(tcx, unsized_def_id).0);
                 diag.emit();
             }
         }
@@ -1821,7 +1821,7 @@ fn components_borrowed_fn_reify_check<'tcx>(tcx: TyCtxt<'tcx>, (): ()) {
 fn format_borrow_origins<'tcx>(
     tcx: TyCtxt<'tcx>,
     root_func: DefId,
-) -> String {
+) -> DiagStyledString {
     let mut fmt_nodes = IndexVec::<TreeFmtIdx, TreeFmtNode>::new();
     let mut nodes_expanded = FxHashSet::default();
 
@@ -1846,12 +1846,12 @@ fn format_borrow_origins<'tcx>(
             for (local_did, local_muta) in entry.local.iter() {
                 let child_fmt = fmt_nodes.push(TreeFmtNode::new(format!(
                     "...because it borrows `{}` explicitly",
-                    Ty::new_ref(
+                    Sty::Highlight(Ty::new_ref(
                         tcx,
                         tcx.lifetimes.re_erased,
                         Ty::new_context_marker(tcx, local_did),
                         local_muta,
-                    ),
+                    )),
                 )));
 
                 fmt_nodes[curr_fmt].children.push(child_fmt);
@@ -1866,7 +1866,7 @@ fn format_borrow_origins<'tcx>(
                 let child_fmt = fmt_nodes.push(TreeFmtNode::new(format!(
                     "...because it inherits the components of `{}`,\n   \
                         which borrows {}",
-                    tcx.def_path_str(call.target),
+                    Sty::Highlight(tcx.def_path_str(call.target)),
                     borrows_fmt_part(tcx, call_borrows),
                 )));
 
@@ -1883,7 +1883,7 @@ fn format_borrow_origins<'tcx>(
 
     let mut target = String::new();
     TreeFmtWriter::new(&mut target, &fmt_nodes).write(root_fmt);
-    target
+    DiagStyledString::rich(target)
 }
 
 fn borrows_fmt_part<'tcx>(
@@ -1904,12 +1904,12 @@ fn borrows_fmt_part<'tcx>(
                 f.write_str(" ")?;
             }
 
-            write!(f, "`{}`", Ty::new_ref(
+            write!(f, "`{}`", Sty::Highlight(Ty::new_ref(
                 tcx,
                 tcx.lifetimes.re_erased,
                 Ty::new_context_marker(tcx, item),
                 muta,
-            ))?;
+            )))?;
         }
 
         Ok(())
@@ -1963,7 +1963,7 @@ impl<'a, T: ?Sized + TreeFmtTarget> TreeFmtWriter<'a, T> {
         for (i, line) in node.main.lines().enumerate() {
             if i == 0 {
                 self.target.write_pipes(&self.pipes[..self.pipes.len() - 1], true);
-                self.target.write_no_line("-- ");
+                self.target.write_no_line(format_args!("{}", Sty::Gutter("-- ")));
             } else {
                 self.target.write_pipes(&self.pipes, false);
                 self.target.write_no_line(" ");
@@ -1992,7 +1992,7 @@ impl<'a, T: ?Sized + TreeFmtTarget> TreeFmtWriter<'a, T> {
 trait TreeFmtTarget {
     fn write_pipes(&mut self, pipes: &[bool], force_last_pipe: bool);
 
-    fn write_no_line(&mut self, text: &str);
+    fn write_no_line(&mut self, text: impl fmt::Display);
 
     fn write_newline(&mut self);
 }
@@ -2003,16 +2003,18 @@ impl TreeFmtTarget for String {
             if i > 0 {
                 self.push(' ');
             }
-            self.push(if pipe || (force_last_pipe && i == pipes.len() - 1) {
-                '|'
-            } else {
-                ' '
-            });
+            self.write_no_line(format_args!("{}", Sty::Gutter(
+                if pipe || (force_last_pipe && i == pipes.len() - 1) {
+                    '|'
+                } else {
+                    ' '
+                },
+            )));
         }
     }
 
-    fn write_no_line(&mut self, text: &str) {
-        self.push_str(text);
+    fn write_no_line(&mut self, text: impl fmt::Display) {
+        write!(self, "{text}").unwrap();
     }
 
     fn write_newline(&mut self) {
@@ -2025,7 +2027,7 @@ impl TreeFmtTarget for u32 {
         // (does not introduce newlines)
     }
 
-    fn write_no_line(&mut self, _text: &str) {
+    fn write_no_line(&mut self, _text: impl fmt::Display) {
         // (does not introduce newlines)
     }
 

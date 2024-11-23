@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::fmt::{self, Debug};
+use std::fmt::{self, Debug, Write as _};
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
@@ -228,6 +228,61 @@ pub struct IsLint {
     has_future_breakage: bool,
 }
 
+#[derive(Debug, Copy, Clone)]
+#[repr(u32)]
+pub enum StyledSection<T> {
+    Normal(T),
+    Highlight(T),
+    Gutter(T),
+}
+
+impl<T> StyledSection<T> {
+    fn discriminant(&self) -> u32 {
+        unsafe { *<*const _>::from(self).cast::<u32>() }
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for StyledSection<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use StyledSection::*;
+
+        // Write the directive to push the style.
+        f.write_char(style_op_to_char(1 + self.discriminant()))?;
+
+        // Write the inner text
+        let (Normal(v) | Highlight(v) | Gutter(v)) = self;
+        v.fmt(f)?;
+
+        // Write the directive to pop the style.
+        f.write_char(style_op_to_char(0))?;
+
+        Ok(())
+    }
+}
+
+const PUA_START: char = '\u{F0000}';
+const STYLED_SECTION_STYLES: [Style; 3] = [
+    Style::NoStyle,
+    Style::Highlight,
+    Style::LineNumber,
+];
+
+fn style_op_to_char(idx: u32) -> char {
+    char::from_u32(PUA_START as u32 + idx).unwrap()
+}
+
+fn char_to_style_op(val: char) -> Option<u32> {
+    let pua_start = PUA_START as u32;
+    let style_no = STYLED_SECTION_STYLES.len() as u32;
+    let val = val as u32;
+
+    if (pua_start..(pua_start + style_no + 1)).contains(&val) {
+        Some(val - pua_start)
+    } else {
+        None
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct DiagStyledString(pub Vec<StringPart>);
 
@@ -235,12 +290,15 @@ impl DiagStyledString {
     pub fn new() -> DiagStyledString {
         DiagStyledString(vec![])
     }
+
     pub fn push_normal<S: Into<String>>(&mut self, t: S) {
         self.0.push(StringPart::normal(t));
     }
+
     pub fn push_highlighted<S: Into<String>>(&mut self, t: S) {
         self.0.push(StringPart::highlighted(t));
     }
+
     pub fn push<S: Into<String>>(&mut self, t: S, highlight: bool) {
         if highlight {
             self.push_highlighted(t);
@@ -248,12 +306,80 @@ impl DiagStyledString {
             self.push_normal(t);
         }
     }
+
+    pub fn push_rich(&mut self, rich: impl fmt::Display) {
+        struct DiagFormatter<'a> {
+            target: &'a mut DiagStyledString,
+            style_stack: Vec<Style>,
+        }
+
+        impl fmt::Write for DiagFormatter<'_> {
+            fn write_str(&mut self, mut text: &str) -> fmt::Result {
+                while !text.is_empty() {
+                    let cmd_pos = text.find(|ch| char_to_style_op(ch).is_some());
+
+                    // Add text up to the control character to the target.
+                    let part = &text[..cmd_pos.unwrap_or(text.len())];
+                    if !part.is_empty() {
+                        let curr_style = *self.style_stack.last().unwrap();
+
+                        if let Some(push_to) = self.target.0.last_mut() && push_to.style == curr_style {
+                            push_to.content.push_str(part);
+                        } else {
+                            self.target.0.push(StringPart {
+                                style: curr_style,
+                                content: part.to_string(),
+                            });
+                        }
+                    }
+
+                    // Parse the control.
+                    let Some(cmd_pos) = cmd_pos else {
+                        // There's no control so we must be at the end of the string.
+                        break;
+                    };
+
+                    let mut str_iter = text[cmd_pos..].char_indices();
+                    let cmd = str_iter.next().unwrap().1;
+                    let cmd = char_to_style_op(cmd).unwrap();
+
+                    if cmd == 0 {
+                        assert!(self.style_stack.len() > 1, "unbalanced number of style closers");
+                        self.style_stack.pop();
+                    } else {
+                        self.style_stack.push(STYLED_SECTION_STYLES[(cmd - 1) as usize]);
+                    }
+
+                    // Advance the text slice.
+                    text = str_iter.as_str();
+                }
+
+                Ok(())
+            }
+        }
+
+        write!(
+            DiagFormatter {
+                target: self,
+                style_stack: vec![Style::NoStyle],
+            },
+            "{rich}",
+        )
+        .unwrap();
+    }
+
     pub fn normal<S: Into<String>>(t: S) -> DiagStyledString {
         DiagStyledString(vec![StringPart::normal(t)])
     }
 
     pub fn highlighted<S: Into<String>>(t: S) -> DiagStyledString {
         DiagStyledString(vec![StringPart::highlighted(t)])
+    }
+
+    pub fn rich(text: impl fmt::Display) -> DiagStyledString {
+        let mut base = Self::new();
+        base.push_rich(text);
+        base
     }
 
     pub fn content(&self) -> String {
