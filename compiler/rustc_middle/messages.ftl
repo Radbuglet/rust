@@ -117,3 +117,9 @@ middle_closure_uses_ctx = closures cannot implicitly borrow context from their c
 middle_trait_member_uses_ctx = `trait` members cannot implicitly borrow context from their callers
 
 middle_reified_fn_using_ctx = cannot transform a function which implicitly borrows context from its caller into a function pointer
+
+middle_ambiguous_origin_for_context_item = ambiguous origin for context item of type `{$ctx_ty}` in bundle expression of type `{$bundle_ty}`
+
+middle_ambiguous_origin_for_generic_item = ambiguous origin for generic context item of type `{$ctx_ty}` in bundle expression of type `{$bundle_ty}`
+
+middle_dependency_originates_from_infer_bundle = context item originates from `{$opaque_ty}`, which was inferred as `{$concrete_ty}`

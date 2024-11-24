@@ -172,6 +172,31 @@ pub struct ReifiedFnUsingCtx {
     pub span: Span,
 }
 
+#[derive(Diagnostic)]
+#[diag(middle_ambiguous_origin_for_context_item)]
+pub struct AmbiguousOriginForContextItem<'tcx> {
+    #[primary_span]
+    pub span: Span,
+    pub ctx_ty: Ty<'tcx>,
+    pub bundle_ty: Ty<'tcx>,
+}
+
+#[derive(Diagnostic)]
+#[diag(middle_ambiguous_origin_for_generic_item)]
+pub struct AmbiguousOriginForGenericItem<'tcx> {
+    #[primary_span]
+    pub span: Span,
+    pub ctx_ty: Ty<'tcx>,
+    pub bundle_ty: Ty<'tcx>,
+}
+
+#[derive(Subdiagnostic)]
+#[note(middle_dependency_originates_from_infer_bundle)]
+pub struct DependencyOriginatesFromInferBundle<'tcx> {
+    pub opaque_ty: Ty<'tcx>,
+    pub concrete_ty: Ty<'tcx>,
+}
+
 pub use crate::fluent_generated::{
     middle_entry_fn_uses_ctx,
     middle_extern_fn_uses_ctx,

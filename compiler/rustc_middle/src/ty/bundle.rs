@@ -6,11 +6,12 @@ use std::panic::Location;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet, FxIndexMap, FxIndexSet, IndexEntry};
 use rustc_data_structures::graph::{DirectedGraph, Successors, scc};
 use rustc_data_structures::sync::Lrc;
-use rustc_errors::{DiagMessage, DiagStyledString, StyledSection as Sty};
+use rustc_errors::{Diag, DiagMessage, DiagStyledString, StyledSection as Sty};
 use rustc_hir as hir;
 use rustc_hir::{def_id::{DefId, LocalDefId, LocalDefIdMap}, def::DefKind};
 use rustc_index::{IndexVec, IndexSlice};
 use rustc_macros::{HashStable, TyDecodable, TyEncodable, Encodable, Decodable};
+use rustc_span::Span;
 use rustc_target::spec::abi::Abi;
 
 use crate::mir;
@@ -541,7 +542,10 @@ impl<'tcx> PackShapeStore<'tcx> {
 
         let ty = expr.ty.bundle_item_set(tcx);
         let bundles = exprs.iter()
-            .map(|&expr| tcx.reified_bundle((body[expr].ty, stage)))
+            .map(|&expr| (
+                body[expr].span,
+                tcx.reified_bundle((body[expr].ty, stage)),
+            ))
             .collect::<Vec<_>>();
 
         let shape = make_bundle_pack_shape(
@@ -597,12 +601,45 @@ pub fn make_bundle_pack_shape<'tcx>(
     tcx: TyCtxt<'tcx>,
     stage: ContextSolveStage,
     flags: ty::PackFlags,
-    bundles: &[&ty::ReifiedBundle<'tcx>],
+    bundles: &[(Span, &ty::ReifiedBundle<'tcx>)],
     ty: Ty<'tcx>,
 ) -> PackShape<'tcx> {
+    let _fmt = stage.fully_resolved().then(|| ty::print::InferBundleResolveGuard::new());
+    make_bundle_pack_shape_inner(
+        tcx,
+        stage,
+        flags,
+        bundles,
+        ty,
+        None
+    )
+}
+
+fn make_bundle_pack_shape_inner<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    stage: ContextSolveStage,
+    flags: ty::PackFlags,
+    bundles: &[(Span, &ty::ReifiedBundle<'tcx>)],
+    ty: Ty<'tcx>,
+    resolved_infer: Option<(Ty<'tcx>, Ty<'tcx>)>,
+) -> PackShape<'tcx> {
+    let maybe_attach_infer_hint = |target: &mut Diag<'tcx>| {
+        let Some((opaque_ty, concrete_ty)) = resolved_infer else {
+            return;
+        };
+
+        ty::print::with_resolve_infer_bundle!(
+            @set_to(false)
+            target.subdiagnostic(errors::DependencyOriginatesFromInferBundle {
+                opaque_ty,
+                concrete_ty,
+            })
+        );
+    };
+
     match ty::ReifiedBundleItemSet::decode(ty) {
         ty::ReifiedBundleItemSet::Ref(_re, muta, def_id) => {
-            for (i, bundle) in bundles.iter().enumerate() {
+            for (i, (bundle_span, bundle)) in bundles.iter().enumerate() {
                 if !bundle.infer_sets.is_empty() && flags.allows_env() {
                     return PackShape::Error(stage.err_during_graph(tcx, || {
                         todo!("unclear whether the reference should come from the environment or the infer set");
@@ -615,7 +652,13 @@ pub fn make_bundle_pack_shape<'tcx>(
 
                 if members.len() > 1 {
                     return PackShape::Error(stage.err_during_mir(tcx, || {
-                        todo!("multiple possible origins for the context item");
+                        let mut diag = tcx.dcx().create_err(errors::AmbiguousOriginForContextItem {
+                            span: *bundle_span,
+                            ctx_ty: ty,
+                            bundle_ty: bundle.original_bundle,
+                        });
+                        maybe_attach_infer_hint(&mut diag);
+                        diag.emit()
                     }));
                 }
 
@@ -634,20 +677,31 @@ pub fn make_bundle_pack_shape<'tcx>(
         }
         ty::ReifiedBundleItemSet::Tuple(items) => {
             let items = items.iter()
-                .map(|item| make_bundle_pack_shape(tcx, stage, flags, bundles, item))
+                .map(|item| make_bundle_pack_shape_inner(
+                    tcx,
+                    stage,
+                    flags,
+                    bundles,
+                    item,
+                    resolved_infer,
+                ))
                 .collect();
 
             PackShape::MakeTuple(items)
         }
         ty::ReifiedBundleItemSet::GenericSet(ty) => {
-            for (i, bundle) in bundles.iter().enumerate() {
+            for (i, (bundle_span, bundle)) in bundles.iter().enumerate() {
                 let Some(members) = bundle.generic_sets.get(&ty) else {
                     continue;
                 };
 
                 if members.len() > 1 {
                     return PackShape::Error(stage.err_during_mir(tcx, || {
-                        todo!("multiple possible origins for the generic set");
+                        tcx.dcx().emit_err(errors::AmbiguousOriginForGenericItem {
+                            span: *bundle_span,
+                            ctx_ty: ty,
+                            bundle_ty: bundle.original_bundle,
+                        })
                     }));
                 }
 
@@ -661,14 +715,18 @@ pub fn make_bundle_pack_shape<'tcx>(
             }))
         }
         ty::ReifiedBundleItemSet::GenericRef(_re, muta, ty) => {
-            for (i, bundle) in bundles.iter().enumerate() {
+            for (i, (bundle_span, bundle)) in bundles.iter().enumerate() {
                 let Some(members) = bundle.generic_fields.get(&ty) else {
                     continue;
                 };
 
                 if members.len() > 1 {
                     return PackShape::Error(stage.err_during_mir(tcx, || {
-                        todo!("multiple possible origins for the generic item");
+                        tcx.dcx().emit_err(errors::AmbiguousOriginForGenericItem {
+                            span: *bundle_span,
+                            ctx_ty: ty,
+                            bundle_ty: bundle.original_bundle,
+                        })
                     }));
                 }
 
@@ -685,15 +743,22 @@ pub fn make_bundle_pack_shape<'tcx>(
             if stage.fully_resolved() {
                 let inner_ty = resolve_infer_bundle_set(tcx, did, re);
                 let inner_values_ty = resolve_infer_bundle_values(tcx, did, re);
-                let inner_shape = make_bundle_pack_shape(tcx, stage, flags, bundles, inner_ty);
+                let inner_shape = make_bundle_pack_shape_inner(
+                    tcx,
+                    stage,
+                    flags,
+                    bundles,
+                    inner_ty,
+                    Some((ty, inner_ty)),
+                );
 
                 PackShape::MakeInfer {
                     bundle: did,
                     inner_ty: inner_values_ty,
-                    inner_shape: Box::new(inner_shape)
+                    inner_shape: Box::new(inner_shape),
                 }
             } else {
-                for (i, bundle) in bundles.iter().enumerate() {
+                for (i, (_bundle_span, bundle)) in bundles.iter().enumerate() {
                     // Ambiguity errors will be handled by regular reference ambiguity semantics with
                     // tge desugaring of these infer bundles to regular component sets.
                     if bundle.infer_sets.contains_key(&did) {

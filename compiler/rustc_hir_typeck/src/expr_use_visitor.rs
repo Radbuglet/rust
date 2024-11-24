@@ -393,14 +393,21 @@ impl<'tcx, Cx: TypeInformationCtxt<'tcx>, D: Delegate<'tcx>> ExprUseVisitor<'tcx
 
                 let mut exprs_reified_owned = Vec::new();
                 for expr in exprs {
-                    exprs_reified_owned.push(ty::reified_bundle_owned(
-                        tcx,
-                        self.expr_ty(expr)?,
-                        ty::ContextSolveStage::ClosureUpVars,
+                    exprs_reified_owned.push((
+                        expr.span,
+                        ty::reified_bundle_owned(
+                            tcx,
+                            self.expr_ty(expr)?,
+                            ty::ContextSolveStage::ClosureUpVars,
+                        ),
                     ));
                 }
 
-                let exprs_reified = exprs_reified_owned.iter().collect::<Vec<_>>();
+                let exprs_reified = exprs_reified_owned
+                    .iter()
+                    .map(|(sp, ty)| (*sp, ty))
+                    .collect::<Vec<_>>();
+
                 let out_ty = self.expr_ty(expr)?.bundle_item_set(tcx);
 
                 let pack_shape = ty::make_bundle_pack_shape(

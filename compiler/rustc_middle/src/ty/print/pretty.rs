@@ -65,6 +65,7 @@ thread_local! {
     static FORCE_TRIMMED_PATH: Cell<bool> = const { Cell::new(false) };
     static REDUCED_QUERIES: Cell<bool> = const { Cell::new(false) };
     static NO_VISIBLE_PATH: Cell<bool> = const { Cell::new(false) };
+    static RESOLVE_INFER_BUNDLES: Cell<bool> = const { Cell::new(false) };
 }
 
 macro_rules! define_helper {
@@ -77,14 +78,22 @@ macro_rules! define_helper {
                 pub fn new() -> $helper {
                     $helper($tl.with(|c| c.replace(true)))
                 }
+
+                pub fn new_set_to(value: bool) -> $helper {
+                    $helper($tl.with(|c| c.replace(value)))
+                }
             }
 
             $(#[$a])*
-            pub macro $name($e:expr) {
-                {
+            pub macro $name {
+                ($e:expr) => {{
                     let _guard = $helper::new();
                     $e
-                }
+                }},
+                (@set_to($set_to:expr) $e:expr) => {{
+                    let _guard = $helper::new_set_to($set_to);
+                    $e
+                }},
             }
 
             impl Drop for $helper {
@@ -124,6 +133,8 @@ define_helper!(
     /// Prevent selection of visible paths. `Display` impl of DefId will prefer
     /// visible (public) reexports of types as paths.
     fn with_no_visible_paths(NoVisibleGuard, NO_VISIBLE_PATH);
+    /// Expand `infer_bundle!()`s to their inferred set.
+    fn with_resolve_infer_bundle(InferBundleResolveGuard, RESOLVE_INFER_BUNDLES);
 );
 
 /// Avoids running any queries during prints.
@@ -983,20 +994,31 @@ pub trait PrettyPrinter<'tcx>: Printer<'tcx> + fmt::Write {
                                 // If the type alias directly starts with the `impl` of the
                                 // inferred bundle type we're printing, then skip the `::{infer_bundle#0}`.
                                 p!(print_def_path(parent, args));
+
+                                if with_resolve_infer_bundle() {
+                                    p!("(", print(ty::resolve_infer_bundle_set(self.tcx(), def_id, r)), ")");
+                                }
                                 return Ok(());
                             }
                         }
                         // Complex inferred bundle, e.g. `type Foo = (i32, infer_bundle!('a));`
                         p!(print_def_path(def_id, args));
+                        if with_resolve_infer_bundle() {
+                            p!("(", print(ty::resolve_infer_bundle_set(self.tcx(), def_id, r)), ")");
+                        }
                         return Ok(());
                     }
                     _ => {
                         p!("infer_bundle!");
 
-                        if self.should_print_region(r) {
-                            p!("(", print(r), ")");
+                        if with_resolve_infer_bundle() {
+                            p!("(", print(ty::resolve_infer_bundle_set(self.tcx(), def_id, r)), ")");
                         } else {
-                            p!("(...)");
+                            if self.should_print_region(r) {
+                                p!("(", print(r), ")");
+                            } else {
+                                p!("(...)");
+                            }
                         }
                     }
                 }
