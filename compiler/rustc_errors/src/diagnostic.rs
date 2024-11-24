@@ -228,46 +228,74 @@ pub struct IsLint {
     has_future_breakage: bool,
 }
 
-#[derive(Debug, Copy, Clone)]
-#[repr(u32)]
-pub enum StyledSection<T> {
-    Normal(T),
-    Highlight(T),
-    Highlight2(T),
-    LineNumber(T),
+macro_rules! define_styled_section {
+    (
+        enum_name = $enum_name:ident;
+        section_styles_array = $section_styles_array:ident;
+
+        $($variant:ident = $style:expr;)*
+    ) => {
+        #[derive(Debug, Copy, Clone)]
+        pub enum $enum_name<T> {
+            $($variant(T),)*
+        }
+
+        impl<T> $enum_name<T> {
+            fn discriminant(&self) -> u32 {
+                let i = 0;
+
+                $(
+                    if let $enum_name::$variant(..) = self {
+                        return i;
+                    }
+
+                    let i = i + 1;
+                )*
+
+                let _ = i;
+                unreachable!();
+            }
+        }
+
+        impl<T: fmt::Display> fmt::Display for $enum_name<T> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                // Write the directive to push the style.
+                f.write_char(style_op_to_char(1 + self.discriminant()))?;
+
+                // Write the inner text
+                let v = match self {
+                    $(StyledSection::$variant(v) => v,)*
+                };
+                v.fmt(f)?;
+
+                // Write the directive to pop the style.
+                f.write_char(style_op_to_char(0))?;
+
+                Ok(())
+            }
+        }
+
+        const $section_styles_array: [
+            Style;
+            $({ define_styled_section!(@bind $variant); 1 } +)* 0
+        ] = [
+            $($style,)*
+        ];
+    };
+    (@bind $dummy:ident) => {};
 }
 
-impl<T> StyledSection<T> {
-    fn discriminant(&self) -> u32 {
-        unsafe { *<*const _>::from(self).cast::<u32>() }
-    }
-}
+define_styled_section! {
+    enum_name = StyledSection;
+    section_styles_array = STYLED_SECTION_STYLES;
 
-impl<T: fmt::Display> fmt::Display for StyledSection<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use StyledSection::*;
-
-        // Write the directive to push the style.
-        f.write_char(style_op_to_char(1 + self.discriminant()))?;
-
-        // Write the inner text
-        let (Normal(v) | Highlight(v) | Highlight2(v) | LineNumber(v)) = self;
-        v.fmt(f)?;
-
-        // Write the directive to pop the style.
-        f.write_char(style_op_to_char(0))?;
-
-        Ok(())
-    }
+    NoStyle = Style::NoStyle;
+    Highlight = Style::Highlight;
+    Highlight2 = Style::Highlight2;
+    LineNumber = Style::LineNumber;
 }
 
 const PUA_START: char = '\u{F0000}';
-const STYLED_SECTION_STYLES: [Style; 4] = [
-    Style::NoStyle,
-    Style::Highlight,
-    Style::Highlight2,
-    Style::LineNumber,
-];
 
 fn style_op_to_char(idx: u32) -> char {
     char::from_u32(PUA_START as u32 + idx).unwrap()
@@ -299,6 +327,10 @@ impl DiagStyledString {
 
     pub fn push_highlighted<S: Into<String>>(&mut self, t: S) {
         self.0.push(StringPart::highlighted(t));
+    }
+
+    pub fn push_highlighted2<S: Into<String>>(&mut self, t: S) {
+        self.0.push(StringPart::highlighted2(t));
     }
 
     pub fn push<S: Into<String>>(&mut self, t: S, highlight: bool) {
@@ -378,6 +410,10 @@ impl DiagStyledString {
         DiagStyledString(vec![StringPart::highlighted(t)])
     }
 
+    pub fn highlighted2<S: Into<String>>(t: S) -> DiagStyledString {
+        DiagStyledString(vec![StringPart::highlighted2(t)])
+    }
+
     pub fn rich(text: impl fmt::Display) -> DiagStyledString {
         let mut base = Self::new();
         base.push_rich(text);
@@ -402,6 +438,10 @@ impl StringPart {
 
     pub fn highlighted<S: Into<String>>(content: S) -> StringPart {
         StringPart { content: content.into(), style: Style::Highlight }
+    }
+
+    pub fn highlighted2<S: Into<String>>(content: S) -> StringPart {
+        StringPart { content: content.into(), style: Style::Highlight2 }
     }
 }
 
