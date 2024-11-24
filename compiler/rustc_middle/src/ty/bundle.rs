@@ -30,7 +30,7 @@ pub fn provide(providers: &mut Providers) {
         components_borrowed_local,
         components_borrowed_graph,
         components_borrowed,
-        components_borrowed_fn_reify_check,
+        components_borrowed_borrow_free_checks,
         ..*providers
     };
 }
@@ -1409,7 +1409,7 @@ impl<'a, 'tcx> Successors for ComponentsBorrowedSccSubgraph<'a, 'tcx> {
 fn def_can_borrow_context<'tcx>(
     tcx: TyCtxt<'tcx>,
     func: DefId,
-) -> Result<(), DiagMessage> {
+) -> Result<(), (DefId, DiagMessage)> {
     let kind = tcx.def_kind(func);
 
     if kind == DefKind::InferBundle {
@@ -1417,26 +1417,26 @@ fn def_can_borrow_context<'tcx>(
     }
 
     if tcx.entry_fn(()).is_some_and(|(did, _)| did == func) {
-        return Err(errors::middle_entry_fn_uses_ctx);
+        return Err((func, errors::middle_entry_fn_uses_ctx));
     }
 
     if
         kind == DefKind::AssocFn
         && let DefKind::Impl { of_trait: true } | DefKind::Trait = tcx.def_kind(tcx.parent(func))
     {
-        return Err(errors::middle_trait_member_uses_ctx);
-    }
-
-    if tcx.is_closure_like(func) {
-        return Err(errors::middle_closure_uses_ctx);
+        return Err((func, errors::middle_trait_member_uses_ctx));
     }
 
     if tcx.is_coroutine(func) {
-        return Err(errors::middle_async_fn_uses_ctx);
+        return Err((tcx.parent(func), errors::middle_async_fn_uses_ctx));
+    }
+
+    if tcx.is_closure_like(func) {
+        return Err((func, errors::middle_closure_uses_ctx));
     }
 
     if kind == DefKind::Fn && tcx.fn_sig(func).skip_binder().abi() != Abi::Rust {
-        return Err(errors::middle_extern_fn_uses_ctx);
+        return Err((func, errors::middle_extern_fn_uses_ctx));
     }
 
     Ok(())
@@ -1675,16 +1675,6 @@ fn components_borrowed_graph<'tcx>(
             continue;
         };
         map.insert(node_def_id, weight.local);
-
-        if
-            !weight.local.is_empty()
-            && let Err(msg) = def_can_borrow_context(tcx, node_def_id.to_def_id())
-        {
-            let span = tcx.span_of_impl(node_def_id.to_def_id()).unwrap();
-            let diag = tcx.dcx().struct_span_err(span, msg);
-            // TODO: Add much more context
-            diag.emit();
-        }
     }
 
     tcx.arena.alloc(map)
@@ -1740,7 +1730,25 @@ pub fn resolve_infer_bundle_values<'tcx>(
     }
 }
 
-fn components_borrowed_fn_reify_check<'tcx>(tcx: TyCtxt<'tcx>, (): ()) {
+fn components_borrowed_borrow_free_checks<'tcx>(tcx: TyCtxt<'tcx>, (): ()) {
+    // Check function borrow rules.
+    for &def_id in tcx.mir_keys(()) {
+        if !has_components_borrowed_entry(tcx, def_id.to_def_id()) {
+            continue;
+        }
+
+        if
+            !tcx.components_borrowed(def_id).is_empty()
+            && let Err((def_id_for_span, msg)) = def_can_borrow_context(tcx, def_id.to_def_id())
+        {
+            let span = tcx.span_of_impl(def_id_for_span).unwrap();
+            let mut diag = tcx.dcx().struct_span_err(span, msg);
+            diag.highlighted_note(format_borrow_origins(tcx, def_id.to_def_id()).0);
+            diag.emit();
+        }
+    }
+
+    // Check function pointer reification rules.
     for &def_id in tcx.mir_keys(()) {
         // Ignore definitions whose type-check results come from another function.
         let typeck_root_def_id = tcx.typeck_root_def_id(def_id.to_def_id());

@@ -2301,8 +2301,8 @@ rustc_queries! {
         separate_provide_extern
     }
 
-    query components_borrowed_fn_reify_check(_: ()) {
-        desc { "validating function pointer unsizes" }
+    query components_borrowed_borrow_free_checks(_: ()) {
+        desc { "validating borrow-free function rules" }
         eval_always
     }
 }
