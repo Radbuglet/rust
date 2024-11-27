@@ -17,6 +17,7 @@ use rustc_hir_analysis::hir_ty_lowering::HirTyLowerer;
 use rustc_index::IndexVec;
 use rustc_infer::infer::{DefineOpaqueTypes, InferOk, TypeTrace};
 use rustc_middle::ty::adjustment::AllowTwoPhase;
+use rustc_middle::ty::auto_arg::{AutoArg, AutoArgOrigin};
 use rustc_middle::ty::error::TypeError;
 use rustc_middle::ty::visit::TypeVisitableExt;
 use rustc_middle::ty::{self, IsSuggestable, Ty, TyCtxt};
@@ -294,19 +295,37 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
         // If we're not variadic and the input argument count is less than the expected count,
         // try to introduce some auto arguments!
-        if !c_variadic {
+        if !c_variadic && provided_args.len() < expected_input_tys.len() {
             let mut tck_results = self.typeck_results.borrow_mut();
             let mut auto_args_list = tck_results.auto_args_mut();
             let auto_args_list = auto_args_list
                 .entry(call_expr.hir_id)
                 .or_default();
 
+            let spans = [call_span]
+                .into_iter()
+                .chain(provided_args.iter().map(|arg| {
+                    arg.span
+                }));
+
+            let auto_arg_origin = AutoArgOrigin {
+                fn_def_id,
+                fn_args: self.tcx.mk_type_list(&formal_input_tys),
+                spans: self.tcx.arena.alloc_from_iter(spans),
+                arg_idx: 0,
+                overloaded: false,
+            };
+
             while provided_args.len() < expected_input_tys.len() {
                 // TODO: Ensure that the argument is marked as an auto-argument.
 
-                let Some(arg) = ty::auto_arg::AutoArg::of(
+                let Some(arg) = AutoArg::of(
                     tcx,
                     *expected_input_tys.last().unwrap(),
+                    AutoArgOrigin {
+                        arg_idx: provided_args.len() as u32,
+                        ..auto_arg_origin
+                    }
                 ) else {
                     break;
                 };

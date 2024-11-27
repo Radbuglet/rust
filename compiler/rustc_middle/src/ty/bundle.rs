@@ -16,7 +16,7 @@ use rustc_target::spec::abi::Abi;
 
 use crate::mir;
 use crate::thir::{self, visit as thir_visit};
-use crate::ty::{self, Mutability, list::RawList, Ty, TyCtxt};
+use crate::ty::{self, auto_arg::AutoArgOrigin, Mutability, list::RawList, Ty, TyCtxt};
 use crate::query::Providers;
 
 // TODO: needed for `delay_bug`; upstream versions of rustc have this as an inherent method
@@ -530,7 +530,7 @@ impl<'tcx> PackShapeStore<'tcx> {
         body: &thir::Thir<'tcx>,
         expr: &thir::Expr<'tcx>,
     ) -> PackShapeStoreRes<'tcx> {
-        let thir::ExprKind::Pack { index, flags, exprs } = &expr.kind else {
+        let thir::ExprKind::Pack { index, flags, exprs, auto_arg } = &expr.kind else {
             bug!("expected `Pack` expression, got {expr:?}");
         };
 
@@ -548,13 +548,15 @@ impl<'tcx> PackShapeStore<'tcx> {
             ))
             .collect::<Vec<_>>();
 
-        let shape = make_bundle_pack_shape(
+        let shape = PackShapeMakeCx {
             tcx,
             stage,
-            *flags,
-            &bundles,
-            ty,
-        );
+            flags: *flags,
+            bundles: &bundles,
+            full_ty: ty,
+            auto_arg: auto_arg.as_ref().map(|v| **v),
+        }
+        .make();
 
         if let Some(entry) = entry {
             let shape = Lrc::new(shape);
@@ -597,179 +599,168 @@ impl<'tcx> Deref for PackShapeStoreRes<'tcx> {
     }
 }
 
-pub fn make_bundle_pack_shape<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    stage: ContextSolveStage,
-    flags: ty::PackFlags,
-    bundles: &[(Span, &ty::ReifiedBundle<'tcx>)],
-    ty: Ty<'tcx>,
-) -> PackShape<'tcx> {
-    let _fmt = stage.fully_resolved().then(|| ty::print::InferBundleResolveGuard::new());
-    make_bundle_pack_shape_inner(
-        tcx,
-        stage,
-        flags,
-        bundles,
-        ty,
-        None
-    )
+pub struct PackShapeMakeCx<'a, 'tcx> {
+    pub tcx: TyCtxt<'tcx>,
+    pub stage: ContextSolveStage,
+    pub flags: ty::PackFlags,
+    pub bundles: &'a [(Span, &'a ty::ReifiedBundle<'tcx>)],
+    pub full_ty: Ty<'tcx>,
+    pub auto_arg: Option<AutoArgOrigin<'tcx>>,
 }
 
-fn make_bundle_pack_shape_inner<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    stage: ContextSolveStage,
-    flags: ty::PackFlags,
-    bundles: &[(Span, &ty::ReifiedBundle<'tcx>)],
-    ty: Ty<'tcx>,
-    resolved_infer: Option<(Ty<'tcx>, Ty<'tcx>)>,
-) -> PackShape<'tcx> {
-    let maybe_attach_infer_hint = |target: &mut Diag<'tcx>| {
-        let Some((opaque_ty, concrete_ty)) = resolved_infer else {
-            return;
+impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
+    pub fn make(&self) -> PackShape<'tcx> {
+        let _fmt = self.stage.fully_resolved().then(|| ty::print::InferBundleResolveGuard::new());
+        self.make_inner(self.full_ty, None)
+    }
+
+    fn make_inner(
+        &self,
+        ty: Ty<'tcx>,
+        resolved_infer: Option<(Ty<'tcx>, Ty<'tcx>)>,
+    ) -> PackShape<'tcx> {
+        let tcx = self.tcx;
+
+        let maybe_attach_infer_hint = |target: &mut Diag<'tcx>| {
+            let Some((opaque_ty, concrete_ty)) = resolved_infer else {
+                return;
+            };
+
+            ty::print::with_resolve_infer_bundle!(
+                @set_to(false)
+                target.subdiagnostic(errors::DependencyOriginatesFromInferBundle {
+                    opaque_ty,
+                    concrete_ty,
+                })
+            );
         };
 
-        ty::print::with_resolve_infer_bundle!(
-            @set_to(false)
-            target.subdiagnostic(errors::DependencyOriginatesFromInferBundle {
-                opaque_ty,
-                concrete_ty,
-            })
-        );
-    };
+        match ty::ReifiedBundleItemSet::decode(ty) {
+            ty::ReifiedBundleItemSet::Ref(_re, muta, def_id) => {
+                for (i, (bundle_span, bundle)) in self.bundles.iter().enumerate() {
+                    if !bundle.infer_sets.is_empty() && self.flags.allows_env() {
+                        return PackShape::Error(self.stage.err_during_graph(tcx, || {
+                            todo!("unclear whether the reference should come from the environment or the infer set");
+                        }));
+                    }
 
-    match ty::ReifiedBundleItemSet::decode(ty) {
-        ty::ReifiedBundleItemSet::Ref(_re, muta, def_id) => {
-            for (i, (bundle_span, bundle)) in bundles.iter().enumerate() {
-                if !bundle.infer_sets.is_empty() && flags.allows_env() {
-                    return PackShape::Error(stage.err_during_graph(tcx, || {
-                        todo!("unclear whether the reference should come from the environment or the infer set");
-                    }));
-                }
-
-                let Some(members) = bundle.fields.get(&def_id) else {
-                    continue;
-                };
-
-                if members.len() > 1 {
-                    return PackShape::Error(stage.err_during_mir(tcx, || {
-                        let mut diag = tcx.dcx().create_err(errors::AmbiguousOriginForContextItem {
-                            span: *bundle_span,
-                            ctx_ty: ty,
-                            bundle_ty: bundle.original_bundle,
-                        });
-                        maybe_attach_infer_hint(&mut diag);
-                        diag.emit()
-                    }));
-                }
-
-                let Some(member) = members.get(0) else { unreachable!() };
-
-                return PackShape::ExtractLocalRef(muta, i, member.location);
-            }
-
-            if flags.allows_env() {
-                return PackShape::ExtractEnv(muta, def_id)
-            }
-
-            PackShape::Error(stage.err_during_mir(tcx, || {
-                todo!("component not provided");
-            }))
-        }
-        ty::ReifiedBundleItemSet::Tuple(items) => {
-            let items = items.iter()
-                .map(|item| make_bundle_pack_shape_inner(
-                    tcx,
-                    stage,
-                    flags,
-                    bundles,
-                    item,
-                    resolved_infer,
-                ))
-                .collect();
-
-            PackShape::MakeTuple(items)
-        }
-        ty::ReifiedBundleItemSet::GenericSet(ty) => {
-            for (i, (bundle_span, bundle)) in bundles.iter().enumerate() {
-                let Some(members) = bundle.generic_sets.get(&ty) else {
-                    continue;
-                };
-
-                if members.len() > 1 {
-                    return PackShape::Error(stage.err_during_mir(tcx, || {
-                        tcx.dcx().emit_err(errors::AmbiguousOriginForGenericItem {
-                            span: *bundle_span,
-                            ctx_ty: ty,
-                            bundle_ty: bundle.original_bundle,
-                        })
-                    }));
-                }
-
-                let Some(member) = members.get(0) else { unreachable!() };
-
-                return PackShape::ExtractLocalMove(i, member.location);
-            }
-
-            PackShape::Error(stage.err_during_mir(tcx, || {
-                todo!("component not provided");
-            }))
-        }
-        ty::ReifiedBundleItemSet::GenericRef(_re, muta, ty) => {
-            for (i, (bundle_span, bundle)) in bundles.iter().enumerate() {
-                let Some(members) = bundle.generic_fields.get(&ty) else {
-                    continue;
-                };
-
-                if members.len() > 1 {
-                    return PackShape::Error(stage.err_during_mir(tcx, || {
-                        tcx.dcx().emit_err(errors::AmbiguousOriginForGenericItem {
-                            span: *bundle_span,
-                            ctx_ty: ty,
-                            bundle_ty: bundle.original_bundle,
-                        })
-                    }));
-                }
-
-                let Some(member) = members.get(0) else { unreachable!() };
-
-                return PackShape::ExtractLocalRef(muta, i, member.location);
-            }
-
-            PackShape::Error(stage.err_during_mir(tcx, || {
-                todo!("component not provided");
-            }))
-        }
-        ty::ReifiedBundleItemSet::InferSet(did, re) => {
-            if stage.fully_resolved() {
-                let inner_ty = resolve_infer_bundle_set(tcx, did, re);
-                let inner_values_ty = resolve_infer_bundle_values(tcx, did, re);
-                let inner_shape = make_bundle_pack_shape_inner(
-                    tcx,
-                    stage,
-                    flags,
-                    bundles,
-                    inner_ty,
-                    Some((ty, inner_ty)),
-                );
-
-                PackShape::MakeInfer {
-                    bundle: did,
-                    inner_ty: inner_values_ty,
-                    inner_shape: Box::new(inner_shape),
-                }
-            } else {
-                for (i, (_bundle_span, bundle)) in bundles.iter().enumerate() {
-                    // Ambiguity errors will be handled by regular reference ambiguity semantics with
-                    // tge desugaring of these infer bundles to regular component sets.
-                    if bundle.infer_sets.contains_key(&did) {
-                        return PackShape::ExtractLocalInferPlaceholder(i);
+                    let Some(members) = bundle.fields.get(&def_id) else {
+                        continue;
                     };
+
+                    if members.len() > 1 {
+                        return PackShape::Error(self.stage.err_during_mir(tcx, || {
+                            let mut diag = tcx.dcx().create_err(errors::AmbiguousOriginForContextItem {
+                                span: *bundle_span,
+                                ctx_ty: ty,
+                                bundle_ty: bundle.original_bundle,
+                            });
+                            maybe_attach_infer_hint(&mut diag);
+                            diag.emit()
+                        }));
+                    }
+
+                    let Some(member) = members.get(0) else { unreachable!() };
+
+                    return PackShape::ExtractLocalRef(muta, i, member.location);
                 }
 
-                PackShape::ExtractEnvInfer(did)
+                if self.flags.allows_env() {
+                    return PackShape::ExtractEnv(muta, def_id)
+                }
+
+                PackShape::Error(self.stage.err_during_mir(tcx, || {
+                    todo!("component not provided");
+                }))
             }
+            ty::ReifiedBundleItemSet::Tuple(items) => {
+                let items = items.iter()
+                    .map(|item| self.make_inner(
+                        item,
+                        resolved_infer,
+                    ))
+                    .collect();
+
+                PackShape::MakeTuple(items)
+            }
+            ty::ReifiedBundleItemSet::GenericSet(ty) => {
+                for (i, (bundle_span, bundle)) in self.bundles.iter().enumerate() {
+                    let Some(members) = bundle.generic_sets.get(&ty) else {
+                        continue;
+                    };
+
+                    if members.len() > 1 {
+                        return PackShape::Error(self.stage.err_during_mir(tcx, || {
+                            tcx.dcx().emit_err(errors::AmbiguousOriginForGenericItem {
+                                span: *bundle_span,
+                                ctx_ty: ty,
+                                bundle_ty: bundle.original_bundle,
+                            })
+                        }));
+                    }
+
+                    let Some(member) = members.get(0) else { unreachable!() };
+
+                    return PackShape::ExtractLocalMove(i, member.location);
+                }
+
+                PackShape::Error(self.stage.err_during_mir(tcx, || {
+                    todo!("component not provided");
+                }))
+            }
+            ty::ReifiedBundleItemSet::GenericRef(_re, muta, ty) => {
+                for (i, (bundle_span, bundle)) in self.bundles.iter().enumerate() {
+                    let Some(members) = bundle.generic_fields.get(&ty) else {
+                        continue;
+                    };
+
+                    if members.len() > 1 {
+                        return PackShape::Error(self.stage.err_during_mir(tcx, || {
+                            tcx.dcx().emit_err(errors::AmbiguousOriginForGenericItem {
+                                span: *bundle_span,
+                                ctx_ty: ty,
+                                bundle_ty: bundle.original_bundle,
+                            })
+                        }));
+                    }
+
+                    let Some(member) = members.get(0) else { unreachable!() };
+
+                    return PackShape::ExtractLocalRef(muta, i, member.location);
+                }
+
+                PackShape::Error(self.stage.err_during_mir(tcx, || {
+                    todo!("component not provided");
+                }))
+            }
+            ty::ReifiedBundleItemSet::InferSet(did, re) => {
+                let inner_ty = resolve_infer_bundle_set(tcx, did, re);
+                if self.stage.fully_resolved() {
+                    let inner_values_ty = resolve_infer_bundle_values(tcx, did, re);
+                    let inner_shape = self.make_inner(
+                        inner_ty,
+                        Some((ty, inner_ty)),
+                    );
+
+                    PackShape::MakeInfer {
+                        bundle: did,
+                        inner_ty: inner_values_ty,
+                        inner_shape: Box::new(inner_shape),
+                    }
+                } else {
+                    for (i, (_bundle_span, bundle)) in self.bundles.iter().enumerate() {
+                        // Ambiguity errors will be handled by regular reference ambiguity semantics with
+                        // tge desugaring of these infer bundles to regular component sets.
+                        if bundle.infer_sets.contains_key(&did) {
+                            return PackShape::ExtractLocalInferPlaceholder(i);
+                        };
+                    }
+
+                    PackShape::ExtractEnvInfer(did)
+                }
+            }
+            ty::ReifiedBundleItemSet::Error(err) => PackShape::Error(err),
         }
-        ty::ReifiedBundleItemSet::Error(err) => PackShape::Error(err),
     }
 }
 

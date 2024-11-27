@@ -22,6 +22,7 @@ use rustc_middle::middle::region;
 use rustc_middle::mir::interpret::AllocId;
 use rustc_middle::mir::{self, BinOp, BorrowKind, FakeReadCause, UnOp};
 use rustc_middle::ty::adjustment::PointerCoercion;
+use rustc_middle::ty::auto_arg::AutoArgOrigin;
 use rustc_middle::ty::layout::IntegerExt;
 use rustc_middle::ty::{
     self, AdtDef, CanonicalUserType, CanonicalUserTypeAnnotation, FnSig, GenericArgsRef, List, Ty,
@@ -544,6 +545,7 @@ pub enum ExprKind<'tcx> {
         index: PackExprIndex,
         flags: ty::PackFlags,
         exprs: Box<[ExprId]>,
+        auto_arg: Option<Box<AutoArgOrigin<'tcx>>>,
     },
     /// A `yield` expression.
     Yield {

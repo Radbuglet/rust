@@ -2,6 +2,8 @@
 //! normal visitor, which just walks the entire body in one shot, the
 //! `ExprUseVisitor` determines how expressions are being used.
 
+// TODO: Should this logic take auto-arguments into account?
+
 use std::cell::{Ref, RefCell};
 use std::ops::Deref;
 use std::slice::from_ref;
@@ -410,13 +412,15 @@ impl<'tcx, Cx: TypeInformationCtxt<'tcx>, D: Delegate<'tcx>> ExprUseVisitor<'tcx
 
                 let out_ty = self.expr_ty(expr)?.bundle_item_set(tcx);
 
-                let pack_shape = ty::make_bundle_pack_shape(
+                let pack_shape = ty::PackShapeMakeCx {
                     tcx,
-                    ty::ContextSolveStage::ClosureUpVars,
+                    stage: ty::ContextSolveStage::ClosureUpVars,
                     flags,
-                    &exprs_reified,
-                    out_ty,
-                );
+                    bundles: &exprs_reified,
+                    full_ty: out_ty,
+                    auto_arg: None,
+                }
+                .make();
 
                 // TODO: Borrow each path individually.
                 fn visit_pack_shape(kinds: &mut [BorrowOrOwned], shape: &ty::PackShape<'_>) {

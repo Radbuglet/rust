@@ -12,7 +12,7 @@ use rustc_middle::thir::*;
 use rustc_middle::ty::adjustment::{
     Adjust, Adjustment, AutoBorrow, AutoBorrowMutability, PointerCoercion,
 };
-use rustc_middle::ty::auto_arg::{AutoArg, AutoArgKind};
+use rustc_middle::ty::auto_arg::{AutoArg, AutoArgKind, AutoArgOrigin};
 use rustc_middle::ty::{
     self, AdtKind, GenericArgs, InlineConstArgs, InlineConstArgsParts, ScalarInt, Ty,
     UpvarArgs, UserType,
@@ -763,7 +763,7 @@ impl<'tcx> Cx<'tcx> {
             }
 
             hir::ExprKind::Pack(flags, exprs, _ty_hint) => {
-                self.lower_pack_expr(flags, exprs)
+                self.lower_pack_expr(flags, exprs, None)
             }
 
             hir::ExprKind::ConstBlock(ref anon_const) => {
@@ -1103,12 +1103,13 @@ impl<'tcx> Cx<'tcx> {
         args: &[ExprId],
     ) -> Box<[ExprId]> {
         // TODO: I don't think this is the correct way to resolve these types...
-        let callee = self.tcx.normalize_erasing_regions(
+        // TODO: Should we be skipping these binders? Probably not...
+        let callee_sig = self.tcx.normalize_erasing_regions(
             self.param_env,
             callee.fn_sig(self.tcx),
         );
 
-        Box::from_iter(callee.inputs()
+        Box::from_iter(callee_sig.inputs()
             .iter()
             .enumerate()
             .map(|(i, ty)| {
@@ -1118,8 +1119,24 @@ impl<'tcx> Cx<'tcx> {
                 } else {
                     // Auto-arg input
                     let ty = *ty.skip_binder();
-                    let auto_arg = AutoArg::of(self.tcx, ty)
-                        .unwrap_or_else(|| bug!("unknown auto-arg type: {ty}"));
+                    let spans = [span]
+                        .into_iter()
+                        .chain(args.iter().map(|arg| {
+                            self.thir[*arg].span
+                        }));
+
+                    let auto_arg = AutoArg::of(
+                        self.tcx,
+                        ty,
+                        AutoArgOrigin {
+                            fn_def_id: None,  // FIXME: There's an actual `DefId` for this!
+                            fn_args: self.tcx.mk_type_list(callee_sig.inputs().skip_binder()),
+                            spans: self.tcx.arena.alloc_from_iter(spans),
+                            arg_idx: i as u32,
+                            overloaded: true,
+                        },
+                    )
+                    .unwrap_or_else(|| bug!("unknown auto-arg type: {ty}"));
 
                     self.lower_auto_arg(span, auto_arg)
                 }
@@ -1300,7 +1317,7 @@ impl<'tcx> Cx<'tcx> {
         let expr = Expr {
             kind: match arg.kind {
                 AutoArgKind::PackBundle => {
-                    self.lower_pack_expr(ty::PackFlags::AllowEnv, &[])
+                    self.lower_pack_expr(ty::PackFlags::AllowEnv, &[], Some(arg.origin))
                 }
             },
             ty: arg.ty,
@@ -1314,6 +1331,7 @@ impl<'tcx> Cx<'tcx> {
         &mut self,
         flags: ty::PackFlags,
         exprs: &'tcx [hir::Expr<'tcx>],
+        auto_arg: Option<AutoArgOrigin<'tcx>>,
     ) -> ExprKind<'tcx> {
         let exprs = exprs.iter()
             .map(|expr| self.mirror_expr(expr))
@@ -1326,6 +1344,7 @@ impl<'tcx> Cx<'tcx> {
             index,
             flags,
             exprs,
+            auto_arg: auto_arg.map(Box::new),
         }
     }
 }
