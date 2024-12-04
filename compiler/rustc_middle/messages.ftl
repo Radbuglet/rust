@@ -122,4 +122,8 @@ middle_ambiguous_origin_for_context_item = ambiguous origin for context item of 
 
 middle_ambiguous_origin_for_generic_item = ambiguous origin for generic context item of type `{$ctx_ty}` in bundle expression of type `{$bundle_ty}`
 
-middle_dependency_originates_from_infer_bundle = context item originates from `{$opaque_ty}`, which was inferred as `{$concrete_ty}`
+middle_dependency_originates_from_infer_bundle_hint = context item originates from `{$opaque_ty}`, which was inferred as `{$concrete_ty}`
+
+middle_missing_context_item = no expression provides a context item of type `{$missing_ty}`
+
+middle_missing_item_lhs_type_hint = provider expression {$index} has type `{$expr_ty}`

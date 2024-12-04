@@ -554,6 +554,7 @@ impl<'tcx> PackShapeStore<'tcx> {
             flags: *flags,
             bundles: &bundles,
             full_ty: ty,
+            full_span: expr.span,
             auto_arg: auto_arg.as_ref().map(|v| **v),
         }
         .make();
@@ -605,6 +606,7 @@ pub struct PackShapeMakeCx<'a, 'tcx> {
     pub flags: ty::PackFlags,
     pub bundles: &'a [(Span, &'a ty::ReifiedBundle<'tcx>)],
     pub full_ty: Ty<'tcx>,
+    pub full_span: Span,
     pub auto_arg: Option<AutoArgOrigin<'tcx>>,
 }
 
@@ -621,18 +623,28 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
     ) -> PackShape<'tcx> {
         let tcx = self.tcx;
 
-        let maybe_attach_infer_hint = |target: &mut Diag<'tcx>| {
+        let maybe_attach_infer_hint = |diag: &mut Diag<'tcx>| {
             let Some((opaque_ty, concrete_ty)) = resolved_infer else {
                 return;
             };
 
             ty::print::with_resolve_infer_bundle!(
                 @set_to(false)
-                target.subdiagnostic(errors::DependencyOriginatesFromInferBundle {
+                diag.subdiagnostic(errors::DependencyOriginatesFromInferBundleHint {
                     opaque_ty,
                     concrete_ty,
                 })
             );
+        };
+
+        let attach_expr_ty_hints = |diag: &mut Diag<'tcx>| {
+            for (i, (expr_span, expr_bundle)) in self.bundles.iter().enumerate() {
+                diag.subdiagnostic(errors::MissingItemLhsTypeHint {
+                    span: *expr_span,
+                    index: i + 1,
+                    expr_ty: expr_bundle.original_bundle,
+                });
+            }
         };
 
         match ty::ReifiedBundleItemSet::decode(ty) {
@@ -670,7 +682,15 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
                 }
 
                 PackShape::Error(self.stage.err_during_mir(tcx, || {
-                    todo!("component not provided");
+                    let mut diag = tcx.dcx().create_err(errors::MissingContextItem {
+                        span: self.full_span,
+                        missing_ty: ty,
+                    });
+
+                    maybe_attach_infer_hint(&mut diag);
+                    attach_expr_ty_hints(&mut diag);
+
+                    diag.emit()
                 }))
             }
             ty::ReifiedBundleItemSet::Tuple(items) => {
@@ -734,8 +754,8 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
                 }))
             }
             ty::ReifiedBundleItemSet::InferSet(did, re) => {
-                let inner_ty = resolve_infer_bundle_set(tcx, did, re);
                 if self.stage.fully_resolved() {
+                    let inner_ty = resolve_infer_bundle_set(tcx, did, re);
                     let inner_values_ty = resolve_infer_bundle_values(tcx, did, re);
                     let inner_shape = self.make_inner(
                         inner_ty,

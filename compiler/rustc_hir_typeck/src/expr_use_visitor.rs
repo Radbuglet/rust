@@ -418,6 +418,7 @@ impl<'tcx, Cx: TypeInformationCtxt<'tcx>, D: Delegate<'tcx>> ExprUseVisitor<'tcx
                     flags,
                     bundles: &exprs_reified,
                     full_ty: out_ty,
+                    full_span: expr.span,
                     auto_arg: None,
                 }
                 .make();

@@ -167,37 +167,54 @@ pub struct TypeLengthLimit {
 
 #[derive(Diagnostic)]
 #[diag(middle_reified_fn_using_ctx)]
-pub struct ReifiedFnUsingCtx {
+pub(crate) struct ReifiedFnUsingCtx {
     #[primary_span]
-    pub span: Span,
+    pub(crate) span: Span,
 }
 
 #[derive(Diagnostic)]
 #[diag(middle_ambiguous_origin_for_context_item)]
-pub struct AmbiguousOriginForContextItem<'tcx> {
+pub(crate) struct AmbiguousOriginForContextItem<'tcx> {
     #[primary_span]
-    pub span: Span,
-    pub ctx_ty: Ty<'tcx>,
-    pub bundle_ty: Ty<'tcx>,
+    pub(crate) span: Span,
+    pub(crate) ctx_ty: Ty<'tcx>,
+    pub(crate) bundle_ty: Ty<'tcx>,
 }
 
 #[derive(Diagnostic)]
 #[diag(middle_ambiguous_origin_for_generic_item)]
-pub struct AmbiguousOriginForGenericItem<'tcx> {
+pub(crate) struct AmbiguousOriginForGenericItem<'tcx> {
     #[primary_span]
-    pub span: Span,
-    pub ctx_ty: Ty<'tcx>,
-    pub bundle_ty: Ty<'tcx>,
+    pub(crate) span: Span,
+    pub(crate) ctx_ty: Ty<'tcx>,
+    pub(crate) bundle_ty: Ty<'tcx>,
 }
 
 #[derive(Subdiagnostic)]
-#[note(middle_dependency_originates_from_infer_bundle)]
-pub struct DependencyOriginatesFromInferBundle<'tcx> {
-    pub opaque_ty: Ty<'tcx>,
-    pub concrete_ty: Ty<'tcx>,
+#[note(middle_dependency_originates_from_infer_bundle_hint)]
+pub(crate) struct DependencyOriginatesFromInferBundleHint<'tcx> {
+    pub(crate) opaque_ty: Ty<'tcx>,
+    pub(crate) concrete_ty: Ty<'tcx>,
 }
 
-pub use crate::fluent_generated::{
+#[derive(Diagnostic)]
+#[diag(middle_missing_context_item)]
+pub(crate) struct MissingContextItem<'tcx> {
+    #[primary_span]
+    pub(crate) span: Span,
+    pub(crate) missing_ty: Ty<'tcx>,
+}
+
+#[derive(Subdiagnostic)]
+#[note(middle_missing_item_lhs_type_hint)]
+pub(crate) struct MissingItemLhsTypeHint<'tcx> {
+    #[primary_span]
+    pub(crate) span: Span,
+    pub(crate) index: usize,
+    pub(crate) expr_ty: Ty<'tcx>,
+}
+
+pub(crate) use crate::fluent_generated::{
     middle_entry_fn_uses_ctx,
     middle_extern_fn_uses_ctx,
     middle_async_fn_uses_ctx,
