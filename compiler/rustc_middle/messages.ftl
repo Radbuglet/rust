@@ -127,3 +127,13 @@ middle_dependency_originates_from_infer_bundle_hint = context item originates fr
 middle_missing_context_item = no expression provides a context item of type `{$missing_ty}`
 
 middle_missing_item_lhs_type_hint = provider expression {$index} has type `{$expr_ty}`
+
+middle_missing_generic_item = no expression provides a generic context item of type `{$missing_ty}`
+
+middle_env_cannot_provide_generic = generic types cannot be fetched from the environment
+
+middle_originates_from_auto_arg_def = `pack!` originates from the auto argument for `{$arg_name}`, which only fetches context from the environment
+
+middle_originates_from_auto_arg_anon = `pack!` originates from the auto argument for argument {$arg_num} of `{$callee_ty}`, which only fetches context from the environment
+
+middle_auto_arg_should_be_explicit = `pack!` auto argument should be provided explicitly

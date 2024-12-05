@@ -302,7 +302,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 .entry(call_expr.hir_id)
                 .or_default();
 
-            let spans = [call_span]
+            let spans = [ty::auto_arg::strip_span_to_open_paren(tcx, call_span)]
                 .into_iter()
                 .chain(provided_args.iter().map(|arg| {
                     arg.span
@@ -323,7 +323,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                     tcx,
                     *expected_input_tys.last().unwrap(),
                     AutoArgOrigin {
-                        arg_idx: provided_args.len() as u32,
+                        arg_idx: expected_input_tys.len() as u32 - 1,
                         ..auto_arg_origin
                     }
                 ) else {

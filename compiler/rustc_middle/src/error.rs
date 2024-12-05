@@ -214,6 +214,41 @@ pub(crate) struct MissingItemLhsTypeHint<'tcx> {
     pub(crate) expr_ty: Ty<'tcx>,
 }
 
+#[derive(Diagnostic)]
+#[diag(middle_missing_generic_item)]
+pub(crate) struct MissingGenericItem<'tcx> {
+    #[primary_span]
+    pub(crate) span: Span,
+    pub(crate) missing_ty: Ty<'tcx>,
+}
+
+#[derive(Subdiagnostic)]
+#[note(middle_env_cannot_provide_generic)]
+pub(crate) struct EnvCannotProvideGeneric {}
+
+#[derive(Subdiagnostic)]
+#[note(middle_originates_from_auto_arg_def)]
+pub(crate) struct OriginatesFromAutoArgDef {
+    #[primary_span]
+    pub(crate) span: Span,
+    pub(crate) arg_name: Symbol,
+}
+
+#[derive(Subdiagnostic)]
+#[note(middle_originates_from_auto_arg_anon)]
+pub(crate) struct OriginatesFromAutoArgAnon<'tcx> {
+    pub(crate) arg_num: u32,
+    pub(crate) callee_ty: Ty<'tcx>,
+}
+
+#[derive(Subdiagnostic)]
+#[suggestion(middle_auto_arg_should_be_explicit, code = "{replacement}", style = "verbose", applicability = "has-placeholders")]
+pub(crate) struct AutoArgShouldBeExplicit {
+    #[primary_span]
+    pub(crate) span: Span,
+    pub(crate) replacement: String,
+}
+
 pub(crate) use crate::fluent_generated::{
     middle_entry_fn_uses_ctx,
     middle_extern_fn_uses_ctx,

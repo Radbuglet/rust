@@ -647,6 +647,53 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
             }
         };
 
+        let maybe_attach_generic_env_hint = |diag: &mut Diag<'tcx>| {
+            if !self.flags.allows_env() {
+                return;
+            }
+
+            diag.subdiagnostic(errors::EnvCannotProvideGeneric {});
+        };
+
+        let maybe_attach_auto_arg_packs_generics_hint = |diag: &mut Diag<'tcx>| {
+            let Some(origin) = self.auto_arg else {
+                return;
+            };
+
+            if let Some(fn_def) = origin.fn_def_id {
+                let arg = tcx.fn_arg_names(fn_def)[origin.arg_idx as usize];
+                diag.subdiagnostic(errors::OriginatesFromAutoArgDef {
+                    span: arg.span.substitute_dummy(tcx.def_span(fn_def)),
+                    arg_name: arg.name,
+                });
+            } else {
+                diag.subdiagnostic(errors::OriginatesFromAutoArgAnon {
+                    arg_num: origin.arg_idx + 1,
+                    // FIXME: Do this more precisely
+                    callee_ty: Ty::new_fn_ptr(
+                        tcx,
+                        ty::Binder::dummy(ty::FnSig {
+                            inputs_and_output: tcx.mk_type_list_from_iter(
+                                origin.fn_args.iter().chain([tcx.types.unit]),
+                            ),
+                            c_variadic: false,
+                            safety: rustc_hir::Safety::Safe,
+                            abi: rustc_target::spec::abi::Abi::Rust,
+                        }),
+                    ),
+                });
+            }
+
+            let Some(replacement) = origin.suggest_intro(tcx) else {
+                return;
+            };
+
+            diag.subdiagnostic(errors::AutoArgShouldBeExplicit {
+                span: origin.intro_span(),
+                replacement,
+            });
+        };
+
         match ty::ReifiedBundleItemSet::decode(ty) {
             ty::ReifiedBundleItemSet::Ref(_re, muta, def_id) => {
                 for (i, (bundle_span, bundle)) in self.bundles.iter().enumerate() {
@@ -687,6 +734,8 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
                         missing_ty: ty,
                     });
 
+                    // TODO: Env suggestion
+
                     maybe_attach_infer_hint(&mut diag);
                     attach_expr_ty_hints(&mut diag);
 
@@ -725,7 +774,16 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
                 }
 
                 PackShape::Error(self.stage.err_during_mir(tcx, || {
-                    todo!("component not provided");
+                    let mut diag = tcx.dcx().create_err(errors::MissingGenericItem {
+                        span: self.full_span,
+                        missing_ty: ty,
+                    });
+
+                    maybe_attach_generic_env_hint(&mut diag);
+                    maybe_attach_auto_arg_packs_generics_hint(&mut diag);
+                    attach_expr_ty_hints(&mut diag);
+
+                    diag.emit()
                 }))
             }
             ty::ReifiedBundleItemSet::GenericRef(_re, muta, ty) => {
