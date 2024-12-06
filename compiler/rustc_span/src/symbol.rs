@@ -736,6 +736,7 @@ symbols! {
         deprecated_suggestion,
         deref,
         deref_cx,
+        deref_cx_context_ref,
         deref_cx_mut,
         deref_cx_target,
         deref_method,

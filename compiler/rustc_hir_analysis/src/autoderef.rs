@@ -85,12 +85,18 @@ impl<'a, 'tcx> Iterator for Autoderef<'a, 'tcx> {
                 } else {
                     (AutoderefKind::Builtin, ty)
                 }
-            } else if let Some((ty, in_re, out_re)) = self.overloaded_deref_cx_ty(self.state.cur_ty) {
+            } else if let Some((
+                ty,
+                in_re,
+                out_re,
+                bundle_ty,
+            )) = self.overloaded_deref_cx_ty(self.state.cur_ty) {
                 // The overloaded deref cx check already normalizes the pointee type.
                 (
                     AutoderefKind::Overloaded(OverloadedDerefKind::Contextual {
                         in_re,
                         out_re,
+                        bundle_ty,
                     }),
                     ty,
                 )
@@ -176,6 +182,7 @@ impl<'a, 'tcx> Autoderef<'a, 'tcx> {
         Ty<'tcx>,
         ty::Region<'tcx>,
         ty::Region<'tcx>,
+        Ty<'tcx>,
     )> {
         debug!("overloaded_deref_cx_ty({:?})", ty);
         let tcx = self.infcx.tcx;
@@ -214,10 +221,25 @@ impl<'a, 'tcx> Autoderef<'a, 'tcx> {
         debug!("overloaded_deref_cx_ty({:?}) = ({:?}, {:?})", ty, normalized_ty, obligations);
         self.state.obligations.extend(obligations);
 
+        let (context_ty, obligations) = self.structurally_normalize(Ty::new_projection(
+            tcx,
+            tcx.lang_items().deref_cx_trait_context_ref()?,
+            trait_args,
+        ))?;
+        debug!("overloaded_deref_cx_ty({:?}) = ({:?}, {:?})", ty, context_ty, obligations);
+        self.state.obligations.extend(obligations);
+
+        let bundle_ty = Ty::new_adt(
+            tcx,
+            tcx.adt_def(tcx.lang_items().bundle()?),
+            tcx.mk_args(&[context_ty.into()]),
+        );
+
         Some((
             self.infcx.resolve_vars_if_possible(normalized_ty),
             self.infcx.resolve_vars_if_possible(in_re_var),
             self.infcx.resolve_vars_if_possible(out_re_var),
+            self.infcx.resolve_vars_if_possible(bundle_ty),
         ))
     }
 

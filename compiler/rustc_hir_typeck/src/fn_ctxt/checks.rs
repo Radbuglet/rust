@@ -293,46 +293,19 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             formal_input_tys.clone()
         };
 
-        // If we're not variadic and the input argument count is less than the expected count,
-        // try to introduce some auto arguments!
-        if !c_variadic && provided_args.len() < expected_input_tys.len() {
-            let mut tck_results = self.typeck_results.borrow_mut();
-            let mut auto_args_list = tck_results.auto_args_mut();
-            let auto_args_list = auto_args_list
-                .entry(call_expr.hir_id)
-                .or_default();
-
-            let spans = [ty::auto_arg::strip_span_to_open_paren(tcx, call_span)]
-                .into_iter()
-                .chain(provided_args.iter().map(|arg| {
-                    arg.span
-                }));
-
-            let auto_arg_origin = AutoArgOrigin {
+        // If we're not variadic, try to introduce some auto arguments!
+        if !c_variadic {
+            let args_introduced = self.introduce_auto_args(
+                call_expr,
                 fn_def_id,
-                fn_args: self.tcx.mk_type_list(&formal_input_tys),
-                spans: self.tcx.arena.alloc_from_iter(spans),
-                arg_idx: 0,
-                overloaded: false,
-            };
+                ty::auto_arg::strip_span_to_open_paren(tcx, call_span),
+                provided_args.iter().map(|expr| expr.span),
+                &expected_input_tys,
+                // overloaded
+                false,
+            );
 
-            while provided_args.len() < expected_input_tys.len() {
-                // TODO: Ensure that the argument is marked as an auto-argument.
-
-                let Some(arg) = AutoArg::of(
-                    tcx,
-                    *expected_input_tys.last().unwrap(),
-                    AutoArgOrigin {
-                        arg_idx: expected_input_tys.len() as u32 - 1,
-                        ..auto_arg_origin
-                    }
-                ) else {
-                    break;
-                };
-
-                auto_args_list.push(arg);
-                expected_input_tys.pop();
-            }
+            expected_input_tys.truncate(expected_input_tys.len() - args_introduced);
         }
 
         let minimum_input_count = expected_input_tys.len();
@@ -2724,6 +2697,68 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
         debug_assert_eq!(params.len(), generic_params.len());
         Some(generic_params.into_iter().zip(params).collect())
+    }
+
+    pub(in super::super) fn introduce_auto_args<I>(
+        &self,
+        expr: &hir::Expr<'_>,
+        call_def_id: Option<DefId>,
+        call_span: Span,
+        provided_args: I,
+        expected_input_tys: &[Ty<'tcx>],
+        overloaded: bool,
+    ) -> usize
+    where
+        I: IntoIterator<Item = Span>,
+        I::IntoIter: iter::ExactSizeIterator,
+    {
+        let tcx = self.tcx;
+        let provided_args = provided_args.into_iter();
+        let provided_arg_no = provided_args.len();
+
+        if provided_arg_no >= expected_input_tys.len() {
+            return 0;
+        }
+
+        let mut tck_results = self.typeck_results.borrow_mut();
+        let mut auto_args_list = tck_results.auto_args_mut();
+        let auto_args_list = auto_args_list
+            .entry(expr.hir_id)
+            .or_default();
+
+        let spans = [call_span]
+            .into_iter()
+            .chain(provided_args);
+
+        let auto_arg_origin = AutoArgOrigin {
+            fn_def_id: call_def_id,
+            fn_args: self.tcx.mk_type_list(&expected_input_tys),
+            spans: self.tcx.arena.alloc_from_iter(spans),
+            arg_idx: 0,
+            overloaded,
+        };
+
+        let mut args_provided = 0;
+
+        for arg_idx in provided_arg_no..expected_input_tys.len() {
+            // TODO: Ensure that the argument is marked as an auto-argument.
+
+            let Some(arg) = AutoArg::of(
+                tcx,
+                expected_input_tys[arg_idx],
+                AutoArgOrigin {
+                    arg_idx: arg_idx as u32,
+                    ..auto_arg_origin
+                },
+            ) else {
+                break;
+            };
+
+            auto_args_list.push(arg);
+            args_provided += 1;
+        }
+
+        args_provided
     }
 }
 

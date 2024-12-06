@@ -158,6 +158,7 @@ pub macro infer_bundle {
 #[doc(alias = "*")]
 #[doc(alias = "&*")]
 pub trait DerefCx<'i, 'o> {
+    #[lang = "deref_cx_context_ref"]
     type ContextRef: BundleItemSet;
 
     #[lang = "deref_cx_target"]

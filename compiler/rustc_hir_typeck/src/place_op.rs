@@ -5,7 +5,7 @@ use rustc_infer::infer::InferOk;
 use rustc_middle::span_bug;
 use rustc_middle::ty::adjustment::{
     Adjust, Adjustment, AllowTwoPhase, AutoBorrow, AutoBorrowMutability, OverloadedDeref,
-    PointerCoercion,
+    OverloadedDerefKind, PointerCoercion,
 };
 use rustc_middle::ty::{self, Ty};
 use rustc_span::Span;
@@ -38,6 +38,17 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         } else {
             span_bug!(expr.span, "input to deref is not a ref?");
         }
+
+        let _ = self.introduce_auto_args(
+            expr,
+            Some(method.def_id),
+            expr.span,
+            [oprnd_expr.span],
+            &method.sig.inputs(),
+            // overloaded
+            true,
+        );
+
         let ty = self.make_overloaded_place_return_type(method);
         self.write_method_call_and_enforce_effects(expr.hir_id, expr.span, method);
         Some(ty)
@@ -330,7 +341,18 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                         let method = self.register_infer_ok_obligations(ok);
                         if let ty::Ref(region, _, mutbl) = *method.sig.output().kind() {
                             *deref = OverloadedDeref {
-                                kind: deref.kind,
+                                kind: match deref.kind {
+                                    v @ OverloadedDerefKind::Regular => v,
+                                    OverloadedDerefKind::Contextual {
+                                        in_re,
+                                        out_re,
+                                        bundle_ty: _,
+                                    } => OverloadedDerefKind::Contextual {
+                                        in_re,
+                                        out_re,
+                                        bundle_ty: method.sig.inputs()[1],
+                                    },
+                                },
                                 region,
                                 mutbl,
                                 span: deref.span,

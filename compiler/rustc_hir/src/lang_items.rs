@@ -432,6 +432,7 @@ language_item_table! {
     BundleItemSetValues,     sym::bundle_item_set_values,  bundle_item_set_values,  Target::AssocTy,       GenericRequirement::None;
 
     DerefCx,                 sym::deref_cx,                deref_cx_trait,          Target::Trait,         GenericRequirement::Exact(2);
+    DerefCxContextRef,       sym::deref_cx_context_ref,    deref_cx_trait_context_ref, Target::AssocTy,    GenericRequirement::None;
     DerefCxMut,              sym::deref_cx_mut,            deref_cx_mut_trait,      Target::Trait,         GenericRequirement::Exact(2);
     DerefCxTarget,           sym::deref_cx_target,         deref_cx_target,         Target::AssocTy,       GenericRequirement::None;
 }

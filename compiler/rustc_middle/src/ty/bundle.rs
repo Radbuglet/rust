@@ -1815,7 +1815,7 @@ fn components_borrowed_graph<'tcx>(
 }
 
 fn components_borrowed<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> &'tcx ContextSet {
-    assert!(has_components_borrowed_entry(tcx, def_id.to_def_id()));
+    assert!(has_components_borrowed_entry(tcx, def_id.to_def_id()), "{def_id:?} does not have a borrowed entry");
 
     tcx.components_borrowed_graph(())
         .get(&def_id)
@@ -1894,8 +1894,8 @@ fn components_borrowed_borrow_free_checks<'tcx>(tcx: TyCtxt<'tcx>, (): ()) {
         if !tcx.has_typeck_results(def_id) {
             continue;
         }
-        let owner_id = hir::OwnerId { def_id };
         let typeck_results = tcx.typeck(def_id);
+        let owner_id = tcx.local_def_id_to_hir_id(def_id).owner;
 
         // Go through each adjustment and ensure that it doesn't unsize a function borrowing
         // context.
@@ -1941,6 +1941,11 @@ fn components_borrowed_borrow_free_checks<'tcx>(tcx: TyCtxt<'tcx>, (): ()) {
                         continue;
                     }
                 };
+
+                // Ignore functions which can't borrow anything.
+                if !has_components_borrowed_entry(tcx, unsized_def_id) {
+                    continue;
+                }
 
                 // See whether the unsized function borrowed any context.
                 let comps = tcx.components_borrowed(unsized_def_id);

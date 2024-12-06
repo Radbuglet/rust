@@ -5,6 +5,7 @@ use rustc_span::Span;
 use rustc_target::abi::FieldIdx;
 
 use crate::ty::{self, Ty, TyCtxt};
+use crate::ty::auto_arg::{AutoArg, AutoArgKind, AutoArgOrigin};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, TyEncodable, TyDecodable, Hash, HashStable)]
 pub enum PointerCoercion {
@@ -131,6 +132,7 @@ pub enum OverloadedDerefKind<'tcx> {
     Contextual {
         in_re: ty::Region<'tcx>,
         out_re: ty::Region<'tcx>,
+        bundle_ty: Ty<'tcx>
     },
 }
 
@@ -160,7 +162,7 @@ impl<'tcx> OverloadedDeref<'tcx> {
             .into_iter()
             .chain(match self.kind {
                 Regular => [].iter().copied(),
-                Contextual { in_re, out_re } => {
+                Contextual { in_re, out_re, bundle_ty: _ } => {
                     generic_args_contextual = [
                         ty::GenericArg::from(in_re),
                         ty::GenericArg::from(out_re),
@@ -170,6 +172,30 @@ impl<'tcx> OverloadedDeref<'tcx> {
             });
 
         Ty::new_fn_def(tcx, method_def_id, generic_args)
+    }
+
+    pub fn auto_arg(&self, tcx: TyCtxt<'tcx>, span: Span, source: Ty<'tcx>) -> Option<AutoArg<'tcx>> {
+        match self.kind {
+            OverloadedDerefKind::Regular => None,
+            OverloadedDerefKind::Contextual { bundle_ty, in_re: _, out_re: _ } => {
+                let fn_def_id = match self.mutbl {
+                    hir::Mutability::Not => tcx.require_lang_item(LangItem::DerefCx, None),
+                    hir::Mutability::Mut => tcx.require_lang_item(LangItem::DerefCxMut, None),
+                };
+
+                Some(AutoArg {
+                    ty: bundle_ty,
+                    kind: AutoArgKind::PackBundle,
+                    origin: AutoArgOrigin {
+                        fn_def_id: Some(fn_def_id),
+                        fn_args: tcx.mk_type_list(&[source, bundle_ty]),
+                        spans: tcx.arena.alloc_from_iter([span, span]),
+                        arg_idx: 1,
+                        overloaded: true,
+                    },
+                })
+            }
+        }
     }
 }
 
