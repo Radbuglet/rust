@@ -623,6 +623,30 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
     ) -> PackShape<'tcx> {
         let tcx = self.tcx;
 
+        let extract_env_flag_span = || -> Span {
+            let source_map = tcx.sess.source_map();
+
+            if self.auto_arg.is_some() {
+                return rustc_span::DUMMY_SP;
+            }
+
+            // "pack!(@env, foo, bar => baz)"
+            let span = self.full_span.parent_callsite().unwrap_or(self.full_span);
+
+            let Ok(snippet) = source_map.span_to_snippet(span) else {
+                return rustc_span::DUMMY_SP;
+            };
+
+            let Some(byte_off_to_env) = snippet.find("@env") else {
+                return rustc_span::DUMMY_SP;
+            };
+
+            let pos_lo = span.lo().0 + byte_off_to_env as u32;
+            let pos_hi = pos_lo + "@env".len() as u32;
+
+            span.with_lo(rustc_span::BytePos(pos_lo)).with_hi(rustc_span::BytePos(pos_hi))
+        };
+
         let maybe_attach_infer_hint = |diag: &mut Diag<'tcx>| {
             let Some((opaque_ty, concrete_ty)) = resolved_infer else {
                 return;
@@ -652,7 +676,9 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
                 return;
             }
 
-            diag.subdiagnostic(errors::EnvCannotProvideGeneric {});
+            diag.subdiagnostic(errors::EnvCannotProvideGeneric {
+                span: extract_env_flag_span(),
+            });
         };
 
         let maybe_attach_auto_arg_packs_generics_hint = |diag: &mut Diag<'tcx>| {
@@ -694,12 +720,31 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
             });
         };
 
+        let make_missing_generic_err = || -> ty::ErrorGuaranteed {
+            let mut diag = tcx.dcx().create_err(errors::MissingGenericItem {
+                span: self.full_span,
+                missing_ty: ty,
+            });
+
+            maybe_attach_generic_env_hint(&mut diag);
+            maybe_attach_auto_arg_packs_generics_hint(&mut diag);
+            attach_expr_ty_hints(&mut diag);
+
+            diag.emit()
+        };
+
         match ty::ReifiedBundleItemSet::decode(ty) {
             ty::ReifiedBundleItemSet::Ref(_re, muta, def_id) => {
                 for (i, (bundle_span, bundle)) in self.bundles.iter().enumerate() {
                     if !bundle.infer_sets.is_empty() && self.flags.allows_env() {
                         return PackShape::Error(self.stage.err_during_graph(tcx, || {
-                            todo!("unclear whether the reference should come from the environment or the infer set");
+                            tcx.dcx().emit_err(errors::AmbiguousEarlyPackResolution {
+                                infer_span: *bundle_span,
+                                env_span: extract_env_flag_span(),
+                                infer_ty: bundle.original_bundle,
+                                req_ty: ty,
+                                note: errors::AmbiguousEarlyPackResolutionNote {},
+                            })
                         }));
                     }
 
@@ -734,7 +779,18 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
                         missing_ty: ty,
                     });
 
-                    // TODO: Env suggestion
+                    let source_map = tcx.sess.source_map();
+
+                    // "pack!(foo, bar => baz)"
+                    let insert_span = self.full_span.parent_callsite().unwrap_or(self.full_span);
+
+                    // "pack!( foo, bar => baz)"
+                    //        ^
+                    let insert_span = source_map.span_through_char(insert_span, '(').shrink_to_hi();
+
+                    diag.subdiagnostic(errors::MissingContextAddEnvSuggestion {
+                        span: insert_span,
+                    });
 
                     maybe_attach_infer_hint(&mut diag);
                     attach_expr_ty_hints(&mut diag);
@@ -773,18 +829,7 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
                     return PackShape::ExtractLocalMove(i, member.location);
                 }
 
-                PackShape::Error(self.stage.err_during_mir(tcx, || {
-                    let mut diag = tcx.dcx().create_err(errors::MissingGenericItem {
-                        span: self.full_span,
-                        missing_ty: ty,
-                    });
-
-                    maybe_attach_generic_env_hint(&mut diag);
-                    maybe_attach_auto_arg_packs_generics_hint(&mut diag);
-                    attach_expr_ty_hints(&mut diag);
-
-                    diag.emit()
-                }))
+                PackShape::Error(self.stage.err_during_mir(tcx, || make_missing_generic_err()))
             }
             ty::ReifiedBundleItemSet::GenericRef(_re, muta, ty) => {
                 for (i, (bundle_span, bundle)) in self.bundles.iter().enumerate() {
@@ -807,9 +852,7 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
                     return PackShape::ExtractLocalRef(muta, i, member.location);
                 }
 
-                PackShape::Error(self.stage.err_during_mir(tcx, || {
-                    todo!("component not provided");
-                }))
+                PackShape::Error(self.stage.err_during_mir(tcx, || make_missing_generic_err()))
             }
             ty::ReifiedBundleItemSet::InferSet(did, re) => {
                 if self.stage.fully_resolved() {

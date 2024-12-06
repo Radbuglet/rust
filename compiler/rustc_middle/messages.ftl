@@ -126,6 +126,8 @@ middle_dependency_originates_from_infer_bundle_hint = context item originates fr
 
 middle_missing_context_item = no expression provides a context item of type `{$missing_ty}`
 
+middle_missing_context_add_env_suggestion = consider allowing `pack!` to borrow this context from the environment
+
 middle_missing_item_lhs_type_hint = provider expression {$index} has type `{$expr_ty}`
 
 middle_missing_generic_item = no expression provides a generic context item of type `{$missing_ty}`
@@ -137,3 +139,10 @@ middle_originates_from_auto_arg_def = `pack!` originates from the auto argument 
 middle_originates_from_auto_arg_anon = `pack!` originates from the auto argument for argument {$arg_num} of `{$callee_ty}`, which only fetches context from the environment
 
 middle_auto_arg_should_be_explicit = `pack!` auto argument should be provided explicitly
+
+middle_ambiguous_early_pack_resolution = cannot determine whether `{$req_ty}` should come from the environment or the infer set
+    .label = expression has type `{$infer_ty}`
+
+middle_ambiguous_early_pack_resolution_env_label = fetching from the environment because of this flag
+
+middle_ambiguous_early_pack_resolution_note = infer bundle resolution requires knowing which `pack!` expressions borrow context from the environment in advance

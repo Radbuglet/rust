@@ -206,6 +206,13 @@ pub(crate) struct MissingContextItem<'tcx> {
 }
 
 #[derive(Subdiagnostic)]
+#[suggestion(middle_missing_context_add_env_suggestion, code = "@env, ")]
+pub(crate) struct MissingContextAddEnvSuggestion {
+    #[primary_span]
+    pub(crate) span: Span,
+}
+
+#[derive(Subdiagnostic)]
 #[note(middle_missing_item_lhs_type_hint)]
 pub(crate) struct MissingItemLhsTypeHint<'tcx> {
     #[primary_span]
@@ -224,7 +231,10 @@ pub(crate) struct MissingGenericItem<'tcx> {
 
 #[derive(Subdiagnostic)]
 #[note(middle_env_cannot_provide_generic)]
-pub(crate) struct EnvCannotProvideGeneric {}
+pub(crate) struct EnvCannotProvideGeneric {
+    #[primary_span]
+    pub(crate) span: Span,
+}
 
 #[derive(Subdiagnostic)]
 #[note(middle_originates_from_auto_arg_def)]
@@ -248,6 +258,27 @@ pub(crate) struct AutoArgShouldBeExplicit {
     pub(crate) span: Span,
     pub(crate) replacement: String,
 }
+
+#[derive(Diagnostic)]
+#[diag(middle_ambiguous_early_pack_resolution)]
+pub(crate) struct AmbiguousEarlyPackResolution<'tcx> {
+    #[primary_span]
+    #[label]
+    pub(crate) infer_span: Span,
+
+    #[label(middle_ambiguous_early_pack_resolution_env_label)]
+    pub(crate) env_span: Span,
+
+    pub(crate) req_ty: Ty<'tcx>,
+    pub(crate) infer_ty: Ty<'tcx>,
+
+    #[subdiagnostic]
+    pub(crate) note: AmbiguousEarlyPackResolutionNote,
+}
+
+#[derive(Subdiagnostic)]
+#[note(middle_ambiguous_early_pack_resolution_note)]
+pub(crate) struct AmbiguousEarlyPackResolutionNote {}
 
 pub(crate) use crate::fluent_generated::{
     middle_entry_fn_uses_ctx,
