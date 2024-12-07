@@ -146,3 +146,9 @@ middle_ambiguous_early_pack_resolution = cannot determine whether `{$req_ty}` sh
 middle_ambiguous_early_pack_resolution_env_label = fetching from the environment because of this flag
 
 middle_ambiguous_early_pack_resolution_note = infer bundle resolution requires knowing which `pack!` expressions borrow context from the environment in advance
+
+middle_generics_in_bind_context = `{$full_ty}` contains generic type `{$generic_ty}`, which is not allowed to appear in a `let static` statement
+
+middle_multiple_infer_in_bind_context = more than one inference bundle is bound by this statement
+
+middle_multiple_infer_in_bind_context_binds_note = binds bundle `{$ty}`

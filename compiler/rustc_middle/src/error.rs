@@ -280,6 +280,28 @@ pub(crate) struct AmbiguousEarlyPackResolution<'tcx> {
 #[note(middle_ambiguous_early_pack_resolution_note)]
 pub(crate) struct AmbiguousEarlyPackResolutionNote {}
 
+#[derive(Diagnostic)]
+#[diag(middle_generics_in_bind_context)]
+pub(crate) struct GenericsInBindContext<'tcx> {
+    #[primary_span]
+    pub(crate) span: Span,
+    pub(crate) full_ty: Ty<'tcx>,
+    pub(crate) generic_ty: Ty<'tcx>,
+}
+
+#[derive(Diagnostic)]
+#[diag(middle_multiple_infer_in_bind_context)]
+pub(crate) struct MultipleInferInBindContext {
+    #[primary_span]
+    pub span: Span,
+}
+
+#[derive(Subdiagnostic)]
+#[note(middle_multiple_infer_in_bind_context_binds_note)]
+pub(crate) struct MultipleInferInBindContextBindsNote<'tcx> {
+    pub ty: Ty<'tcx>
+}
+
 pub(crate) use crate::fluent_generated::{
     middle_entry_fn_uses_ctx,
     middle_extern_fn_uses_ctx,

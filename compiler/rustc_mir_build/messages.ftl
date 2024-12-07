@@ -1,5 +1,3 @@
-mir_build_generics_in_bind = `{$full_ty}` contains generic type `{$generic_ty}`, which is not allowed to appear in a `let static` statement
-
 mir_build_adt_defined_here = `{$ty}` defined here
 
 mir_build_already_borrowed = cannot borrow value as mutable because it is also borrowed as immutable

@@ -6,7 +6,6 @@ use rustc_middle::ty;
 use rustc_middle::ty::CanonicalUserTypeAnnotation;
 use tracing::debug;
 
-use crate::errors;
 use crate::thir::cx::Cx;
 
 impl<'tcx> Cx<'tcx> {
@@ -123,20 +122,6 @@ impl<'tcx> Cx<'tcx> {
                     }
                     hir::StmtKind::BindContext(bind) => {
                         let bundle = self.mirror_expr(bind.bundle);
-                        let full_ty = self.thir[bundle].ty;
-                        let reified = self.tcx.reified_bundle((
-                            full_ty,
-                            ty::ContextSolveStage::GraphSolving,
-                        ));
-
-                        // TODO: Should we move this elsewhere?
-                        for generic_ty in reified.generic_types() {
-                            self.tcx.dcx().emit_err(errors::ThirBuildGenericsInBind {
-                                span: bind.span,
-                                full_ty,
-                                generic_ty,
-                            });
-                        }
 
                         let remainder_scope = region::Scope {
                             id: block_id,

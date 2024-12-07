@@ -886,8 +886,8 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
                     }
                 } else {
                     for (i, (_bundle_span, bundle)) in self.bundles.iter().enumerate() {
-                        // Ambiguity errors will be handled by regular reference ambiguity semantics with
-                        // tge desugaring of these infer bundles to regular component sets.
+                        // Ambiguity errors will be handled by regular reference ambiguity semantics
+                        // with the desugaring of these infer bundles to regular component sets.
                         if bundle.infer_sets.contains_key(&did) {
                             return PackShape::ExtractLocalInferPlaceholder(i);
                         };
@@ -1046,15 +1046,16 @@ pub fn context_binds_by_stmt<'tcx>(
     stage: ContextSolveStage,
     body: &thir::Thir<'tcx>,
     stmt: &thir::Stmt<'tcx>,
-) -> Option<(ContextBinder, &'tcx ReifiedBundle<'tcx>)> {
+) -> Option<(Span, ContextBinder, &'tcx ReifiedBundle<'tcx>)> {
     use thir::StmtKind::*;
 
     match &stmt.kind {
-        &BindContext { self_id, bundle, .. } => {
+        &BindContext { self_id, bundle, span, .. } => {
             let bundle_ty = body.exprs[bundle].ty;
             let reified = tcx.reified_bundle((bundle_ty, stage));
 
             Some((
+                span,
                 ContextBinder::LocalBinder(self_id),
                 reified,
             ))
@@ -1188,7 +1189,7 @@ impl ContextBindTracker {
         body: &thir::Thir<'tcx>,
         stmt: &thir::Stmt<'tcx>,
     ) {
-        let Some((binder, reified)) = context_binds_by_stmt(tcx, stage, body, stmt) else {
+        let Some((_span, binder, reified)) = context_binds_by_stmt(tcx, stage, body, stmt) else {
             return;
         };
 
@@ -1380,18 +1381,36 @@ impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVi
         //
         // We do this after visiting the statement to ensure that expressions used in the statement
         // don't see the bindings to which they're subjected.
-        if let Some((_binder, reified)) = context_binds_by_stmt(
+        if let Some((span, _binder, reified)) = context_binds_by_stmt(
             self.tcx,
             ContextSolveStage::GraphSolving,
             self.thir,
             stmt,
         ) {
-            // TODO: Consider enforcing no-generics and no-ambiguity rules here instead of in
-            // THIR building.
+            // See if there are any generic types in a binder.
+            for generic_ty in reified.generic_types() {
+                self.tcx.dcx().emit_err(errors::GenericsInBindContext {
+                    span,
+                    full_ty: reified.original_bundle,
+                    generic_ty,
+                });
+            }
 
             // See if we have an infer set binder.
             if !reified.infer_sets.is_empty() {
-                // TODO: Ensure that there is only one origin.
+                if reified.infer_sets.len() > 1 {
+                    let mut diag = self.tcx.dcx().create_err(errors::MultipleInferInBindContext {
+                        span,
+                    });
+
+                    for &did in reified.infer_sets.keys() {
+                        diag.subdiagnostic(errors::MultipleInferInBindContextBindsNote {
+                            ty: Ty::new_infer_bundle(self.tcx, did, self.tcx.lifetimes.re_erased),
+                        });
+                    }
+
+                    diag.emit();
+                }
 
                 // We begin by clearing the `curr_absorb` list since the infer set now collects all
                 // of these unabsorbed borrows.

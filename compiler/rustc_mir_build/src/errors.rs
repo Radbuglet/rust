@@ -12,15 +12,6 @@ use rustc_span::symbol::Symbol;
 
 use crate::fluent_generated as fluent;
 
-#[derive(Diagnostic)]
-#[diag(mir_build_generics_in_bind)]
-pub(crate) struct ThirBuildGenericsInBind<'tcx> {
-    #[primary_span]
-    pub span: Span,
-    pub full_ty: Ty<'tcx>,
-    pub generic_ty: Ty<'tcx>,
-}
-
 #[derive(LintDiagnostic)]
 #[diag(mir_build_unconditional_recursion)]
 #[help]
