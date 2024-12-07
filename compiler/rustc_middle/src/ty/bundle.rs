@@ -504,8 +504,18 @@ pub enum PackShape<'tcx> {
         inner_shape: Box<PackShape<'tcx>>,
     },
 
-    /// An unrecoverable error ocurred and this field has no useful way to assign a value.
-    Error(ty::ErrorGuaranteed),
+    /// An error ocurred and this field has no useful way to assign a value.
+    ///
+    /// The inner option could be `None` if the error is not yet confirmed to cause a failed
+    /// compilation, which could happen during stages where inference bundles are not yet resolved.
+    /// This variant will not show up after the `GraphSolving` solving stage.
+    Error(Option<ty::ErrorGuaranteed>),
+}
+
+impl<'tcx> PackShape<'tcx> {
+    pub fn err_known(err: ty::ErrorGuaranteed) -> Self {
+        Self::Error(Some(err))
+    }
 }
 
 type PackShapeStoreMap<'tcx> = IndexVec<thir::PackExprIndex, Option<Lrc<PackShape<'tcx>>>>;
@@ -737,7 +747,7 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
             ty::ReifiedBundleItemSet::Ref(_re, muta, def_id) => {
                 for (i, (bundle_span, bundle)) in self.bundles.iter().enumerate() {
                     if !bundle.infer_sets.is_empty() && self.flags.allows_env() {
-                        return PackShape::Error(self.stage.err_during_graph(tcx, || {
+                        return PackShape::err_known(self.stage.err_during_graph(tcx, || {
                             tcx.dcx().emit_err(errors::AmbiguousEarlyPackResolution {
                                 infer_span: *bundle_span,
                                 env_span: extract_env_flag_span(),
@@ -753,7 +763,7 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
                     };
 
                     if members.len() > 1 {
-                        return PackShape::Error(self.stage.err_during_mir(tcx, || {
+                        return PackShape::err_known(self.stage.err_during_mir(tcx, || {
                             let mut diag = tcx.dcx().create_err(errors::AmbiguousOriginForContextItem {
                                 span: *bundle_span,
                                 ctx_ty: ty,
@@ -773,7 +783,13 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
                     return PackShape::ExtractEnv(muta, def_id)
                 }
 
-                PackShape::Error(self.stage.err_during_mir(tcx, || {
+                if !self.stage.fully_resolved() {
+                    // We may have passed by a bundle whose inference set is not yet known.
+                    // This is not yet a hard error.
+                    return PackShape::Error(None);
+                }
+
+                PackShape::err_known(self.stage.err_during_mir(tcx, || {
                     let mut diag = tcx.dcx().create_err(errors::MissingContextItem {
                         span: self.full_span,
                         missing_ty: ty,
@@ -815,7 +831,7 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
                     };
 
                     if members.len() > 1 {
-                        return PackShape::Error(self.stage.err_during_mir(tcx, || {
+                        return PackShape::err_known(self.stage.err_during_mir(tcx, || {
                             tcx.dcx().emit_err(errors::AmbiguousOriginForGenericItem {
                                 span: *bundle_span,
                                 ctx_ty: ty,
@@ -829,7 +845,7 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
                     return PackShape::ExtractLocalMove(i, member.location);
                 }
 
-                PackShape::Error(self.stage.err_during_mir(tcx, || make_missing_generic_err()))
+                PackShape::err_known(self.stage.err_during_mir(tcx, || make_missing_generic_err()))
             }
             ty::ReifiedBundleItemSet::GenericRef(_re, muta, ty) => {
                 for (i, (bundle_span, bundle)) in self.bundles.iter().enumerate() {
@@ -838,7 +854,7 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
                     };
 
                     if members.len() > 1 {
-                        return PackShape::Error(self.stage.err_during_mir(tcx, || {
+                        return PackShape::err_known(self.stage.err_during_mir(tcx, || {
                             tcx.dcx().emit_err(errors::AmbiguousOriginForGenericItem {
                                 span: *bundle_span,
                                 ctx_ty: ty,
@@ -852,7 +868,7 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
                     return PackShape::ExtractLocalRef(muta, i, member.location);
                 }
 
-                PackShape::Error(self.stage.err_during_mir(tcx, || make_missing_generic_err()))
+                PackShape::err_known(self.stage.err_during_mir(tcx, || make_missing_generic_err()))
             }
             ty::ReifiedBundleItemSet::InferSet(did, re) => {
                 if self.stage.fully_resolved() {
@@ -880,7 +896,7 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
                     PackShape::ExtractEnvInfer(did)
                 }
             }
-            ty::ReifiedBundleItemSet::Error(err) => PackShape::Error(err),
+            ty::ReifiedBundleItemSet::Error(err) => PackShape::err_known(err),
         }
     }
 }
@@ -890,7 +906,7 @@ impl<'a, 'tcx> PackShapeMakeCx<'a, 'tcx> {
 #[derive(Debug, Clone)]
 pub struct ContextUsedByExpr {
     pub concrete: Vec<(DefId, Mutability)>,
-    pub infer: Option<DefId>,
+    pub infer: Vec<DefId>,
 }
 
 pub fn context_used_by_expr<'tcx>(
@@ -902,7 +918,7 @@ pub fn context_used_by_expr<'tcx>(
 ) -> ContextUsedByExpr {
     let mut uses = ContextUsedByExpr {
         concrete: Vec::new(),
-        infer: None,
+        infer: Vec::new(),
     };
     context_used_by_expr_inner(
         tcx,
@@ -1002,7 +1018,7 @@ pub fn context_used_by_pack_shape<'tcx>(
             uses.concrete.push((item, muta));
         }
         &PackShape::ExtractEnvInfer(item) => {
-            uses.infer = Some(item);
+            uses.infer.push(item);
         }
         PackShape::MakeTuple(fields) => {
             for field in fields {
@@ -1432,7 +1448,7 @@ impl<'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ComponentsBorrowedLocalVi
             }
         }
 
-        if let Some(infer) = uses.infer {
+        for infer in uses.infer {
             self.borrows_nodes[self.curr_borrows_node]
                 .1
                 .calls

@@ -527,7 +527,8 @@ impl<'a, 'thir, 'tcx> ContextFatalUseValidator<'a, 'thir, 'tcx> {
     fn visit_shape(&mut self, shape: &ty::PackShape<'_>) {
         match shape {
             ty::PackShape::Error(err) => {
-                self.fatal(*err);
+                // The graph has been solved by this point so all errors should be guaranteed.
+                self.fatal(err.unwrap());
             }
             ty::PackShape::MakeTuple(fields) => {
                 for field in fields {
