@@ -375,6 +375,9 @@ impl<'a, 'tcx, F: Fn(Ty<'tcx>) -> bool> MoveDataBuilder<'a, 'tcx, F> {
                 }
                 self.gather_rvalue(rval);
             }
+            StatementKind::AssignContext(box (_, op)) => {
+                self.gather_operand(op);
+            }
             StatementKind::FakeRead(box (_, place)) => {
                 self.create_move_path(*place);
             }

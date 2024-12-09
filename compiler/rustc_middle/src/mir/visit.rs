@@ -112,6 +112,15 @@ macro_rules! make_mir_visitor {
                 self.super_assign(place, rvalue, location);
             }
 
+            fn visit_assign_context(
+                &mut self,
+                target: $(& $mutability)? DefId,
+                operand: & $($mutability)? Operand<'tcx>,
+                location: Location,
+            ) {
+                self.super_assign_context(target, operand, location);
+            }
+
             fn visit_terminator(
                 &mut self,
                 terminator: & $($mutability)? Terminator<'tcx>,
@@ -452,6 +461,9 @@ macro_rules! make_mir_visitor {
                     }
                     StatementKind::ConstEvalCounter => {}
                     StatementKind::Nop => {}
+                    StatementKind::AssignContext(box (target, op)) => {
+                        self.visit_assign_context($(& $mutability)? *target, op, location);
+                    }
                 }
             }
 
@@ -465,6 +477,14 @@ macro_rules! make_mir_visitor {
                     location
                 );
                 self.visit_rvalue(rvalue, location);
+            }
+
+            fn super_assign_context(&mut self,
+                                    target: $(& $mutability)? DefId,
+                                    operand: &$($mutability)? Operand<'tcx>,
+                                    location: Location) {
+                let _ = target;
+                self.visit_operand(operand, location);
             }
 
             fn super_terminator(&mut self,

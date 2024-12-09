@@ -623,6 +623,9 @@ impl<'a, 'tcx, R> rustc_mir_dataflow::ResultsVisitor<'a, 'tcx, R>
 
                 self.mutate_place(location, (*lhs, span), Shallow(None), state);
             }
+            StatementKind::AssignContext(box (_, op)) => {
+                self.consume_operand(location, (op, span), state);
+            }
             StatementKind::FakeRead(box (_, place)) => {
                 // Read for match doesn't access any memory and is used to
                 // assert that a place is safe and live. So we don't have to

@@ -351,7 +351,8 @@ impl<'a, 'tcx> TOFinder<'a, 'tcx> {
             | StatementKind::FakeRead(..)
             | StatementKind::ConstEvalCounter
             | StatementKind::PlaceMention(..)
-            | StatementKind::Nop => None,
+            | StatementKind::Nop
+            | StatementKind::AssignContext(..) => None,
         }
     }
 

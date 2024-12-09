@@ -87,6 +87,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                 let src = src_val.immediate();
                 bx.memcpy(dst, align, src, align, bytes, crate::MemFlags::empty());
             }
+            mir::StatementKind::AssignContext(..) => todo!(),
             mir::StatementKind::FakeRead(..)
             | mir::StatementKind::Retag { .. }
             | mir::StatementKind::AscribeUserType(..)

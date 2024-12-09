@@ -323,6 +323,16 @@ pub trait Machine<'tcx>: Sized {
         throw_unsup!(ContextRef(def_id))
     }
 
+    /// Assign a new value to the context item.
+    fn assign_context_item(
+        _ecx: &mut InterpCx<'tcx, Self>,
+        def_id: DefId,
+        operand: &mir::Operand<'tcx>,
+    ) -> InterpResult<'tcx> {
+        let _ = operand;
+        throw_unsup!(ContextRef(def_id))
+    }
+
     /// Return the `AllocId` for the given `extern static`.
     fn extern_static_pointer(
         ecx: &InterpCx<'tcx, Self>,

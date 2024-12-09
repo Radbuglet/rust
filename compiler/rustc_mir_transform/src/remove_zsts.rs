@@ -125,7 +125,8 @@ impl<'tcx> MutVisitor<'tcx> for Replacer<'_, 'tcx> {
             StatementKind::Coverage(_)
             | StatementKind::Intrinsic(_)
             | StatementKind::Nop
-            | StatementKind::ConstEvalCounter => None,
+            | StatementKind::ConstEvalCounter
+            | StatementKind::AssignContext(..) => None,
         };
         if let Some(place_for_ty) = place_for_ty
             && let ty = place_for_ty.ty(self.local_decls, self.tcx).ty

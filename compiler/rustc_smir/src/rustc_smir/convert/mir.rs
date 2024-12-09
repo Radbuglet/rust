@@ -152,6 +152,7 @@ impl<'tcx> Stable<'tcx> for mir::StatementKind<'tcx> {
                 stable_mir::mir::StatementKind::ConstEvalCounter
             }
             mir::StatementKind::Nop => stable_mir::mir::StatementKind::Nop,
+            mir::StatementKind::AssignContext(..) => todo!(),
         }
     }
 }

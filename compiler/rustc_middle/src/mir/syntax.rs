@@ -440,6 +440,9 @@ pub enum StatementKind<'tcx> {
 
     /// No-op. Useful for deleting instructions without affecting statement indices.
     Nop,
+
+    /// Update a context item's actively bound value on the current thread.
+    AssignContext(Box<(DefId, Operand<'tcx>)>),
 }
 
 impl StatementKind<'_> {
@@ -460,6 +463,7 @@ impl StatementKind<'_> {
             StatementKind::Intrinsic(..) => "Intrinsic",
             StatementKind::ConstEvalCounter => "ConstEvalCounter",
             StatementKind::Nop => "Nop",
+            StatementKind::AssignContext(..) => "AssignContext",
         }
     }
 }

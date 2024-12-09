@@ -1766,6 +1766,8 @@ impl<'tcx> Visitor<'tcx> for EnsureCoroutineFieldAssignmentsNeverAlias<'_> {
                 self.check_assigned_place(*lhs, |this| this.visit_rvalue(rhs, location));
             }
 
+            StatementKind::AssignContext(..) => todo!(),
+
             StatementKind::FakeRead(..)
             | StatementKind::SetDiscriminant { .. }
             | StatementKind::Deinit(..)

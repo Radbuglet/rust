@@ -1309,6 +1309,28 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
                     "Unexpected NonDivergingIntrinsic::CopyNonOverlapping, should only appear after lowering_intrinsics",
                 ),
             },
+            StatementKind::AssignContext(box (target, value)) => {
+                self.check_operand(value, location);
+
+                let ty = tcx.context_ptr_ty(*target);
+
+                let value_ty = value.ty(body, tcx);
+                if let Err(terr) = self.sub_types(
+                    value_ty,
+                    ty,
+                    location.to_locations(),
+                    ConstraintCategory::Assignment,
+                ) {
+                    span_mirbug!(
+                        self,
+                        stmt,
+                        "type of context item is {:?}, but the assigned type is {:?}: {:?}",
+                        value_ty,
+                        ty,
+                        terr
+                    );
+                }
+            }
             StatementKind::FakeRead(..)
             | StatementKind::StorageLive(..)
             | StatementKind::StorageDead(..)

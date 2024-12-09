@@ -39,6 +39,7 @@ use std::ops::Range;
 use rustc_data_structures::captures::Captures;
 use rustc_data_structures::fx::{FxHashMap, FxIndexSet, StdEntry};
 use rustc_data_structures::stack::ensure_sufficient_stack;
+use rustc_hir::def_id::DefId;
 use rustc_index::IndexVec;
 use rustc_index::bit_set::BitSet;
 use rustc_middle::bug;
@@ -87,6 +88,9 @@ pub trait ValueAnalysis<'tcx> {
             }
             StatementKind::Retag(..) => {
                 // We don't track references.
+            }
+            StatementKind::AssignContext(box (target, value)) => {
+                self.handle_assign_context(*target, value, state);
             }
             StatementKind::ConstEvalCounter
             | StatementKind::Nop
@@ -159,6 +163,25 @@ pub trait ValueAnalysis<'tcx> {
     ) {
         let result = self.handle_rvalue(rvalue, state);
         state.assign(target.as_ref(), result, self.map());
+    }
+
+    fn handle_assign_context(
+        &self,
+        target: DefId,
+        operand: &Operand<'tcx>,
+        state: &mut State<Self::Value>,
+    ) {
+        self.super_assign_context(target, operand, state)
+    }
+
+    fn super_assign_context(
+        &self,
+        target: DefId,
+        operand: &Operand<'tcx>,
+        state: &mut State<Self::Value>,
+    ) {
+        let _ = target;
+        self.handle_operand(operand, state);
     }
 
     fn handle_rvalue(

@@ -348,7 +348,8 @@ impl<'a, 'tcx> Visitor<'tcx> for CfgChecker<'a, 'tcx> {
             | StatementKind::Intrinsic(_)
             | StatementKind::ConstEvalCounter
             | StatementKind::PlaceMention(..)
-            | StatementKind::Nop => {}
+            | StatementKind::Nop
+            | StatementKind::AssignContext(..) => {}
         }
 
         self.super_statement(statement, location);
@@ -1407,6 +1408,22 @@ impl<'a, 'tcx> Visitor<'tcx> for TypeChecker<'a, 'tcx> {
                             "`CopyForDeref` should only be used for dereferenceable types",
                         )
                     }
+                }
+            }
+            StatementKind::AssignContext(box (target, op)) => {
+                let left_ty = self.tcx.context_ptr_ty(*target);
+                let right_ty = op.ty(&self.body.local_decls, self.tcx);
+
+                if !self.mir_assign_valid_types(right_ty, left_ty) {
+                    self.fail(
+                        location,
+                        format!(
+                            "encountered `{:?}` with incompatible types:\n\
+                            left-hand side has type: {}\n\
+                            right-hand side has type: {}",
+                            statement.kind, left_ty, right_ty,
+                        ),
+                    );
                 }
             }
             StatementKind::AscribeUserType(..) => {

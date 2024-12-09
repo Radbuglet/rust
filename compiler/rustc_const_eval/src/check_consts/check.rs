@@ -383,8 +383,8 @@ impl<'tcx> Visitor<'tcx> for Checker<'_, 'tcx> {
             Rvalue::ThreadLocalRef(_) => self.check_op(ops::ThreadLocalAccess),
             Rvalue::ContextRef(_) => {
                 unreachable!(
-                    "ContextRef should not have been lowered during `rustc_mir_build` when \
-                     building const bodies",
+                    "`ContextRef` should not have been lowered during `mir_build` when building \
+                     const bodies",
                 );
             }
 
@@ -536,6 +536,12 @@ impl<'tcx> Visitor<'tcx> for Checker<'_, 'tcx> {
         self.super_statement(statement, location);
 
         match statement.kind {
+            StatementKind::AssignContext(_) => {
+                unreachable!(
+                    "`AssignContext` should not have been lowered during `mir_build` when building \
+                     const bodies",
+                );
+            }
             StatementKind::Assign(..)
             | StatementKind::SetDiscriminant { .. }
             | StatementKind::Deinit(..)
