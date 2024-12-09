@@ -442,7 +442,10 @@ pub enum StatementKind<'tcx> {
     Nop,
 
     /// Update a context item's actively bound value on the current thread.
-    AssignContext(Box<(DefId, Operand<'tcx>)>),
+    ///
+    /// It is undefined behavior to not restore the context value bound to a given `DefId` back to
+    /// its original pre-function-call value by the end of the function call.
+    AssignContext(Box<(DefId, Operand<'tcx>, AssignContextKind)>),
 }
 
 impl StatementKind<'_> {
@@ -607,6 +610,21 @@ impl CallSource {
     pub fn from_hir_call(self) -> bool {
         matches!(self, CallSource::Normal)
     }
+}
+
+#[derive(Clone, Copy, TyEncodable, TyDecodable, Debug, Eq, PartialEq, Hash, HashStable)]
+#[derive(TypeFoldable, TypeVisitable)]
+pub enum AssignContextKind {
+    /// Potentially sets the bound context to something other than what it was at the start of the
+    /// function.
+    MaybeClobber,
+
+    /// Potentially sets the bound context to something other than what it was at the start of the
+    /// function *and is not load-bearing for restoring that context*.
+    DoesClobber,
+
+    /// Restores the bound context to what it was at the start of the function.
+    Restore,
 }
 
 ///////////////////////////////////////////////////////////////////////////

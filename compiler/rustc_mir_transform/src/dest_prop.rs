@@ -588,7 +588,7 @@ impl WriteInfo {
                     | Rvalue::CopyForDeref(_) => (),
                 }
             }
-            StatementKind::AssignContext(box (_, op)) => {
+            StatementKind::AssignContext(box (_, op, _)) => {
                 self.add_operand(op);
             }
             // Retags are technically also reads, but reporting them as a write suffices

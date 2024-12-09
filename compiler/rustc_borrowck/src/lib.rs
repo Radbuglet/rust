@@ -623,7 +623,7 @@ impl<'a, 'tcx, R> rustc_mir_dataflow::ResultsVisitor<'a, 'tcx, R>
 
                 self.mutate_place(location, (*lhs, span), Shallow(None), state);
             }
-            StatementKind::AssignContext(box (_, op)) => {
+            StatementKind::AssignContext(box (_, op, _)) => {
                 self.consume_operand(location, (op, span), state);
             }
             StatementKind::FakeRead(box (_, place)) => {

@@ -233,7 +233,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             );
             var_count += 1;
 
-            // N.B. This old folds *free* regions.
+            // N.B. This only folds *free* regions.
             let pointee = pointee.fold_with(&mut ty::fold::RegionFolder::new(
                 self.tcx,
                 &mut |_, debrujin| {

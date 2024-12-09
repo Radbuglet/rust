@@ -328,8 +328,10 @@ pub trait Machine<'tcx>: Sized {
         _ecx: &mut InterpCx<'tcx, Self>,
         def_id: DefId,
         operand: &mir::Operand<'tcx>,
+        kind: mir::AssignContextKind,
     ) -> InterpResult<'tcx> {
         let _ = operand;
+        let _ = kind;
         throw_unsup!(ContextRef(def_id))
     }
 

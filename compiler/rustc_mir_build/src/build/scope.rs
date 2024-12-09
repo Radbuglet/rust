@@ -85,6 +85,7 @@ use std::mem;
 
 use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::HirId;
+use rustc_hir::def_id::DefId;
 use rustc_index::{IndexSlice, IndexVec};
 use rustc_middle::middle::region;
 use rustc_middle::mir::*;
@@ -157,6 +158,9 @@ struct DropData {
 pub(crate) enum DropKind {
     Value,
     Storage,
+
+    /// Inserts a `StorageDead` for the given local after binding it to the specified context item.
+    RestoreBind(DefId, AssignContextKind),
 }
 
 #[derive(Debug)]
@@ -247,6 +251,8 @@ impl Scope {
         self.drops.iter().any(|drop| match drop.kind {
             DropKind::Value => true,
             DropKind::Storage => false,
+            DropKind::RestoreBind(_, AssignContextKind::DoesClobber) => false,
+            DropKind::RestoreBind(..) => true,
         })
     }
 
@@ -406,7 +412,22 @@ impl DropTree {
                 }
                 // Root nodes don't correspond to a drop.
                 DropKind::Storage if drop_idx == ROOT_NODE => {}
-                DropKind::Storage => {
+                dk @ (DropKind::Storage | DropKind::RestoreBind(..)) => {
+                    if let DropKind::RestoreBind(did, kind) = dk {
+                        let stmt = Statement {
+                            source_info: drop_node.data.source_info,
+                            kind: StatementKind::AssignContext(Box::new((
+                                // context item
+                                did,
+                                // value to restore to
+                                Operand::Copy(drop_node.data.local.into()),
+                                // whether it clobbers or restores state
+                                kind,
+                            ))),
+                        };
+                        cfg.push(block, stmt);
+                    }
+
                     let stmt = Statement {
                         source_info: drop_node.data.source_info,
                         kind: StatementKind::StorageDead(drop_node.data.local),
@@ -810,9 +831,21 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                         });
                         block = next;
                     }
-                    DropKind::Storage => {
+                    dk @ (DropKind::Storage | DropKind::RestoreBind(..)) => {
                         // Only temps and vars need their storage dead.
                         assert!(local.index() > self.arg_count);
+
+                        if let DropKind::RestoreBind(did, kind) = dk {
+                            self.cfg.push(block, Statement {
+                                source_info,
+                                kind: StatementKind::AssignContext(Box::new((
+                                    did,
+                                    Operand::Copy(local.into()),
+                                    kind,
+                                ))),
+                            });
+                        }
+
                         self.cfg.push(block, Statement {
                             source_info,
                             kind: StatementKind::StorageDead(local),
@@ -1025,6 +1058,10 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     )
                 }
                 false
+            }
+            DropKind::RestoreBind(..) => {
+                // TODO: Do we need to invalidate drops??
+                true
             }
         };
 
@@ -1389,7 +1426,7 @@ fn build_scope_drops<'tcx>(
                 });
                 block = next;
             }
-            DropKind::Storage => {
+            dk @ (DropKind::Storage | DropKind::RestoreBind(..)) => {
                 if storage_dead_on_unwind {
                     debug_assert_eq!(unwind_drops.drops[unwind_to].data.local, drop_data.local);
                     debug_assert_eq!(unwind_drops.drops[unwind_to].data.kind, drop_data.kind);
@@ -1397,6 +1434,18 @@ fn build_scope_drops<'tcx>(
                 }
                 // Only temps and vars need their storage dead.
                 assert!(local.index() > arg_count);
+
+                if let DropKind::RestoreBind(did, kind) = dk {
+                    cfg.push(block, Statement {
+                        source_info,
+                        kind: StatementKind::AssignContext(Box::new((
+                            did,
+                            Operand::Copy(local.into()),
+                            kind,
+                        ))),
+                    });
+                }
+
                 cfg.push(block, Statement { source_info, kind: StatementKind::StorageDead(local) });
             }
         }
@@ -1428,7 +1477,7 @@ impl<'a, 'tcx: 'a> Builder<'a, 'tcx> {
             let mut unwind_indices = IndexVec::from_elem_n(unwind_target, 1);
             for (drop_idx, drop_node) in drops.drops.iter_enumerated().skip(1) {
                 match drop_node.data.kind {
-                    DropKind::Storage => {
+                    DropKind::Storage | DropKind::RestoreBind(..) => {
                         if is_coroutine {
                             let unwind_drop = self
                                 .scopes

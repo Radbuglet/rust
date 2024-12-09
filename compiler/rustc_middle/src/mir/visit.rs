@@ -116,9 +116,10 @@ macro_rules! make_mir_visitor {
                 &mut self,
                 target: $(& $mutability)? DefId,
                 operand: & $($mutability)? Operand<'tcx>,
+                kind: AssignContextKind,
                 location: Location,
             ) {
-                self.super_assign_context(target, operand, location);
+                self.super_assign_context(target, operand, kind, location);
             }
 
             fn visit_terminator(
@@ -461,8 +462,8 @@ macro_rules! make_mir_visitor {
                     }
                     StatementKind::ConstEvalCounter => {}
                     StatementKind::Nop => {}
-                    StatementKind::AssignContext(box (target, op)) => {
-                        self.visit_assign_context($(& $mutability)? *target, op, location);
+                    StatementKind::AssignContext(box (target, op, kind)) => {
+                        self.visit_assign_context($(& $mutability)? *target, op, *kind, location);
                     }
                 }
             }
@@ -482,8 +483,10 @@ macro_rules! make_mir_visitor {
             fn super_assign_context(&mut self,
                                     target: $(& $mutability)? DefId,
                                     operand: &$($mutability)? Operand<'tcx>,
+                                    kind: AssignContextKind,
                                     location: Location) {
                 let _ = target;
+                let _ = kind;
                 self.visit_operand(operand, location);
             }
 

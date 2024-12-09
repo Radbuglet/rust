@@ -89,8 +89,8 @@ pub trait ValueAnalysis<'tcx> {
             StatementKind::Retag(..) => {
                 // We don't track references.
             }
-            StatementKind::AssignContext(box (target, value)) => {
-                self.handle_assign_context(*target, value, state);
+            StatementKind::AssignContext(box (target, value, kind)) => {
+                self.handle_assign_context(*target, value, *kind, state);
             }
             StatementKind::ConstEvalCounter
             | StatementKind::Nop
@@ -169,18 +169,21 @@ pub trait ValueAnalysis<'tcx> {
         &self,
         target: DefId,
         operand: &Operand<'tcx>,
+        kind: AssignContextKind,
         state: &mut State<Self::Value>,
     ) {
-        self.super_assign_context(target, operand, state)
+        self.super_assign_context(target, operand, kind, state)
     }
 
     fn super_assign_context(
         &self,
         target: DefId,
         operand: &Operand<'tcx>,
+        kind: AssignContextKind,
         state: &mut State<Self::Value>,
     ) {
         let _ = target;
+        let _ = kind;
         self.handle_operand(operand, state);
     }
 

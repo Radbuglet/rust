@@ -56,7 +56,7 @@ impl<'a, 'tcx> Visitor<'tcx> for LoanInvalidationsGenerator<'a, 'tcx> {
             StatementKind::FakeRead(box (_, _)) => {
                 // Only relevant for initialized/liveness/safety checks.
             }
-            StatementKind::AssignContext(box (_, op)) => {
+            StatementKind::AssignContext(box (_, op, _)) => {
                 self.consume_operand(location, op);
             }
             StatementKind::Intrinsic(box NonDivergingIntrinsic::Assume(op)) => {

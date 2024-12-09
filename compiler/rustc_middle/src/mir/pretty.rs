@@ -824,7 +824,7 @@ impl Debug for Statement<'_> {
             Intrinsic(box ref intrinsic) => write!(fmt, "{intrinsic}"),
             ConstEvalCounter => write!(fmt, "ConstEvalCounter"),
             Nop => write!(fmt, "nop"),
-            AssignContext(box (did, ref op)) => write!(fmt, "ctx {did:?} = {op:?}"),
+            AssignContext(box (did, ref op, kind)) => write!(fmt, "ctx({kind:?}) {did:?} = {op:?}"),
         }
     }
 }

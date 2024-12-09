@@ -1410,7 +1410,7 @@ impl<'a, 'tcx> Visitor<'tcx> for TypeChecker<'a, 'tcx> {
                     }
                 }
             }
-            StatementKind::AssignContext(box (target, op)) => {
+            StatementKind::AssignContext(box (target, op, _)) => {
                 let left_ty = self.tcx.context_ptr_ty(*target);
                 let right_ty = op.ty(&self.body.local_decls, self.tcx);
 

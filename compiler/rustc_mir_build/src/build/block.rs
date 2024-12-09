@@ -5,6 +5,7 @@ use rustc_middle::{span_bug, ty};
 use rustc_span::Span;
 use tracing::debug;
 
+use crate::build::DropKind;
 use crate::build::ForGuard::OutsideGuard;
 use crate::build::matches::{DeclareLetBindings, EmitStorageLive, ScheduleDrops};
 use crate::build::{BlockAnd, BlockAndExtension, BlockFrame, Builder};
@@ -326,7 +327,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     }
                     last_remainder_scope = *remainder_scope;
                 }
-                StmtKind::BindContext { remainder_scope, init_scope, bundle, span: _, self_id: _ } => {
+                StmtKind::BindContext { remainder_scope, init_scope, bundle, span, self_id: _ } => {
                     assert!(!this.ctx_const_restrictions);
 
                     this.block_context.push(BlockFrame::Statement { ignores_expr_result: false });
@@ -357,8 +358,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                             // Reborrow the fields that we need
                             let borrowed_fields = bundle_reified
                                 .fields
-                                .values()
-                                .map(|fields| {
+                                .iter()
+                                .map(|(did, fields)| {
                                     let field = &fields[0];
 
                                     let reborrow = this.local_decls.push(LocalDecl::new(
@@ -386,14 +387,17 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                                         ),
                                     );
 
-                                    reborrow
+                                    (*did, reborrow)
                                 })
                                 .collect::<Vec<_>>();
 
                             // Limit lifetimes
                             let lt_limiter = this.new_lt_limiter_static(block, source_info);
                             let relate_refs = [lt_limiter].into_iter()
-                                .chain(borrowed_fields.iter().copied().map(Place::from))
+                                .chain(borrowed_fields
+                                    .iter()
+                                    .map(|&(_did, local)| Place::from(local))
+                                )
                                 .collect::<Vec<_>>();
 
                             let relate_csts = (1..relate_refs.len())
@@ -401,6 +405,64 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                                 .collect::<Vec<_>>();
 
                             this.relate_lifetimes(block, source_info, &relate_refs, &relate_csts);
+
+                            // Assign context
+                            let deref_proj = this.tcx.mk_place_elems(&[PlaceElem::Deref]);
+                            for &(did, local) in &borrowed_fields {
+                                let did_ty = this.tcx.context_ptr_ty(did);
+
+                                // Save old value
+                                let old_ptr = this.local_decls.push(LocalDecl::new(
+                                    did_ty,
+                                    bundle_span,
+                                ));
+
+                                this.cfg.push_assign(
+                                    block,
+                                    source_info,
+                                    Place::from(old_ptr),
+                                    Rvalue::ContextRef(did),
+                                );
+
+                                this.schedule_drop(
+                                    *span,
+                                    *remainder_scope,
+                                    old_ptr,
+                                    // TODO: Use more precise modes
+                                    DropKind::RestoreBind(
+                                        did,
+                                        AssignContextKind::MaybeClobber,
+                                    ),
+                                );
+
+                                // Assign to new value
+                                let new_ptr = this.local_decls.push(LocalDecl::new(
+                                    did_ty,
+                                    bundle_span,
+                                ));
+
+                                this.cfg.push_assign(
+                                    block,
+                                    source_info,
+                                    Place::from(new_ptr),
+                                    Rvalue::RawPtr(
+                                        Mutability::Mut,
+                                        Place {
+                                            local,
+                                            projection: deref_proj,
+                                        },
+                                    ),
+                                );
+
+                                this.cfg.push(block, Statement {
+                                    source_info,
+                                    kind: StatementKind::AssignContext(Box::new((
+                                        did,
+                                        Operand::Copy(new_ptr.into()),
+                                        AssignContextKind::DoesClobber,
+                                    ))),
+                                });
+                            }
 
                             // Prepare context
                             this.init_and_borrow_context_binder_locals(

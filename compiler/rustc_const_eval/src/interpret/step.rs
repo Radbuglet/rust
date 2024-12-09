@@ -82,7 +82,12 @@ impl<'tcx, M: Machine<'tcx>> InterpCx<'tcx, M> {
         match &stmt.kind {
             Assign(box (place, rvalue)) => self.eval_rvalue_into_place(rvalue, *place)?,
 
-            AssignContext(box (target, rvalue)) => M::assign_context_item(self, *target, rvalue)?,
+            AssignContext(box (target, rvalue, kind)) => M::assign_context_item(
+                self,
+                *target,
+                rvalue,
+                *kind,
+            )?,
 
             SetDiscriminant { place, variant_index } => {
                 let dest = self.eval_place(**place)?;
