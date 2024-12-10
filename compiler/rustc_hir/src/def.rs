@@ -322,7 +322,8 @@ impl DefKind {
             | DefKind::Ctor(..)
             | DefKind::Closure
             | DefKind::Static { .. }
-            | DefKind::SyntheticCoroutineBody => true,
+            | DefKind::SyntheticCoroutineBody
+            | DefKind::Context => true,
             DefKind::Mod
             | DefKind::Struct
             | DefKind::Union
@@ -347,7 +348,6 @@ impl DefKind {
             | DefKind::AnonConst
             | DefKind::InlineConst
             | DefKind::GlobalAsm
-            | DefKind::Context
             | DefKind::ExternCrate
             | DefKind::InferBundle => false,
         }

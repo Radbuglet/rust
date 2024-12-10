@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir as hir;
-use rustc_hir::def::Namespace;
+use rustc_hir::def::{DefKind, Namespace};
 use rustc_hir::def_id::{CrateNum, DefId};
 use rustc_hir::lang_items::LangItem;
 use rustc_index::bit_set::FiniteBitSet;
@@ -179,8 +179,14 @@ impl<'tcx> Instance<'tcx> {
     /// Returns the `Ty` corresponding to this `Instance`, with generic instantiations applied and
     /// lifetimes erased, allowing a `ParamEnv` to be specified for use during normalization.
     pub fn ty(&self, tcx: TyCtxt<'tcx>, param_env: ty::ParamEnv<'tcx>) -> Ty<'tcx> {
-        let ty = tcx.type_of(self.def.def_id());
-        tcx.instantiate_and_normalize_erasing_regions(self.args, param_env, ty)
+        let did = self.def.def_id();
+
+        if tcx.def_kind(did) == DefKind::Context {
+            tcx.context_ptr_ty(did)
+        } else {
+            let ty = tcx.type_of(did);
+            tcx.instantiate_and_normalize_erasing_regions(self.args, param_env, ty)
+        }
     }
 
     /// Finds a crate that contains a monomorphization of this instance that

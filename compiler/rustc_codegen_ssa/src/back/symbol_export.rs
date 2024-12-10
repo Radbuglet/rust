@@ -83,7 +83,7 @@ fn reachable_non_generics_provider(tcx: TyCtxt<'_>, _: LocalCrate) -> DefIdMap<S
 
             // Only consider nodes that actually have exported symbols.
             match tcx.def_kind(def_id) {
-                DefKind::Fn | DefKind::Static { .. } => {}
+                DefKind::Fn | DefKind::Static { .. } | DefKind::Context => {}
                 DefKind::AssocFn if tcx.impl_of_method(def_id.to_def_id()).is_some() => {}
                 _ => return None,
             };
@@ -128,6 +128,8 @@ fn reachable_non_generics_provider(tcx: TyCtxt<'_>, _: LocalCrate) -> DefIdMap<S
                     } else {
                         SymbolExportKind::Data
                     }
+                } else if tcx.is_context_item(def_id.to_def_id()) {
+                    SymbolExportKind::Tls
                 } else {
                     SymbolExportKind::Text
                 },

@@ -1,9 +1,10 @@
 use std::sync::atomic::Ordering::Relaxed;
 
 use either::{Left, Right};
+use rustc_hir::Mutability;
 use rustc_hir::def::DefKind;
 use rustc_middle::bug;
-use rustc_middle::mir::interpret::{AllocId, ErrorHandled, InterpErrorInfo};
+use rustc_middle::mir::interpret::{Allocation, AllocId, ErrorHandled, InterpErrorInfo};
 use rustc_middle::mir::{self, ConstAlloc, ConstValue};
 use rustc_middle::query::TyCtxtAt;
 use rustc_middle::traits::Reveal;
@@ -304,11 +305,22 @@ pub fn eval_static_initializer_provider<'tcx>(
     tcx: TyCtxt<'tcx>,
     def_id: LocalDefId,
 ) -> ::rustc_middle::mir::interpret::EvalStaticInitializerRawResult<'tcx> {
-    assert!(tcx.is_static(def_id.to_def_id()));
+    if tcx.is_static(def_id.to_def_id()) {
+        assert!(tcx.is_static(def_id.to_def_id()));
 
-    let instance = ty::Instance::mono(tcx, def_id.to_def_id());
-    let cid = rustc_middle::mir::interpret::GlobalId { instance, promoted: None };
-    eval_in_interpreter(tcx, cid, ty::ParamEnv::reveal_all())
+        let instance = ty::Instance::mono(tcx, def_id.to_def_id());
+        let cid = rustc_middle::mir::interpret::GlobalId { instance, promoted: None };
+        eval_in_interpreter(tcx, cid, ty::ParamEnv::reveal_all())
+    } else {
+        let layout = &tcx.data_layout;
+        let data = (0..layout.pointer_size.bytes_usize()).map(|_| 0u8).collect::<Vec<u8>>();
+
+        Ok(tcx.mk_const_alloc(Allocation::from_bytes(
+            &data,
+            layout.pointer_align.abi,
+            Mutability::Mut,
+        )))
+    }
 }
 
 pub trait InterpretationResult<'tcx> {

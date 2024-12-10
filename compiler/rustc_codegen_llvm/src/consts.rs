@@ -248,16 +248,20 @@ impl<'ll> CodegenCx<'ll, '_> {
         let instance = Instance::mono(self.tcx, def_id);
         trace!(?instance);
 
-        let DefKind::Static { nested, .. } = self.tcx.def_kind(def_id) else { bug!() };
-        // Nested statics do not have a type, so pick a dummy type and let `codegen_static` figure
-        // out the llvm type from the actual evaluated initializer.
-        let llty = if nested {
-            self.type_i8()
-        } else {
-            let ty = instance.ty(self.tcx, ty::ParamEnv::reveal_all());
-            trace!(?ty);
-            self.layout_of(ty).llvm_type(self)
+        let llty = match self.tcx.def_kind(def_id) {
+            DefKind::Static { nested: true, .. } => {
+                // Nested statics do not have a type, so pick a dummy type and let `codegen_static` figure
+                // out the llvm type from the actual evaluated initializer.
+                self.type_i8()
+            }
+            DefKind::Static { nested: false, .. } | DefKind::Context => {
+                let ty = instance.ty(self.tcx, ty::ParamEnv::reveal_all());
+                trace!(?ty);
+                self.layout_of(ty).llvm_type(self)
+            }
+            _ => bug!(),
         };
+
         self.get_static_inner(def_id, llty)
     }
 

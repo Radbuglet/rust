@@ -711,6 +711,15 @@ impl<'a, 'tcx> Visitor<'tcx> for TypeChecker<'a, 'tcx> {
                         };
                         check_equal(self, location, field.ty(self.tcx, args));
                     }
+                    &ty::InferBundle(did, re) => {
+                        if f.as_usize() != 0 {
+                            fail_out_of_bounds(self, location);
+                            return;
+                        }
+
+                        let dest = ty::resolve_infer_bundle_values(self.tcx, did, re);
+                        check_equal(self, location, dest);
+                    }
                     ty::Closure(_, args) => {
                         let args = args.as_closure();
                         let Some(&f_ty) = args.upvar_tys().get(f.as_usize()) else {

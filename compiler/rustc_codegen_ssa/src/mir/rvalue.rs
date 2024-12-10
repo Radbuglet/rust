@@ -1,6 +1,7 @@
 use std::assert_matches::assert_matches;
 
 use arrayvec::ArrayVec;
+use rustc_hir::def_id::DefId;
 use rustc_middle::ty::adjustment::PointerCoercion;
 use rustc_middle::ty::layout::{HasTyCtxt, LayoutOf, TyAndLayout};
 use rustc_middle::ty::{self, Instance, Ty, TyCtxt};
@@ -744,7 +745,28 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                 };
                 OperandRef { val: OperandValue::Immediate(static_), layout }
             }
-            mir::Rvalue::ContextRef(_) => todo!(),
+            mir::Rvalue::ContextRef(def_id) => {
+                // Represents a pointer to the static itself.
+                // Hence, it will have type `*mut *mut ItemTy`
+                let tls_layout = bx.layout_of(bx.cx().tcx().context_tls_ty(def_id));
+                let static_ = self.context_ref_value(bx, def_id);
+                let static_ = OperandRef {
+                    val: OperandValue::Immediate(static_),
+                    layout: tls_layout,
+                };
+
+                // We essentially want to codegen an...
+                //
+                // ```
+                // Operand::Use(
+                //     PlaceRef {
+                //         place: static_,
+                //         projections: [Deref],
+                //     }
+                // )
+                // ```
+                bx.load_operand(static_.deref(bx.cx()))
+            },
             mir::Rvalue::Use(ref operand) => self.codegen_operand(bx, operand),
             mir::Rvalue::Repeat(..) => bug!("{rvalue:?} in codegen_rvalue_operand"),
             mir::Rvalue::Aggregate(_, ref fields) => {
@@ -797,6 +819,30 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
                 OperandRef { val: OperandValue::Immediate(val), layout: box_layout }
             }
         }
+    }
+
+    fn context_ref_value(
+        &mut self,
+        bx: &mut Bx,
+        def_id: DefId,
+    ) -> Bx::Value {
+        assert!(bx.cx().tcx().is_context_item(def_id));
+
+        // TODO: handle TLS shims :)
+        bx.get_static(def_id)
+    }
+
+    pub(crate) fn context_ref_place(
+        &mut self,
+        bx: &mut Bx,
+        def_id: DefId,
+    ) -> PlaceRef<'tcx, Bx::Value> {
+        let layout = bx.layout_of(bx.cx().tcx().context_ptr_ty(def_id));
+
+        PlaceRef::new_sized(
+            self.context_ref_value(bx, def_id),
+            layout,
+        )
     }
 
     fn evaluate_array_len(&mut self, bx: &mut Bx, place: mir::Place<'tcx>) -> Bx::Value {
@@ -1096,9 +1142,9 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             mir::Rvalue::Discriminant(..) |
             mir::Rvalue::NullaryOp(..) |
             mir::Rvalue::ThreadLocalRef(_) |
+            mir::Rvalue::ContextRef(_) |
             mir::Rvalue::Use(..) => // (*)
                 true,
-            mir::Rvalue::ContextRef(_) => todo!(),
             // Arrays are always aggregates, so it's not worth checking anything here.
             // (If it's really `[(); N]` or `[T; 0]` and we use the place path, fine.)
             mir::Rvalue::Repeat(..) => false,

@@ -64,6 +64,10 @@ fn codegen_fn_attrs(tcx: TyCtxt<'_>, did: LocalDefId) -> CodegenFnAttrs {
         codegen_fn_attrs.flags |= CodegenFnAttrFlags::TRACK_CALLER;
     }
 
+    if tcx.def_kind(did) == DefKind::Context {
+        codegen_fn_attrs.flags |= CodegenFnAttrFlags::THREAD_LOCAL;
+    }
+
     // When `no_builtins` is applied at the crate level, we should add the
     // `no-builtins` attribute to each function to ensure it takes effect in LTO.
     let crate_attrs = tcx.hir().attrs(rustc_hir::CRATE_HIR_ID);

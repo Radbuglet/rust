@@ -642,6 +642,12 @@ impl<'tcx> TyCtxt<'tcx> {
         matches!(self.def_kind(def_id), DefKind::Static { .. })
     }
 
+    /// Returns `true` if the node pointed to by `def_id` is a `static` item.
+    #[inline]
+    pub fn is_context_item(self, def_id: DefId) -> bool {
+        matches!(self.def_kind(def_id), DefKind::Context)
+    }
+
     #[inline]
     pub fn static_mutability(self, def_id: DefId) -> Option<hir::Mutability> {
         if let DefKind::Static { mutability, .. } = self.def_kind(def_id) {
@@ -706,6 +712,11 @@ impl<'tcx> TyCtxt<'tcx> {
     pub fn context_ptr_ty(self, def_id: DefId) -> Ty<'tcx> {
         let context_ty = self.context_ty(def_id);
         Ty::new_mut_ptr(self, context_ty)
+    }
+
+    /// Get the type of the pointer to the context item.
+    pub fn context_tls_ty(self, def_id: DefId) -> Ty<'tcx> {
+        Ty::new_mut_ptr(self, self.context_ptr_ty(def_id))
     }
 
     /// Get the type of the pointer to the static that we use in MIR.

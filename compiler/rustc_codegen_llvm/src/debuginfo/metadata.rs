@@ -472,6 +472,7 @@ pub(crate) fn type_di_node<'ll, 'tcx>(cx: &CodegenCx<'ll, 'tcx>, t: Ty<'tcx>) ->
         ty::Tuple(_) => build_tuple_type_di_node(cx, unique_type_id),
         // Type parameters from polymorphized functions.
         ty::Param(_) => build_param_type_di_node(cx, t),
+        ty::ContextMarker(_) => build_context_marker_type_di_node(cx, t),
         _ => bug!("debuginfo: unexpected type in type_di_node(): {:?}", t),
     };
 
@@ -855,6 +856,26 @@ fn build_param_type_di_node<'ll, 'tcx>(
     t: Ty<'tcx>,
 ) -> DINodeCreationResult<'ll> {
     debug!("build_param_type_di_node: {:?}", t);
+    let name = format!("{t:?}");
+    DINodeCreationResult {
+        di_node: unsafe {
+            llvm::LLVMRustDIBuilderCreateBasicType(
+                DIB(cx),
+                name.as_ptr().cast(),
+                name.len(),
+                Size::ZERO.bits(),
+                DW_ATE_unsigned,
+            )
+        },
+        already_stored_in_typemap: false,
+    }
+}
+
+fn build_context_marker_type_di_node<'ll, 'tcx>(
+    cx: &CodegenCx<'ll, 'tcx>,
+    t: Ty<'tcx>,
+) -> DINodeCreationResult<'ll> {
+    debug!("build_context_marker_type_di_node: {:?}", t);
     let name = format!("{t:?}");
     DINodeCreationResult {
         di_node: unsafe {
@@ -1362,10 +1383,16 @@ pub(crate) fn build_global_var_di_node<'ll>(
 
     let is_local_to_unit = is_node_local_to_unit(cx, def_id);
 
-    let DefKind::Static { nested, .. } = cx.tcx.def_kind(def_id) else { bug!() };
-    if nested {
-        return;
+    match cx.tcx.def_kind(def_id) {
+        DefKind::Static { nested: true, .. } | DefKind::Context => {
+            // (fallthrough)
+        }
+        DefKind::Static { nested: false, .. } => {
+            return;
+        }
+        _ => bug!(),
     }
+
     let variable_type = Instance::mono(cx.tcx, def_id).ty(cx.tcx, ty::ParamEnv::reveal_all());
     let type_di_node = type_di_node(cx, variable_type);
     let var_name = tcx.item_name(def_id);
