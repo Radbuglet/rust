@@ -225,7 +225,12 @@ fn layout_of_uncached<'tcx>(
                 def_id,
                 re,
             );
-            layout_of_uncached(cx, values)?
+
+            univariant(
+                &IndexVec::from([cx.layout_of(values)?]),
+                &ReprOptions::default(),
+                StructKind::AlwaysSized,
+            )?
         }
 
         // Potentially-wide pointers.

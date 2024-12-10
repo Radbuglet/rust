@@ -782,7 +782,6 @@ where
                 | ty::Foreign(..)
                 | ty::Pat(_, _)
                 | ty::ContextMarker(_)
-                | ty::InferBundle(..)
                 | ty::Dynamic(_, _, ty::Dyn) => {
                     bug!("TyAndLayout::field({:?}): not applicable", this)
                 }
@@ -890,6 +889,12 @@ where
                 },
 
                 ty::Tuple(tys) => TyMaybeWithLayout::Ty(tys[i]),
+
+                ty::InferBundle(did, re) => TyMaybeWithLayout::Ty(ty::resolve_infer_bundle_values(
+                    tcx,
+                    did,
+                    re,
+                )),
 
                 // ADTs.
                 ty::Adt(def, args) => {

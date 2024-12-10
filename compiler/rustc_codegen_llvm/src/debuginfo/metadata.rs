@@ -473,6 +473,7 @@ pub(crate) fn type_di_node<'ll, 'tcx>(cx: &CodegenCx<'ll, 'tcx>, t: Ty<'tcx>) ->
         // Type parameters from polymorphized functions.
         ty::Param(_) => build_param_type_di_node(cx, t),
         ty::ContextMarker(_) => build_context_marker_type_di_node(cx, t),
+        ty::InferBundle(_, _) => build_infer_bundle_type_di_node(cx, t),
         _ => bug!("debuginfo: unexpected type in type_di_node(): {:?}", t),
     };
 
@@ -876,6 +877,27 @@ fn build_context_marker_type_di_node<'ll, 'tcx>(
     t: Ty<'tcx>,
 ) -> DINodeCreationResult<'ll> {
     debug!("build_context_marker_type_di_node: {:?}", t);
+    let name = format!("{t:?}");
+    DINodeCreationResult {
+        di_node: unsafe {
+            llvm::LLVMRustDIBuilderCreateBasicType(
+                DIB(cx),
+                name.as_ptr().cast(),
+                name.len(),
+                Size::ZERO.bits(),
+                DW_ATE_unsigned,
+            )
+        },
+        already_stored_in_typemap: false,
+    }
+}
+
+fn build_infer_bundle_type_di_node<'ll, 'tcx>(
+    cx: &CodegenCx<'ll, 'tcx>,
+    t: Ty<'tcx>,
+) -> DINodeCreationResult<'ll> {
+    // TODO: Reveal children
+    debug!("build_infer_bundle_type_di_node: {:?}", t);
     let name = format!("{t:?}");
     DINodeCreationResult {
         di_node: unsafe {
