@@ -2066,6 +2066,8 @@ fn format_borrow_origins<'tcx>(
         let curr_expand = mem::take(&mut nodes_to_expand);
 
         for (curr_fmt, curr_func) in curr_expand {
+            // FIXME: This method does not work for infer bundles. We should import this information
+            //  from the graph building phase directly, which properly handles context unions.
             let entry = &tcx.components_borrowed_local(curr_func).entry;
 
             for (local_did, local_muta) in entry.local.iter() {

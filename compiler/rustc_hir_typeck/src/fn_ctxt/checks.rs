@@ -295,7 +295,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
         // If we're not variadic, try to introduce some auto arguments!
         if !c_variadic {
-            let args_introduced = self.introduce_auto_args(
+            let args_introduced = self.compute_auto_args(
                 call_expr,
                 fn_def_id,
                 ty::auto_arg::strip_span_to_open_paren(tcx, call_span),
@@ -2699,7 +2699,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         Some(generic_params.into_iter().zip(params).collect())
     }
 
-    pub(in super::super) fn introduce_auto_args<I>(
+    pub(in super::super) fn compute_auto_args<I>(
         &self,
         expr: &hir::Expr<'_>,
         call_def_id: Option<DefId>,
@@ -2716,12 +2716,14 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         let provided_args = provided_args.into_iter();
         let provided_arg_no = provided_args.len();
 
+        let mut tck_results = self.typeck_results.borrow_mut();
+        let mut auto_args_list = tck_results.auto_args_mut();
+
         if provided_arg_no >= expected_input_tys.len() {
+            auto_args_list.remove(expr.hir_id);
             return 0;
         }
 
-        let mut tck_results = self.typeck_results.borrow_mut();
-        let mut auto_args_list = tck_results.auto_args_mut();
         let auto_args_list = auto_args_list
             .entry(expr.hir_id)
             .or_default();
@@ -2738,6 +2740,8 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             overloaded,
         };
 
+        auto_args_list.clear();
+
         let mut args_provided = 0;
 
         for arg_idx in provided_arg_no..expected_input_tys.len() {
@@ -2747,6 +2751,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 tcx,
                 expected_input_tys[arg_idx],
                 AutoArgOrigin {
+                    // FIXME: Might be incorrect for methods
                     arg_idx: arg_idx as u32,
                     ..auto_arg_origin
                 },

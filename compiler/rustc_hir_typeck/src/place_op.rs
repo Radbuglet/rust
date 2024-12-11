@@ -39,7 +39,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             span_bug!(expr.span, "input to deref is not a ref?");
         }
 
-        let _ = self.introduce_auto_args(
+        let _ = self.compute_auto_args(
             expr,
             Some(method.def_id),
             expr.span,
@@ -435,6 +435,18 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         };
         debug!("convert_place_op_to_mutable: method={:?}", method);
         self.write_method_call_and_enforce_effects(expr.hir_id, expr.span, method);
+
+        // Recompute auto-args. This may end up removing the auto-arguments entirely if we went
+        // from a `DerefCx` to a `DerefMut`.
+        let _ = self.compute_auto_args(
+            expr,
+            Some(method.def_id),
+            expr.span,
+            [expr.span],
+            &method.sig.inputs(),
+            // overloaded
+            true,
+        );
 
         let ty::Ref(region, _, hir::Mutability::Mut) = method.sig.inputs()[0].kind() else {
             span_bug!(expr.span, "input to mutable place op is not a mut ref?");

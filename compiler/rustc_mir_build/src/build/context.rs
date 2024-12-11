@@ -586,6 +586,7 @@ impl<'a, 'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ContextFatalUseValida
             }
             ExprKind::Pack { .. } => {
                 if self.const_restrictions {
+                    // TODO: add additional diagnostics for auto-arguments
                     let err = self.tcx.dcx().emit_err(errors::ConstPackExprUse {
                         span: expr.span,
                     });
