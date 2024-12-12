@@ -710,8 +710,13 @@ impl<'tcx> TyCtxt<'tcx> {
 
     /// Get the type of the pointer to the context item.
     pub fn context_ptr_ty(self, def_id: DefId) -> Ty<'tcx> {
+        self.context_ptr_ty_with_muta(def_id, Mutability::Mut)
+    }
+
+    /// Get the type of the pointer to the context item.
+    pub fn context_ptr_ty_with_muta(self, def_id: DefId, muta: Mutability) -> Ty<'tcx> {
         let context_ty = self.context_ty(def_id);
-        Ty::new_mut_ptr(self, context_ty)
+        Ty::new_ptr(self, context_ty, muta)
     }
 
     /// Get the type of the pointer to the context item.

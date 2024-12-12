@@ -441,16 +441,32 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                                     bundle_span,
                                 ));
 
+                                let new_ptr_imm = this.local_decls.push(LocalDecl::new(
+                                    this.tcx.context_ptr_ty_with_muta(did, Mutability::Not),
+                                    bundle_span,
+                                ));
+
                                 this.cfg.push_assign(
                                     block,
                                     source_info,
-                                    Place::from(new_ptr),
+                                    Place::from(new_ptr_imm),
                                     Rvalue::RawPtr(
-                                        Mutability::Mut,
+                                        Mutability::Not,
                                         Place {
                                             local,
                                             projection: deref_proj,
                                         },
+                                    ),
+                                );
+
+                                this.cfg.push_assign(
+                                    block,
+                                    source_info,
+                                    Place::from(new_ptr),
+                                    Rvalue::Cast(
+                                        CastKind::PtrToPtr,
+                                        Operand::Copy(new_ptr_imm.into()),
+                                        did_ty,
                                     ),
                                 );
 
