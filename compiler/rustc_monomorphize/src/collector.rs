@@ -660,6 +660,25 @@ impl<'a, 'tcx> MirUsedCollector<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> MirVisitor<'tcx> for MirUsedCollector<'a, 'tcx> {
+    fn visit_statement(&mut self, stmt: &mir::Statement<'tcx>, location: Location) {
+        debug!("visiting statement {:?}", *stmt);
+
+        let span = self.body.source_info(location).span;
+
+        match stmt.kind {
+            mir::StatementKind::AssignContext(box (def_id, _, _)) => {
+                let instance = Instance::mono(self.tcx, def_id);
+                if self.tcx.should_codegen_locally(instance) {
+                    trace!("collecting context-pointer static {:?}", def_id);
+                    self.used_items.push(respan(span, MonoItem::Static(def_id)));
+                }
+            }
+            _ => { /* not interesting */ }
+        }
+
+        self.super_statement(stmt, location);
+    }
+
     fn visit_rvalue(&mut self, rvalue: &mir::Rvalue<'tcx>, location: Location) {
         debug!("visiting rvalue {:?}", *rvalue);
 
@@ -733,6 +752,13 @@ impl<'a, 'tcx> MirVisitor<'tcx> for MirUsedCollector<'a, 'tcx> {
                 let instance = Instance::mono(self.tcx, def_id);
                 if self.tcx.should_codegen_locally(instance) {
                     trace!("collecting thread-local static {:?}", def_id);
+                    self.used_items.push(respan(span, MonoItem::Static(def_id)));
+                }
+            }
+            mir::Rvalue::ContextRef(def_id) => {
+                let instance = Instance::mono(self.tcx, def_id);
+                if self.tcx.should_codegen_locally(instance) {
+                    trace!("collecting context-pointer static {:?}", def_id);
                     self.used_items.push(respan(span, MonoItem::Static(def_id)));
                 }
             }

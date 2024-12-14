@@ -1,5 +1,6 @@
 // tidy-alphabetical-start
 #![feature(array_windows)]
+#![feature(box_patterns)]
 #![feature(file_buffered)]
 #![feature(if_let_guard)]
 #![feature(let_chains)]
