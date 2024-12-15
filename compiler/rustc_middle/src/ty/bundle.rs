@@ -180,13 +180,13 @@ pub fn reified_bundle_owned<'tcx>(
         tcx,
         stage,
         proj_stack: Vec::new(),
-        bundle_item_set_to_value: FxHashMap::default(),
+        item_values: BundleItemValueResolver::default(),
         fields: FxIndexMap::default(),
         generic_fields: FxIndexMap::default(),
         generic_sets: FxIndexMap::default(),
         infer_sets: FxIndexMap::default(),
     };
-    let value_ty = walker.bundle_item_set_to_value(bundle_arg);
+    let value_ty = walker.item_values.resolve(tcx, bundle_arg);
     walker.proj_stack.push(ReifiedBundleProj {
         field: ty::FieldIdx::ZERO,
         ty: value_ty,
@@ -203,63 +203,56 @@ pub fn reified_bundle_owned<'tcx>(
     }
 }
 
-struct ReifiedBundleWalker<'tcx> {
-    tcx: TyCtxt<'tcx>,
-    stage: ContextSolveStage,
-    proj_stack: Vec<ReifiedBundleProj<'tcx>>,
-    bundle_item_set_to_value: FxHashMap<Ty<'tcx>, Ty<'tcx>>,
-
-    fields: FxIndexMap<DefId, ReifiedBundleMemberList<'tcx>>,
-    generic_fields: FxIndexMap<Ty<'tcx>, ReifiedBundleMemberList<'tcx>>,
-    generic_sets: FxIndexMap<Ty<'tcx>, ReifiedBundleMemberList<'tcx>>,
-    infer_sets: FxIndexMap<DefId, ReifiedBundleMemberList<'tcx>>,
+#[derive(Debug, Default)]
+pub struct BundleItemValueResolver<'tcx> {
+    map: FxHashMap<Ty<'tcx>, Ty<'tcx>>,
 }
 
-impl<'tcx> ReifiedBundleWalker<'tcx> {
+impl<'tcx> BundleItemValueResolver<'tcx> {
     /// Transforms a type implementing `BundleItemSet` (e.g. `(&mut FOO, &BAR)`) into the
     /// corresponding bundle value types (e.g. `(&mut FOO::Item, &BAR::Item)`). Returns `Error` if
     /// this cannot be fully reified.
-    fn bundle_item_set_to_value(&mut self, ty: Ty<'tcx>) -> Ty<'tcx> {
-        if let Some(&out) = self.bundle_item_set_to_value.get(&ty) {
+    pub fn resolve(&mut self, tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Ty<'tcx> {
+        if let Some(&out) = self.map.get(&ty) {
             return out;
         }
 
         let out = match ReifiedBundleItemSet::decode(ty) {
             ReifiedBundleItemSet::Ref(re, muta, did) => {
                 Ty::new_ref(
-                    self.tcx,
+                    tcx,
                     re,
-                    self.tcx.context_ty(did),
+                    tcx.context_ty(did),
                     muta,
                 )
             }
             ReifiedBundleItemSet::Tuple(fields) => {
                 Ty::new_tup_from_iter(
-                    self.tcx,
-                    fields.iter().map(|field| self.bundle_item_set_to_value(field)),
+                    tcx,
+                    fields.iter().map(|field| self.resolve(tcx, field)),
                 )
             }
             ReifiedBundleItemSet::GenericRef(re, muta, ty) => {
                 let context_item_trait_def_id =
-                    self.tcx.require_lang_item(ty::LangItem::ContextItemTrait, None);
+                    tcx.require_lang_item(ty::LangItem::ContextItemTrait, None);
 
                 let item_assoc_para_def_id =
-                    self.tcx.associated_item_def_ids(context_item_trait_def_id)[0];
+                    tcx.associated_item_def_ids(context_item_trait_def_id)[0];
 
                 let value_ty = Ty::new_alias(
-                    self.tcx,
+                    tcx,
                     ty::AliasTyKind::Projection,
-                    ty::AliasTy::new(self.tcx, item_assoc_para_def_id, [ty]),
+                    ty::AliasTy::new(tcx, item_assoc_para_def_id, [ty]),
                 );
-                Ty::new_ref(self.tcx, re, value_ty, muta)
+                Ty::new_ref(tcx, re, value_ty, muta)
             }
             ReifiedBundleItemSet::GenericSet(ty) => {
                 Ty::new_alias(
-                    self.tcx,
+                    tcx,
                     ty::AliasTyKind::Projection,
                     ty::AliasTy::new(
-                        self.tcx,
-                        self.tcx.lang_items().bundle_item_set_values().unwrap(),
+                        tcx,
+                        tcx.lang_items().bundle_item_set_values().unwrap(),
                         [ty],
                     ),
                 )
@@ -268,14 +261,28 @@ impl<'tcx> ReifiedBundleWalker<'tcx> {
                 ty
             }
             ReifiedBundleItemSet::Error(err) => {
-                Ty::new_error(self.tcx, err)
+                Ty::new_error(tcx, err)
             }
         };
 
-        self.bundle_item_set_to_value.insert(ty, out);
+        self.map.insert(ty, out);
         out
     }
+}
 
+struct ReifiedBundleWalker<'tcx> {
+    tcx: TyCtxt<'tcx>,
+    stage: ContextSolveStage,
+    proj_stack: Vec<ReifiedBundleProj<'tcx>>,
+    item_values: BundleItemValueResolver<'tcx>,
+
+    fields: FxIndexMap<DefId, ReifiedBundleMemberList<'tcx>>,
+    generic_fields: FxIndexMap<Ty<'tcx>, ReifiedBundleMemberList<'tcx>>,
+    generic_sets: FxIndexMap<Ty<'tcx>, ReifiedBundleMemberList<'tcx>>,
+    infer_sets: FxIndexMap<DefId, ReifiedBundleMemberList<'tcx>>,
+}
+
+impl<'tcx> ReifiedBundleWalker<'tcx> {
     fn collect_fields_in_bundle_item_set(&mut self, ty: Ty<'tcx>) {
         match ReifiedBundleItemSet::decode(ty) {
             ReifiedBundleItemSet::Ref(_re, muta, did) => {
@@ -288,7 +295,7 @@ impl<'tcx> ReifiedBundleWalker<'tcx> {
             }
             ReifiedBundleItemSet::Tuple(fields) => {
                 for (i, field) in fields.iter().enumerate() {
-                    let field_values = self.bundle_item_set_to_value(field);
+                    let field_values = self.item_values.resolve(self.tcx, field);
                     self.proj_stack.push(ReifiedBundleProj {
                         field: ty::FieldIdx::from_usize(i),
                         ty: field_values,

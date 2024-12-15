@@ -638,6 +638,10 @@ impl TypeId {
     pub const fn of<T: ?Sized + 'static>() -> TypeId {
         let t: u128 = intrinsics::type_id::<T>();
 
+        Self::from_u128(t)
+    }
+
+    pub(crate) const fn from_u128(t: u128) -> TypeId {
         let t1 = (t >> 64) as u64;
         let t2 = t as u64;
         TypeId { t: (t1, t2) }

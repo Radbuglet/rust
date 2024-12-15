@@ -522,6 +522,7 @@ symbols! {
         builtin_syntax,
         bundle,
         bundle_item_set_values,
+        bundle_layout,
         c,
         c_str,
         c_str_literals,

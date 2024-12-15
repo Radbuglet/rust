@@ -93,6 +93,10 @@ pub(crate) fn eval_nullary_intrinsic<'tcx>(
             | ty::InferBundle(..)
             | ty::Error(_) => ConstValue::from_target_usize(0u64, &tcx),
         },
+        sym::bundle_layout => {
+            ensure_monomorphic_enough(tcx, tp_ty)?;
+            crate::util::bundle_layout(tcx, param_env, tp_ty)
+        }
         other => bug!("`{}` is not a zero arg intrinsic", other),
     })
 }

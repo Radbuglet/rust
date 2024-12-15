@@ -3139,6 +3139,23 @@ pub const fn type_name<T: ?Sized>() -> &'static str {
     unreachable!()
 }
 
+/// Describes the layout of a bundle.
+///
+/// Each entry in the slice describes a field in the bundle:
+///
+/// - The first element indicates the type ID of the context item marker.
+/// - The second element indicates the type ID of the value without a wrapping reference.
+/// - The third element indicates whether the entry is mutable.
+/// - The fourth element indicates the offset into which this value is written.
+///
+#[unstable(feature = "core_intrinsics", issue = "none")]
+#[rustc_intrinsic]
+#[rustc_intrinsic_must_be_overridden]
+#[cfg(not(bootstrap))]
+pub fn bundle_layout<T>() -> &'static [(u128, u128, bool, usize)] {
+    unreachable!()
+}
+
 /// Gets an identifier which is globally unique to the specified type. This
 /// function will return the same value for a type regardless of whichever
 /// crate it is invoked in.

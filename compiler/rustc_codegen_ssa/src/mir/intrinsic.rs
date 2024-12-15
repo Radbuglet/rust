@@ -145,7 +145,8 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
             | sym::needs_drop
             | sym::type_id
             | sym::type_name
-            | sym::variant_count => {
+            | sym::variant_count
+            | sym::bundle_layout => {
                 let value = bx
                     .tcx()
                     .const_eval_instance(ty::ParamEnv::reveal_all(), instance, span)

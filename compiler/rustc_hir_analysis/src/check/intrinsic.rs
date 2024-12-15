@@ -145,7 +145,8 @@ pub fn intrinsic_operation_unsafety(tcx: TyCtxt<'_>, intrinsic_id: LocalDefId) -
         | sym::fmul_algebraic
         | sym::fdiv_algebraic
         | sym::frem_algebraic
-        | sym::const_eval_select => hir::Safety::Safe,
+        | sym::const_eval_select
+        | sym::bundle_layout => hir::Safety::Safe,
         _ => hir::Safety::Unsafe,
     };
 
@@ -663,6 +664,17 @@ pub fn check_intrinsic_type(
             | sym::simd_reduce_max => (2, 0, vec![param(0)], param(1)),
             sym::simd_shuffle => (3, 0, vec![param(0), param(0), param(1)], param(2)),
             sym::simd_shuffle_generic => (2, 1, vec![param(0), param(0)], param(1)),
+
+            sym::bundle_layout => (1, 0, vec![], Ty::new_imm_ref(
+                tcx,
+                tcx.lifetimes.re_static,
+                Ty::new_slice(tcx, Ty::new_tup(tcx, &[
+                    tcx.types.u128,
+                    tcx.types.u128,
+                    tcx.types.bool,
+                    tcx.types.usize,
+                ])),
+            )),
 
             other => {
                 tcx.dcx().emit_err(UnrecognizedIntrinsicFunction { span, name: other });

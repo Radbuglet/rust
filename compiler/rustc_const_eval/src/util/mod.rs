@@ -1,12 +1,14 @@
 use rustc_middle::mir;
 
 mod alignment;
+mod bundle_layout;
 pub(crate) mod caller_location;
 mod check_validity_requirement;
 mod compare_types;
 mod type_name;
 
 pub use self::alignment::{is_disaligned, is_within_packed};
+pub use self::bundle_layout::bundle_layout;
 pub use self::check_validity_requirement::check_validity_requirement;
 pub use self::compare_types::{is_equal_up_to_subtyping, relate_types};
 pub use self::type_name::type_name;

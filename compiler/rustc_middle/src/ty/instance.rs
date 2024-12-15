@@ -181,12 +181,13 @@ impl<'tcx> Instance<'tcx> {
     pub fn ty(&self, tcx: TyCtxt<'tcx>, param_env: ty::ParamEnv<'tcx>) -> Ty<'tcx> {
         let did = self.def.def_id();
 
-        if tcx.def_kind(did) == DefKind::Context {
-            tcx.context_ptr_ty(did)
+        let ty = if tcx.def_kind(did) == DefKind::Context {
+            EarlyBinder::bind(tcx.context_ptr_ty(did))
         } else {
-            let ty = tcx.type_of(did);
-            tcx.instantiate_and_normalize_erasing_regions(self.args, param_env, ty)
-        }
+            tcx.type_of(did)
+        };
+
+        tcx.instantiate_and_normalize_erasing_regions(self.args, param_env, ty)
     }
 
     /// Finds a crate that contains a monomorphization of this instance that

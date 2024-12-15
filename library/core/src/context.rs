@@ -1,5 +1,14 @@
 #![allow(missing_docs)]  // TODO
 
+use crate::{
+    any::TypeId,
+    fmt,
+    intrinsics,
+    marker::PhantomData,
+    mem::MaybeUninit,
+    slice,
+};
+
 macro_rules! tuple {
     ($mac:path) => {
         tuple!(@inner $mac, A B C D E F G H I J K L);
@@ -175,4 +184,158 @@ pub trait DerefCxMut<'i, 'o>: DerefCx<'i, 'o> {
 
     #[must_use]
     fn deref_cx_mut(&'i mut self, cx: Bundle<Self::ContextMut>) -> &'o mut Self::TargetCx;
+}
+
+// === Bundle Auto Construction === //
+
+impl<T: BundleItemSet> Bundle<T> {
+    pub fn layout() -> &'static [BundleItemLayout] {
+        let elems = intrinsics::bundle_layout::<T>();
+
+        unsafe {
+            slice::from_raw_parts(elems.as_ptr().cast(), elems.len())
+        }
+    }
+
+    pub fn try_new_auto<'a, F, E>(mut f: F) -> Result<Self, E>
+    where
+        F: for<'m> FnMut(BundleItemRequest<'a, 'm>) -> Result<BundleItemResponse<'m>, E>,
+        // FIXME: Bad lifetime constraint
+        Self: 'a,
+    {
+        let mut out = MaybeUninit::<Self>::uninit();
+
+        for item in Self::layout() {
+            f(BundleItemRequest {
+                _ty: PhantomData,
+                resp: BundleItemResponse {
+                    _invariant: PhantomData,
+                },
+                marker_type_id: item.marker_type_id(),
+                pointee_type_id: item.pointee_type_id(),
+                is_mut: item.is_mut(),
+                write_to: unsafe {
+                    out.as_mut_ptr().cast::<u8>().add(item.offset())
+                },
+            })?;
+        }
+
+        Ok(unsafe { out.assume_init() })
+    }
+
+    pub fn new_auto<'a, F>(mut f: F) -> Self
+    where
+        F: for<'m> FnMut(BundleItemRequest<'a, 'm>) -> BundleItemResponse<'m>,
+        Self: 'a,
+    {
+        Self::try_new_auto::<_, !>(|req| Ok(f(req))).unwrap()
+    }
+}
+
+#[derive(Debug)]
+pub struct BundleItemRequest<'a, 'm> {
+    // Ensure that `'a`, the lifetime of the bundle we're producing, is contravariant i.e. that `'a`
+    // can be made to live longer but not shorter.
+    _ty: PhantomData<fn() -> &'a ()>,
+
+    // This is the marker ZST we use to provide proof that `provide_mut` or `provide_ref` was called.
+    // This makes `'m`, a universally quantified lifetime acting as a token, as invariant.
+    resp: BundleItemResponse<'m>,
+
+    // Forwarded directly from the `bundle_layout` intrinsic.
+    marker_type_id: TypeId,
+    pointee_type_id: TypeId,
+    is_mut: bool,
+
+    // The location to which we write our value.
+    write_to: *mut u8,
+}
+
+impl<'a, 'm> BundleItemRequest<'a, 'm> {
+    pub fn marker_type_id(&self) -> TypeId {
+        self.marker_type_id
+    }
+
+    pub fn pointee_type_id(&self) -> TypeId {
+        self.pointee_type_id
+    }
+
+    pub fn is_mut(&self) -> bool {
+        self.is_mut
+    }
+
+    pub fn is_ref(&self) -> bool {
+        !self.is_mut
+    }
+
+    pub fn provide_mut<T: ?Sized + 'static>(self, value: &'a mut T) -> BundleItemResponse<'m> {
+        assert_eq!(self.pointee_type_id, TypeId::of::<T>());
+
+        unsafe {
+            self.write_to.cast::<&'a mut T>().write(value);
+        }
+
+        self.resp
+    }
+
+    pub fn provide_ref<T: ?Sized + 'static>(self, value: &'a T) -> BundleItemResponse<'m> {
+        assert_eq!(self.pointee_type_id, TypeId::of::<T>());
+
+        unsafe {
+            self.write_to.cast::<&'a T>().write(value);
+        }
+
+        self.resp
+    }
+}
+
+pub struct BundleItemResponse<'m> {
+    _invariant: PhantomData<fn(&'m ()) -> &'m ()>,
+}
+
+impl fmt::Debug for BundleItemResponse<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("BundleItemResponse").finish_non_exhaustive()
+    }
+}
+
+#[repr(transparent)]
+pub struct BundleItemLayout((
+    /* marker type */ u128,
+    /* pointee type */ u128,
+    /* is mutable */ bool,
+    /* offset */ usize,
+));
+
+impl fmt::Debug for BundleItemLayout {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("BundleItemLayout")
+            .field("marker_type_id", &self.marker_type_id())
+            .field("pointee_type_id", &self.pointee_type_id())
+            .field("is_mut", &self.is_mut())
+            .field("offset", &self.offset())
+            .finish()
+    }
+}
+
+impl BundleItemLayout {
+    pub fn marker_type_id(&self) -> TypeId {
+        TypeId::from_u128((self.0).0)
+    }
+
+    pub fn pointee_type_id(&self) -> TypeId {
+        TypeId::from_u128((self.0).1)
+    }
+
+    pub fn is_mut(&self) -> bool {
+        (self.0).2
+    }
+
+    pub fn is_ref(&self) -> bool {
+        !(self.0).2
+    }
+
+    fn offset(&self) -> usize {
+        (self.0).3
+    }
 }

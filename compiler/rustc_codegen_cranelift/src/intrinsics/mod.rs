@@ -737,7 +737,8 @@ fn codegen_regular_intrinsic_call<'tcx>(
         | sym::needs_drop
         | sym::type_id
         | sym::type_name
-        | sym::variant_count => {
+        | sym::variant_count
+        | sym::bundle_layout => {
             intrinsic_args!(fx, args => (); intrinsic);
 
             let const_val = fx
