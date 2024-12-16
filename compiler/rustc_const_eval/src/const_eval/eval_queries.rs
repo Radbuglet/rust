@@ -312,12 +312,20 @@ pub fn eval_static_initializer_provider<'tcx>(
         let cid = rustc_middle::mir::interpret::GlobalId { instance, promoted: None };
         eval_in_interpreter(tcx, cid, ty::ParamEnv::reveal_all())
     } else {
-        let layout = &tcx.data_layout;
-        let data = (0..layout.pointer_size.bytes_usize()).map(|_| 0u8).collect::<Vec<u8>>();
+        let layout =
+            tcx.layout_of(
+                ty::ParamEnv::reveal_all().and(
+                    tcx.context_ptr_ty(def_id.to_def_id())
+                ),
+            )
+            .unwrap()
+            .layout;
+
+        let data = (0..layout.size.bytes_usize()).map(|_| 0u8).collect::<Vec<u8>>();
 
         Ok(tcx.mk_const_alloc(Allocation::from_bytes(
             &data,
-            layout.pointer_align.abi,
+            layout.align.abi,
             Mutability::Mut,
         )))
     }
