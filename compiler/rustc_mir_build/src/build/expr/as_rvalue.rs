@@ -570,6 +570,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
 
                 let inner_ty = expr.ty.bundle_item_set(this.tcx);
                 let value_ty = this.tcx.reified_bundle((expr.ty, MirBuilding)).value_ty;
+                let value_ty = this.tcx.erase_regions(value_ty);
                 let inner_operand = unpack!(block = this.build_pack_bundle_value(
                     block,
                     expr.span,

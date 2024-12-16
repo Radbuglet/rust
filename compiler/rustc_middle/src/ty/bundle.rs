@@ -149,7 +149,7 @@ impl<'tcx> ReifiedBundleProjs<'tcx> {
         let projection = place.projection
             .iter()
             .chain(self.0.iter().map(|elem| {
-                mir::PlaceElem::Field(elem.field, elem.ty)
+                mir::PlaceElem::Field(elem.field, tcx.erase_regions(elem.ty))
             }))
             .chain(deeper);
 

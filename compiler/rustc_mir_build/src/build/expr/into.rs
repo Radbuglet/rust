@@ -280,7 +280,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                             Ty::new_ref(
                                 this.tcx,
                                 this.tcx.lifetimes.re_erased,
-                                this.tcx.context_ty(item),
+                                this.tcx.erase_regions(this.tcx.context_ty(item)),
                                 muta,
                             ),
                             fn_span,

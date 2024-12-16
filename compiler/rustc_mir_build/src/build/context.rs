@@ -168,7 +168,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         // Create `ascribe_temp` temporary and give it the type...
         // `(&'erased {refs[0].muta} {refs[0].pointee}, ..., constraints_ty)`
         let ascribe_temp_ty = refs.iter()
-            .map(|&ref_| ref_.ty(&self.local_decls, self.tcx).ty)
+            .map(|&ref_| self.tcx.erase_regions(ref_.ty(&self.local_decls, self.tcx).ty))
             .chain([constraints_ty]);
         let ascribe_temp_ty = Ty::new_tup_from_iter(self.tcx, ascribe_temp_ty);
         let refs_tys = match ascribe_temp_ty.kind() {
@@ -416,14 +416,14 @@ impl<'a, 'thir, 'tcx> BinderUseVisitor<'a, 'thir, 'tcx> {
                 // ptr_local
                 let first_local = self.builder.local_decls
                     .push(mir::LocalDecl::with_source_info(
-                        tcx.context_ptr_ty(item),
+                        tcx.erase_regions(tcx.context_ptr_ty(item)),
                         self.source_info,
                     ));
 
                 // ref_local
                 let _ = self.builder.local_decls
                     .push(mir::LocalDecl::with_source_info(
-                        tcx.context_ref_ty(item, muta, tcx.lifetimes.re_erased),
+                        tcx.erase_regions(tcx.context_ref_ty(item, muta, tcx.lifetimes.re_erased)),
                         self.source_info,
                     ));
 
@@ -438,11 +438,11 @@ impl<'a, 'thir, 'tcx> BinderUseVisitor<'a, 'thir, 'tcx> {
                     entry.muta = Mutability::Mut;
 
                     self.builder.local_decls[entry.ref_local()].ty =
-                        tcx.context_ref_ty(
+                        tcx.erase_regions(tcx.context_ref_ty(
                             item,
                             Mutability::Mut,
                             tcx.lifetimes.re_erased,
-                        );
+                        ));
                 }
             }
         }

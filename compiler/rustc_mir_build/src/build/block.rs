@@ -349,8 +349,9 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                         .in_scope(scope, LintLevel::Inherited, |this| {
                             let mut block = block;
 
+                            let tcx = this.tcx;
                             let bundle_ty = this.thir.exprs[*bundle].ty;
-                            let bundle_reified = this.tcx.reified_bundle((bundle_ty, MirBuilding));
+                            let bundle_reified = tcx.reified_bundle((bundle_ty, MirBuilding));
 
                             // Lower bundle expression
                             let bundle_place = unpack!(block = this.as_place(block, *bundle));
@@ -363,7 +364,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                                     let field = &fields[0];
 
                                     let reborrow = this.local_decls.push(LocalDecl::new(
-                                        field.location.ty(),
+                                        tcx.erase_regions(field.location.ty()),
                                         bundle_span,
                                     ));
 
@@ -372,7 +373,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                                         source_info,
                                         Place::from(reborrow),
                                         Rvalue::Ref(
-                                            this.tcx.lifetimes.re_erased,
+                                            tcx.lifetimes.re_erased,
                                             match field.mutability {
                                                 Mutability::Not => BorrowKind::Shared,
                                                 Mutability::Mut => BorrowKind::Mut {
@@ -380,7 +381,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                                                 }
                                             },
                                             field.location.project_place(
-                                                this.tcx,
+                                                tcx,
                                                 bundle_place,
                                                 [PlaceElem::Deref],
                                             ),
@@ -409,7 +410,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                             // Assign context
                             let deref_proj = this.tcx.mk_place_elems(&[PlaceElem::Deref]);
                             for &(did, local) in &borrowed_fields {
-                                let did_ty = this.tcx.context_ptr_ty(did);
+                                let did_ty = this.tcx.erase_regions(this.tcx.context_ptr_ty(did));
 
                                 // Save old value
                                 let old_ptr = this.local_decls.push(LocalDecl::new(
@@ -442,7 +443,9 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                                 ));
 
                                 let new_ptr_imm = this.local_decls.push(LocalDecl::new(
-                                    this.tcx.context_ptr_ty_with_muta(did, Mutability::Not),
+                                    tcx.erase_regions(
+                                        this.tcx.context_ptr_ty_with_muta(did, Mutability::Not),
+                                    ),
                                     bundle_span,
                                 ));
 
