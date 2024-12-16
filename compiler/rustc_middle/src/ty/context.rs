@@ -640,6 +640,7 @@ bidirectional_lang_item_map! {
     Future,
     FutureOutput,
     InferBundleTrait,
+    InferBundleForTrait,
     Iterator,
     Metadata,
     Option,

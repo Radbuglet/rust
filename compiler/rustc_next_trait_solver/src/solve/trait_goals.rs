@@ -461,17 +461,36 @@ where
     fn consider_builtin_infer_bundle_candidate(
         ecx: &mut EvalCtxt<'_, D>,
         goal: Goal<I, Self>,
+        constrains_lt: bool,
     ) -> Result<Candidate<I>, NoSolution> {
         if goal.predicate.polarity != ty::PredicatePolarity::Positive {
             return Err(NoSolution);
         }
 
-        if let ty::InferBundle(..) = goal.predicate.self_ty().kind() {
-            ecx.probe_builtin_trait_candidate(BuiltinImplSource::Misc)
-                .enter(|ecx| ecx.evaluate_added_goals_and_make_canonical_response(Certainty::Yes))
-        } else {
-            Err(NoSolution)
-        }
+        let ty::InferBundle(_, self_re) = goal.predicate.self_ty().kind() else {
+            return Err(NoSolution);
+        };
+
+        ecx.probe_builtin_trait_candidate(BuiltinImplSource::Misc)
+            .enter(|ecx| {
+                if constrains_lt {
+                    let outlive_re = goal
+                        .predicate
+                        .trait_ref
+                        .args
+                        .region_at(1);
+
+                    ecx.add_goal(
+                        GoalSource::Misc,
+                        Goal::new(ecx.cx(), goal.param_env, ty::OutlivesPredicate(
+                            outlive_re,
+                            self_re,
+                        )),
+                    );
+                }
+
+                ecx.evaluate_added_goals_and_make_canonical_response(Certainty::Yes)
+            })
     }
 
     fn consider_builtin_future_candidate(

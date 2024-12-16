@@ -600,6 +600,7 @@ where
     fn consider_builtin_infer_bundle_candidate(
         _ecx: &mut EvalCtxt<'_, D>,
         goal: Goal<I, Self>,
+        _constrains_lt: bool,
     ) -> Result<Candidate<I>, NoSolution> {
         panic!("`InferBundle` does not have an associated type: {:?}", goal);
     }

@@ -212,6 +212,7 @@ where
     fn consider_builtin_infer_bundle_candidate(
         ecx: &mut EvalCtxt<'_, D>,
         goal: Goal<I, Self>,
+        constrains_lt: bool,
     ) -> Result<Candidate<I>, NoSolution>;
 
     /// A coroutine (that comes from an `async` desugaring) is known to implement
@@ -450,7 +451,10 @@ where
                     G::consider_builtin_context_item_candidate(self, goal)
                 }
                 Some(TraitSolverLangItem::InferBundleTrait) => {
-                    G::consider_builtin_infer_bundle_candidate(self, goal)
+                    G::consider_builtin_infer_bundle_candidate(self, goal, false)
+                }
+                Some(TraitSolverLangItem::InferBundleForTrait) => {
+                    G::consider_builtin_infer_bundle_candidate(self, goal, true)
                 }
                 Some(TraitSolverLangItem::Future) => {
                     G::consider_builtin_future_candidate(self, goal)
