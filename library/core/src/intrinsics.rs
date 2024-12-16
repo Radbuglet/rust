@@ -3143,16 +3143,18 @@ pub const fn type_name<T: ?Sized>() -> &'static str {
 ///
 /// Each entry in the slice describes a field in the bundle:
 ///
-/// - The first element indicates the type ID of the context item marker.
-/// - The second element indicates the type ID of the value without a wrapping reference.
-/// - The third element indicates whether the entry is mutable.
-/// - The fourth element indicates the offset into which this value is written.
+/// - The first element gives the type name of the context item marker.
+/// - The second element gives the type name of the value.
+/// - The third element indicates the type ID of the context item marker.
+/// - The fourth element indicates the type ID of the value without a wrapping reference.
+/// - The fifth element indicates whether the entry is mutable.
+/// - The sixth element indicates the offset into which this value is written.
 ///
 #[unstable(feature = "core_intrinsics", issue = "none")]
 #[rustc_intrinsic]
 #[rustc_intrinsic_must_be_overridden]
 #[cfg(not(bootstrap))]
-pub fn bundle_layout<T>() -> &'static [(u128, u128, bool, usize)] {
+pub fn bundle_layout<T>() -> &'static [(&'static str, &'static str, u128, u128, bool, usize)] {
     unreachable!()
 }
 

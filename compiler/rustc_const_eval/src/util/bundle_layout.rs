@@ -13,6 +13,8 @@ pub fn bundle_layout<'tcx>(
     let mut items = Vec::new();
 
     let elem_ty = Ty::new_tup(tcx, &[
+        Ty::new_static_str(tcx),
+        Ty::new_static_str(tcx),
         tcx.types.u128,
         tcx.types.u128,
         tcx.types.bool,
@@ -64,6 +66,14 @@ fn type_id<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> ValTree<'tcx> {
     ValTree::from_scalar_int(tcx.type_id_hash(ty).as_u128().into())
 }
 
+fn type_name<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> ValTree<'tcx> {
+    let name = super::type_name::type_name(tcx, ty);
+
+    ValTree::Branch(tcx.arena.alloc_from_iter(
+        name.bytes().map(|by| ValTree::from_scalar_int(by.into())),
+    ))
+}
+
 fn make_bundle_layout_vt<'tcx>(
     tcx: TyCtxt<'tcx>,
     param_env: ParamEnv<'tcx>,
@@ -75,6 +85,18 @@ fn make_bundle_layout_vt<'tcx>(
     match ty::ReifiedBundleItemSet::decode(ty) {
         ty::ReifiedBundleItemSet::Ref(_re, muta, did) => {
             let tup_fields = tcx.arena.alloc_slice(&[
+                // marker name (&'static str)
+                type_name(tcx, ty),
+                // pointee name (&'static str)
+                type_name(
+                    tcx,
+                    Ty::new_ref(
+                        tcx,
+                        tcx.lifetimes.re_erased,
+                        tcx.context_ty(did),
+                        muta,
+                    ),
+                ),
                 // marker type (u128)
                 type_id(tcx, Ty::new_context_marker(tcx, did)),
                 // pointee type (u128)

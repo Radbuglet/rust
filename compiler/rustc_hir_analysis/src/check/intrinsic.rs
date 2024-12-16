@@ -669,6 +669,8 @@ pub fn check_intrinsic_type(
                 tcx,
                 tcx.lifetimes.re_static,
                 Ty::new_slice(tcx, Ty::new_tup(tcx, &[
+                    Ty::new_static_str(tcx),
+                    Ty::new_static_str(tcx),
                     tcx.types.u128,
                     tcx.types.u128,
                     tcx.types.bool,

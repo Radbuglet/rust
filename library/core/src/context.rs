@@ -1,7 +1,7 @@
 #![allow(missing_docs)]  // TODO
 
 use crate::{
-    any::TypeId,
+    any::{TypeId, type_name},
     fmt,
     intrinsics,
     marker::PhantomData,
@@ -211,9 +211,7 @@ impl<T: BundleItemSet> Bundle<T> {
                 resp: BundleItemResponse {
                     _invariant: PhantomData,
                 },
-                marker_type_id: item.marker_type_id(),
-                pointee_type_id: item.pointee_type_id(),
-                is_mut: item.is_mut(),
+                item,
                 write_to: unsafe {
                     out.as_mut_ptr().cast::<u8>().add(item.offset())
                 },
@@ -242,34 +240,42 @@ pub struct BundleItemRequest<'a, 'm> {
     // This makes `'m`, a universally quantified lifetime acting as a token, as invariant.
     resp: BundleItemResponse<'m>,
 
-    // Forwarded directly from the `bundle_layout` intrinsic.
-    marker_type_id: TypeId,
-    pointee_type_id: TypeId,
-    is_mut: bool,
+    // The item we're trying to access.
+    item: &'static BundleItemLayout,
 
     // The location to which we write our value.
     write_to: *mut u8,
 }
 
 impl<'a, 'm> BundleItemRequest<'a, 'm> {
+    pub fn item(&self) -> &'static BundleItemLayout {
+        self.item
+    }
+
     pub fn marker_type_id(&self) -> TypeId {
-        self.marker_type_id
+        self.item.marker_type_id()
     }
 
     pub fn pointee_type_id(&self) -> TypeId {
-        self.pointee_type_id
+        self.item.pointee_type_id()
     }
 
     pub fn is_mut(&self) -> bool {
-        self.is_mut
+        self.item.is_mut()
     }
 
     pub fn is_ref(&self) -> bool {
-        !self.is_mut
+        self.item.is_ref()
     }
 
     pub fn provide_mut<T: ?Sized + 'static>(self, value: &'a mut T) -> BundleItemResponse<'m> {
-        assert_eq!(self.pointee_type_id, TypeId::of::<T>());
+        assert!(
+            self.pointee_type_id() == TypeId::of::<T>(),
+            "expected `{}` (for context item `{}`), got `{}`",
+            self.item.pointee_name(),
+            self.item.marker_name(),
+            type_name::<&T>(),
+        );
 
         unsafe {
             self.write_to.cast::<&'a mut T>().write(value);
@@ -279,7 +285,13 @@ impl<'a, 'm> BundleItemRequest<'a, 'm> {
     }
 
     pub fn provide_ref<T: ?Sized + 'static>(self, value: &'a T) -> BundleItemResponse<'m> {
-        assert_eq!(self.pointee_type_id, TypeId::of::<T>());
+        assert!(
+            self.pointee_type_id() == TypeId::of::<T>() && self.is_ref(),
+            "expected `{}` (for context item `{}`), got `{}`",
+            self.item.pointee_name(),
+            self.item.marker_name(),
+            type_name::<&T>(),
+        );
 
         unsafe {
             self.write_to.cast::<&'a T>().write(value);
@@ -301,6 +313,8 @@ impl fmt::Debug for BundleItemResponse<'_> {
 
 #[repr(transparent)]
 pub struct BundleItemLayout((
+    /* marker name */ &'static str,
+    /* pointee name */ &'static str,
     /* marker type */ u128,
     /* pointee type */ u128,
     /* is mutable */ bool,
@@ -310,6 +324,8 @@ pub struct BundleItemLayout((
 impl fmt::Debug for BundleItemLayout {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("BundleItemLayout")
+            .field("marker_name", &self.marker_name())
+            .field("pointee_name", &self.pointee_name())
             .field("marker_type_id", &self.marker_type_id())
             .field("pointee_type_id", &self.pointee_type_id())
             .field("is_mut", &self.is_mut())
@@ -319,23 +335,31 @@ impl fmt::Debug for BundleItemLayout {
 }
 
 impl BundleItemLayout {
+    pub fn marker_name(&self) -> &'static str {
+        (self.0).0
+    }
+
+    pub fn pointee_name(&self) -> &'static str {
+        (self.0).1
+    }
+
     pub fn marker_type_id(&self) -> TypeId {
-        TypeId::from_u128((self.0).0)
+        TypeId::from_u128((self.0).2)
     }
 
     pub fn pointee_type_id(&self) -> TypeId {
-        TypeId::from_u128((self.0).1)
+        TypeId::from_u128((self.0).3)
     }
 
     pub fn is_mut(&self) -> bool {
-        (self.0).2
+        (self.0).4
     }
 
     pub fn is_ref(&self) -> bool {
-        !(self.0).2
+        !(self.0).4
     }
 
     fn offset(&self) -> usize {
-        (self.0).3
+        (self.0).5
     }
 }
