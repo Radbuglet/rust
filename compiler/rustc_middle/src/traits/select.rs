@@ -183,6 +183,9 @@ pub enum SelectionCandidate<'tcx> {
 
     /// Implementation of `const Destruct`, optionally from a custom `impl const Drop`.
     ConstDestructCandidate(Option<DefId>),
+
+    /// Implementation of `InferBundleFor`
+    InferBundleForCandidate,
 }
 
 /// The result of trait evaluation. The order is important

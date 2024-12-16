@@ -116,7 +116,9 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
             } else if tcx.is_lang_item(def_id, LangItem::ContextItemTrait) {
                 self.assemble_candidates_for_context_item_trait(obligation, &mut candidates);
             } else if tcx.is_lang_item(def_id, LangItem::InferBundleTrait) {
-                self.assemble_candidates_for_infer_bundle_trait(obligation, &mut candidates);
+                self.assemble_candidates_for_infer_bundle_trait(obligation, &mut candidates, false);
+            } else if tcx.is_lang_item(def_id, LangItem::InferBundleForTrait) {
+                self.assemble_candidates_for_infer_bundle_trait(obligation, &mut candidates, true);
             } else {
                 if tcx.is_lang_item(def_id, LangItem::Clone) {
                     // Same builtin conditions as `Copy`, i.e., every type which has builtin support
@@ -1445,13 +1447,18 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
         &mut self,
         obligation: &PolyTraitObligation<'tcx>,
         candidates: &mut SelectionCandidateSet<'tcx>,
+        is_for_trait: bool,
     ) {
         let self_ty = self.infcx.shallow_resolve(obligation.self_ty().skip_binder());
 
         match self_ty.kind() {
             ty::InferBundle(..) => {
                 if obligation.polarity() == ty::PredicatePolarity::Positive {
-                    candidates.vec.push(BuiltinCandidate { has_nested: false });
+                    if is_for_trait {
+                        candidates.vec.push(InferBundleForCandidate);
+                    } else {
+                        candidates.vec.push(BuiltinCandidate { has_nested: false });
+                    }
                 }
             }
             ty::Infer(ty::TyVar(_)) => {

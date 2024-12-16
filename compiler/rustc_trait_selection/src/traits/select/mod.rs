@@ -1878,7 +1878,8 @@ impl<'tcx> SelectionContext<'_, 'tcx> {
                 | BuiltinCandidate { .. }
                 | TraitAliasCandidate
                 | ObjectCandidate(_)
-                | ProjectionCandidate(_),
+                | ProjectionCandidate(_)
+                | InferBundleForCandidate,
             ) => {
                 // We have a where clause so don't go around looking
                 // for impls. Arbitrarily give param candidates priority
@@ -1908,7 +1909,8 @@ impl<'tcx> SelectionContext<'_, 'tcx> {
                 | BuiltinUnsizeCandidate
                 | TraitUpcastingUnsizeCandidate(_)
                 | BuiltinCandidate { has_nested: true }
-                | TraitAliasCandidate,
+                | TraitAliasCandidate
+                | InferBundleForCandidate,
                 ParamCandidate(victim_cand),
             ) => {
                 // Prefer these to a global where-clause bound
@@ -1946,7 +1948,8 @@ impl<'tcx> SelectionContext<'_, 'tcx> {
                 | BuiltinUnsizeCandidate
                 | TraitUpcastingUnsizeCandidate(_)
                 | BuiltinCandidate { .. }
-                | TraitAliasCandidate,
+                | TraitAliasCandidate
+                | InferBundleForCandidate,
             ) => DropVictim::Yes,
 
             (
@@ -1964,7 +1967,8 @@ impl<'tcx> SelectionContext<'_, 'tcx> {
                 | BuiltinUnsizeCandidate
                 | TraitUpcastingUnsizeCandidate(_)
                 | BuiltinCandidate { .. }
-                | TraitAliasCandidate,
+                | TraitAliasCandidate
+                | InferBundleForCandidate,
                 ObjectCandidate(_) | ProjectionCandidate(_),
             ) => DropVictim::No,
 
@@ -2074,7 +2078,8 @@ impl<'tcx> SelectionContext<'_, 'tcx> {
                 | BuiltinUnsizeCandidate
                 | TraitUpcastingUnsizeCandidate(_)
                 | BuiltinCandidate { has_nested: true }
-                | TraitAliasCandidate,
+                | TraitAliasCandidate
+                | InferBundleForCandidate,
                 ImplCandidate(_)
                 | ClosureCandidate { .. }
                 | AsyncClosureCandidate
@@ -2088,7 +2093,8 @@ impl<'tcx> SelectionContext<'_, 'tcx> {
                 | BuiltinUnsizeCandidate
                 | TraitUpcastingUnsizeCandidate(_)
                 | BuiltinCandidate { has_nested: true }
-                | TraitAliasCandidate,
+                | TraitAliasCandidate
+                | InferBundleForCandidate,
             ) => DropVictim::No,
         }
     }

@@ -51,10 +51,20 @@ impl<T: ?Sized> !InferBundle for &'_ T {}
 
 impl<T: ?Sized> !InferBundle for &'_ mut T {}
 
+#[lang = "infer_bundle_for"]
+// TODO: `#[rustc_deny_explicit_impl(implement_via_object = false)]`, but make it work with negative impls.
+pub trait InferBundleFor<'a>: InferBundle {}
+
+impl<T: ?Sized> !InferBundleFor<'_> for &'_ T {}
+
+impl<T: ?Sized> !InferBundleFor<'_> for &'_ mut T {}
+
 pub trait BundleItemSet {
     #[lang = "bundle_item_set_values"]
     type Values;
 }
+
+pub trait BundleItemSetFor<'a>: BundleItemSet {}
 
 pub trait KnownBundleItemSet: BundleItemSet {
     type Contexts: ContextItemSet;
@@ -64,10 +74,14 @@ impl<T: InferBundle> BundleItemSet for T {
     type Values = T;
 }
 
+impl<'a, T: InferBundleFor<'a>> BundleItemSetFor<'a> for T {}
+
 // This works because `InferBundle` has a negative impl for `&'_ T`.
 impl<'a, T: ContextItem> BundleItemSet for &'a T {
     type Values = &'a T::Item;
 }
+
+impl<'a, T: ContextItem> BundleItemSetFor<'a> for &'a T {}
 
 impl<'a, T: ContextItem> KnownBundleItemSet for &'a T {
     type Contexts = T;
@@ -78,6 +92,8 @@ impl<'a, T: ContextItem> BundleItemSet for &'a mut T {
     type Values = &'a mut T::Item;
 }
 
+impl<'a, T: ContextItem> BundleItemSetFor<'a> for &'a mut T {}
+
 impl<'a, T: ContextItem> KnownBundleItemSet for &'a mut T {
     type Contexts = T;
 }
@@ -87,6 +103,8 @@ macro_rules! impl_bundle_items {
         impl<$($para: BundleItemSet,)*> BundleItemSet for ($($para,)*) {
             type Values = ($($para::Values,)*);
         }
+
+        impl<'a, $($para: BundleItemSetFor<'a>,)*> BundleItemSetFor<'a> for ($($para,)*) {}
 
         impl<$($para: KnownBundleItemSet,)*> KnownBundleItemSet for ($($para,)*) {
             type Contexts = ($($para::Contexts,)*);
@@ -200,8 +218,7 @@ impl<T: BundleItemSet> Bundle<T> {
     pub fn try_new_auto<'a, F, E>(mut f: F) -> Result<Self, E>
     where
         F: for<'m> FnMut(BundleItemRequest<'a, 'm>) -> Result<BundleItemResponse<'m>, E>,
-        // FIXME: Bad lifetime constraint
-        Self: 'a,
+        T: BundleItemSetFor<'a>,
     {
         let mut out = MaybeUninit::<Self>::uninit();
 
@@ -224,7 +241,7 @@ impl<T: BundleItemSet> Bundle<T> {
     pub fn new_auto<'a, F>(mut f: F) -> Self
     where
         F: for<'m> FnMut(BundleItemRequest<'a, 'm>) -> BundleItemResponse<'m>,
-        Self: 'a,
+        T: BundleItemSetFor<'a>,
     {
         Self::try_new_auto::<_, !>(|req| Ok(f(req))).unwrap()
     }
@@ -234,7 +251,7 @@ impl<T: BundleItemSet> Bundle<T> {
 pub struct BundleItemRequest<'a, 'm> {
     // Ensure that `'a`, the lifetime of the bundle we're producing, is contravariant i.e. that `'a`
     // can be made to live longer but not shorter.
-    _ty: PhantomData<fn() -> &'a ()>,
+    _ty: PhantomData<fn(&'a ())>,
 
     // This is the marker ZST we use to provide proof that `provide_mut` or `provide_ref` was called.
     // This makes `'m`, a universally quantified lifetime acting as a token, as invariant.

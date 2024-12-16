@@ -1075,6 +1075,7 @@ symbols! {
         index,
         index_mut,
         infer_bundle,
+        infer_bundle_for,
         infer_outlives_requirements,
         infer_static_outlives_requirements,
         inherent_associated_types,

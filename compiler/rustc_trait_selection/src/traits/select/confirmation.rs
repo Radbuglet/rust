@@ -134,6 +134,11 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
                 let data = self.confirm_const_destruct_candidate(obligation, def_id)?;
                 ImplSource::Builtin(BuiltinImplSource::Misc, data)
             }
+
+            InferBundleForCandidate => {
+                let data = self.confirm_infer_bundle_for_candidate(obligation)?;
+                ImplSource::Builtin(BuiltinImplSource::Misc, data)
+            }
         };
 
         // The obligations returned by confirmation are recursively evaluated
@@ -1501,5 +1506,42 @@ impl<'cx, 'tcx> SelectionContext<'cx, 'tcx> {
         }
 
         Ok(nested)
+    }
+
+    #[instrument(level = "debug", skip(self))]
+    fn confirm_infer_bundle_for_candidate(
+        &mut self,
+        obligation: &PolyTraitObligation<'tcx>,
+    ) -> Result<Vec<PredicateObligation<'tcx>>, SelectionError<'tcx>> {
+        let tcx = self.tcx();
+
+        // TODO: ngl, I have no clue what I'm doing here.
+        let predicate = self.infcx.enter_forall_and_leak_universe(obligation.predicate);
+
+        let self_ty = self.infcx.shallow_resolve(predicate.self_ty());
+        let ty::InferBundle(_, self_re) = *self_ty.kind() else {
+            // (checked in candidate assembly)
+            unreachable!();
+        };
+
+        let outlive_re = predicate
+            .trait_ref
+            .args
+            .region_at(1);
+
+        Ok(vec![
+            PredicateObligation::with_depth(
+                tcx,
+                obligation.cause.clone(),
+                obligation.recursion_depth + 1,
+                obligation.param_env,
+                ty::ClauseKind::RegionOutlives(
+                    ty::OutlivesPredicate(
+                        outlive_re,
+                        self_re,
+                    ),
+                ),
+            ),
+        ])
     }
 }
