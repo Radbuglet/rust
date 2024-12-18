@@ -547,7 +547,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 block.and(Rvalue::Use(operand))
             }
             ExprKind::Pack { ref exprs, .. } => {
-                assert!(!this.ctx_const_restrictions);
+                assert!(this.ctx_restrictions.is_none());
 
                 let bundle_did = this.tcx.lang_items().bundle().unwrap();
                 let shape = this.ctx_pack_shapes.resolve(

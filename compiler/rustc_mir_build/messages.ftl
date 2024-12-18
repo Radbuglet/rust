@@ -419,11 +419,11 @@ mir_build_variant_defined_here = not covered
 
 mir_build_wrap_suggestion = consider wrapping the function body in an unsafe block
 
-mir_build_const_context_item_use =
-    context items cannot be accessed at compile-time
+mir_build_restricted_context_item_use =
+    context items cannot be accessed {$reason}
 
-mir_build_const_pack_expr_use =
-    `pack!` expressions cannot be used at compile-time
+mir_build_restricted_pack_expr_use =
+    `pack!` expressions cannot be used {$reason}
 
-mir_build_const_bind_context_stmt_use =
-    `let static` statements cannot be used at compile-time
+mir_build_restricted_bind_context_stmt_use =
+    `let static` statements cannot be used {$reason}

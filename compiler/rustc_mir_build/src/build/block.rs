@@ -328,7 +328,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     last_remainder_scope = *remainder_scope;
                 }
                 StmtKind::BindContext { remainder_scope, init_scope, bundle, span, self_id: _ } => {
-                    assert!(!this.ctx_const_restrictions);
+                    assert!(this.ctx_restrictions.is_none());
 
                     this.block_context.push(BlockFrame::Statement { ignores_expr_result: false });
 

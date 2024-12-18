@@ -244,9 +244,9 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     ty,
                 );
 
-                // Ensure that context passing analysis is not ran when `ctx_const_restrictions`s are
+                // Ensure that context passing analysis is not ran when `ctx_restrictions`s are
                 // enabled since a `const` function could still call a non-`const` function here.
-                let ctx_callee = ctx_callee.filter(|_| !this.ctx_const_restrictions);
+                let ctx_callee = ctx_callee.filter(|_| this.ctx_restrictions.is_none());
 
                 let ctx_callee_comps = ctx_callee.map(|callee| this.tcx.components_borrowed(callee));
 

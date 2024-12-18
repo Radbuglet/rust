@@ -222,12 +222,13 @@ impl<T: BundleItemSet> Bundle<T> {
     {
         let mut out = MaybeUninit::<Self>::uninit();
 
-        for item in Self::layout() {
+        for (index, item) in Self::layout().iter().enumerate() {
             f(BundleItemRequest {
                 _ty: PhantomData,
                 resp: BundleItemResponse {
                     _invariant: PhantomData,
                 },
+                index,
                 item,
                 write_to: unsafe {
                     out.as_mut_ptr().cast::<u8>().add(item.offset())
@@ -257,6 +258,9 @@ pub struct BundleItemRequest<'a, 'm> {
     // This makes `'m`, a universally quantified lifetime acting as a token, as invariant.
     resp: BundleItemResponse<'m>,
 
+    // The index of this request in the layout array.
+    index: usize,
+
     // The item we're trying to access.
     item: &'static BundleItemLayout,
 
@@ -265,6 +269,10 @@ pub struct BundleItemRequest<'a, 'm> {
 }
 
 impl<'a, 'm> BundleItemRequest<'a, 'm> {
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
     pub fn item(&self) -> &'static BundleItemLayout {
         self.item
     }

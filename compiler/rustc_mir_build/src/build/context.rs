@@ -15,6 +15,21 @@ use super::Builder;
 
 use crate::errors;
 
+#[derive(Debug, Copy, Clone)]
+pub(crate) enum CtxRestrictionCause {
+    Const,
+    Opaque,
+}
+
+impl CtxRestrictionCause {
+    pub(crate) fn reason(&self) -> String {
+        match self {
+            CtxRestrictionCause::Const => "at compile time".to_string(),
+            CtxRestrictionCause::Opaque => "in functions defining opaque types".to_string(),
+        }
+    }
+}
+
 // Inner index map allows for deterministic iteration.
 type BinderMap = FxHashMap<ContextBinder, FxIndexMap<DefId, ContextBinderItemInfo>>;
 
@@ -56,7 +71,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         root_expr: thir::ExprId,
     ) {
         assert!(self.ctx_bind_values.0.is_none(), "`define_context_locals` called twice");
-        assert!(!self.ctx_const_restrictions);
+        assert!(self.ctx_restrictions.is_none());
 
         let root_expr = &self.thir[root_expr];
         let mut visitor = BinderUseVisitor {
@@ -76,7 +91,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         binder: ContextBinder,
         lt_limiter: Place<'tcx>,
     ) {
-        assert!(!self.ctx_const_restrictions);
+        assert!(self.ctx_restrictions.is_none());
 
         let Some(binders) = self.ctx_bind_values.expect_init().get(&binder) else {
             return;
@@ -131,7 +146,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         item: DefId,
         binder: ContextBinder,
     ) -> ContextBinderItemInfo {
-        assert!(!self.ctx_const_restrictions);
+        assert!(self.ctx_restrictions.is_none());
 
         *self.ctx_bind_values.expect_init()
             .get(&binder)
@@ -146,7 +161,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         refs: &[Place<'tcx>],
         constraints: &[(usize, usize)],
     ) {
-        assert!(!self.ctx_const_restrictions);
+        assert!(self.ctx_restrictions.is_none());
 
         // Determine the type of the constraint marker. This will have the form...
         // `[(&'erased &'erased (), ..., &'erased &'erased ()); 0]`
@@ -327,7 +342,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
     }
 
     pub(crate) fn new_lt_limiter_func(&mut self, block: BasicBlock, source_info: SourceInfo) -> Place<'tcx> {
-        assert!(!self.ctx_const_restrictions);
+        assert!(self.ctx_restrictions.is_none());
 
         let lt_limiter = self.temp(self.tcx.types.unit, source_info.span);
         self.cfg.push_assign_unit(block, source_info, lt_limiter, self.tcx);
@@ -357,7 +372,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         block: BasicBlock,
         source_info: SourceInfo,
     ) -> Place<'tcx> {
-        assert!(!self.ctx_const_restrictions);
+        assert!(self.ctx_restrictions.is_none());
 
         let lt_limiter_ty = Ty::new_mut_ref(
             self.tcx,
@@ -491,14 +506,14 @@ pub(crate) fn check_for_fatal_context_use<'tcx>(
     tcx: TyCtxt<'tcx>,
     thir: &thir::Thir<'tcx>,
     pack_shapes: &mut ty::PackShapeStore<'tcx>,
-    const_restrictions: bool,
+    restrictions: Option<CtxRestrictionCause>,
     expr: thir::ExprId,
 ) -> Result<(), ErrorGuaranteed> {
     let mut visitor = ContextFatalUseValidator {
         tcx,
         thir,
         pack_shapes,
-        const_restrictions,
+        restrictions,
         err: None,
     };
 
@@ -515,7 +530,7 @@ struct ContextFatalUseValidator<'a, 'thir, 'tcx> {
     tcx: TyCtxt<'tcx>,
     thir: &'thir thir::Thir<'tcx>,
     pack_shapes: &'a mut ty::PackShapeStore<'tcx>,
-    const_restrictions: bool,
+    restrictions: Option<CtxRestrictionCause>,
     err: Option<ErrorGuaranteed>,
 }
 
@@ -557,9 +572,10 @@ impl<'a, 'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ContextFatalUseValida
     fn visit_stmt(&mut self, stmt: &'thir thir::Stmt<'tcx>) {
         match &stmt.kind {
             &thir::StmtKind::BindContext { span, .. } => {
-                if self.const_restrictions {
-                    let err = self.tcx.dcx().emit_err(errors::ConstBindContextStmtUse {
+                if let Some(restrictions) = self.restrictions {
+                    let err = self.tcx.dcx().emit_err(errors::RestrictedBindContextStmtUse {
                         span,
+                        reason: restrictions.reason(),
                     });
                     self.fatal(err);
                 }
@@ -577,18 +593,20 @@ impl<'a, 'thir, 'tcx> thir_visit::Visitor<'thir, 'tcx> for ContextFatalUseValida
 
         match &expr.kind {
             ExprKind::ContextRef { .. } => {
-                if self.const_restrictions {
-                    let err = self.tcx.dcx().emit_err(errors::ConstContextItemUse {
+                if let Some(restrictions) = self.restrictions {
+                    let err = self.tcx.dcx().emit_err(errors::RestrictedContextItemUse {
                         span: expr.span,
+                        reason: restrictions.reason(),
                     });
                     self.fatal(err);
                 }
             }
             ExprKind::Pack { .. } => {
-                if self.const_restrictions {
+                if let Some(restrictions) = self.restrictions {
                     // TODO: add additional diagnostics for auto-arguments
-                    let err = self.tcx.dcx().emit_err(errors::ConstPackExprUse {
+                    let err = self.tcx.dcx().emit_err(errors::RestrictedPackExprUse {
                         span: expr.span,
+                        reason: restrictions.reason(),
                     });
                     self.fatal(err);
                 }

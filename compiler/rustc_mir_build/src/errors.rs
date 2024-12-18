@@ -1002,22 +1002,25 @@ impl Subdiagnostic for Rust2024IncompatiblePatSugg {
 }
 
 #[derive(Diagnostic)]
-#[diag(mir_build_const_context_item_use)]
-pub(crate) struct ConstContextItemUse {
+#[diag(mir_build_restricted_context_item_use)]
+pub(crate) struct RestrictedContextItemUse {
     #[primary_span]
     pub(crate) span: Span,
+    pub(crate) reason: String,
 }
 
 #[derive(Diagnostic)]
-#[diag(mir_build_const_pack_expr_use)]
-pub(crate) struct ConstPackExprUse {
+#[diag(mir_build_restricted_pack_expr_use)]
+pub(crate) struct RestrictedPackExprUse {
     #[primary_span]
     pub(crate) span: Span,
+    pub(crate) reason: String,
 }
 
 #[derive(Diagnostic)]
-#[diag(mir_build_const_bind_context_stmt_use)]
-pub(crate) struct ConstBindContextStmtUse {
+#[diag(mir_build_restricted_bind_context_stmt_use)]
+pub(crate) struct RestrictedBindContextStmtUse {
     #[primary_span]
     pub(crate) span: Span,
+    pub(crate) reason: String,
 }

@@ -524,7 +524,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 block.and(PlaceBuilder::from(temp))
             }
             ExprKind::ContextRef { item, .. } => {
-                assert!(!this.ctx_const_restrictions);
+                assert!(this.ctx_restrictions.is_none());
 
                 let binder = this.ctx_bind_tracker.resolve(item);
                 block.and(PlaceBuilder::from(this.lookup_context_binder(item, binder).ref_local()))

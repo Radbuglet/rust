@@ -56,16 +56,32 @@ pub(crate) fn mir_build<'tcx>(tcx: TyCtxtAt<'tcx>, def: LocalDefId) -> Body<'tcx
         Ok((thir, expr)) => {
             let thir = thir.borrow();
             let mut ctx_pack_shapes = ty::PackShapeStore::new_store();
-            let ctx_const_restrictions = match thir.body_type {
-                thir::BodyTy::Fn(..) => tcx.is_const_fn(def.to_def_id()),
-                thir::BodyTy::Const(..) => true,
+            let ctx_restrictions = match thir.body_type {
+                thir::BodyTy::Fn(..) => 'a: {
+                    if tcx.is_const_fn(def.to_def_id()) {
+                        break 'a Some(context::CtxRestrictionCause::Const);
+                    }
+
+                    // We currently deny explicit context usage in functions using opaque types
+                    // since resolving the underlying type of a called opaque function during type
+                    // checking requires borrow checking that function, which could easily cause
+                    // cyclic query resolutions.
+                    //
+                    // I don't really think there's an easy way to fix this.
+                    if !tcx.opaque_types_defined_by(def).is_empty() {
+                        break 'a Some(context::CtxRestrictionCause::Opaque);
+                    }
+
+                    None
+                },
+                thir::BodyTy::Const(..) => Some(context::CtxRestrictionCause::Const),
             };
 
             if let Err(e) = context::check_for_fatal_context_use(
                 tcx,
                 &thir,
                 &mut ctx_pack_shapes,
-                ctx_const_restrictions,
+                ctx_restrictions,
                 expr,
             ) {
                 return construct_error(tcx, def, e);
@@ -79,7 +95,7 @@ pub(crate) fn mir_build<'tcx>(tcx: TyCtxtAt<'tcx>, def: LocalDefId) -> Body<'tcx
                     expr,
                     fn_sig,
                     ctx_pack_shapes,
-                    ctx_const_restrictions,
+                    ctx_restrictions,
                 ),
                 thir::BodyTy::Const(ty) => construct_const(
                     tcx,
@@ -88,7 +104,7 @@ pub(crate) fn mir_build<'tcx>(tcx: TyCtxtAt<'tcx>, def: LocalDefId) -> Body<'tcx
                     expr,
                     ty,
                     ctx_pack_shapes,
-                    ctx_const_restrictions,
+                    ctx_restrictions,
                 ),
             };
 
@@ -262,8 +278,9 @@ struct Builder<'a, 'tcx> {
     /// Pack shape tracker
     ctx_pack_shapes: ty::PackShapeStore<'tcx>,
 
-    /// Whether the special restrictions for `const` functions are enforced for the current body.
-    ctx_const_restrictions: bool,
+    /// Whether the special restrictions for direct context accesses are enforced for the current
+    /// body.
+    ctx_restrictions: Option<context::CtxRestrictionCause>,
 }
 
 type CaptureMap<'tcx> = SortedIndexMultiMap<usize, HirId, Capture<'tcx>>;
@@ -491,7 +508,7 @@ fn construct_fn<'tcx>(
     expr: ExprId,
     fn_sig: ty::FnSig<'tcx>,
     ctx_pack_shapes: ty::PackShapeStore<'tcx>,
-    ctx_const_restrictions: bool,
+    ctx_restrictions: Option<context::CtxRestrictionCause>,
 ) -> Body<'tcx> {
     let span = tcx.def_span(fn_def);
     let fn_id = tcx.local_def_id_to_hir_id(fn_def);
@@ -559,7 +576,7 @@ fn construct_fn<'tcx>(
         return_ty_span,
         coroutine,
         ctx_pack_shapes,
-        ctx_const_restrictions,
+        ctx_restrictions,
     );
 
     let call_site_scope =
@@ -604,7 +621,7 @@ fn construct_const<'a, 'tcx>(
     expr: ExprId,
     const_ty: Ty<'tcx>,
     ctx_pack_shapes: ty::PackShapeStore<'tcx>,
-    ctx_const_restrictions: bool,
+    ctx_restrictions: Option<context::CtxRestrictionCause>,
 ) -> Body<'tcx> {
     let hir_id = tcx.local_def_id_to_hir_id(def);
 
@@ -641,7 +658,7 @@ fn construct_const<'a, 'tcx>(
         const_ty_span,
         None,
         ctx_pack_shapes,
-        ctx_const_restrictions,
+        ctx_restrictions,
     );
 
     let mut block = START_BLOCK;
@@ -795,7 +812,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         return_span: Span,
         coroutine: Option<Box<CoroutineInfo<'tcx>>>,
         ctx_pack_shapes: ty::PackShapeStore<'tcx>,
-        ctx_const_restrictions: bool,
+        ctx_restrictions: Option<context::CtxRestrictionCause>,
     ) -> Builder<'a, 'tcx> {
         let tcx = infcx.tcx;
         let attrs = tcx.hir().attrs(hir_id);
@@ -845,7 +862,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             ctx_bind_values: context::ContextBinderMap::default(),
             ctx_bind_tracker: ty::ContextBindTracker::default(),
             ctx_pack_shapes,
-            ctx_const_restrictions,
+            ctx_restrictions,
         };
 
         assert_eq!(builder.cfg.start_new_block(), START_BLOCK);
@@ -1048,7 +1065,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             self.cfg.terminate(block, source_info, TerminatorKind::Unreachable);
             self.cfg.start_new_block().unit()
         } else {
-            if !self.ctx_const_restrictions {
+            if self.ctx_restrictions.is_none() {
                 let source_info = self.source_info(expr_span);
                 self.define_context_locals(source_info, expr_id);
 
