@@ -1407,16 +1407,21 @@ impl<'tcx> Ty<'tcx> {
         }
     }
 
-    pub fn bundle_item_set(self, tcx: TyCtxt<'tcx>) -> Ty<'tcx> {
+    pub fn opt_bundle_item_set(self, tcx: TyCtxt<'tcx>) -> Option<Ty<'tcx>> {
         let bundle_did = tcx.lang_items().bundle();
 
         match self.kind() {
-            ty::Adt(def, args) if Some(def.did()) == bundle_did => {
-                args[0].expect_ty()
-            }
-            ty::Error(..) => self,
-            _ => bug!("reified_bundle expected bundle type, got {self}"),
+            ty::Adt(def, args) if Some(def.did()) == bundle_did => Some(args[0].expect_ty()),
+            ty::Error(..) => Some(self),
+            _ => None,
         }
+    }
+
+    pub fn bundle_item_set(self, tcx: TyCtxt<'tcx>) -> Ty<'tcx> {
+        self.opt_bundle_item_set(tcx)
+            .unwrap_or_else(|| {
+                bug!("reified_bundle expected bundle type, got {self}")
+            })
     }
 
     /// If the type contains variants, returns the valid range of variant indices.

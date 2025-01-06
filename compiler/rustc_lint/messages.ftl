@@ -973,3 +973,6 @@ lint_variant_size_differences =
 
 lint_wasm_c_abi =
     older versions of the `wasm-bindgen` crate will be incompatible with future versions of Rust; please update to `wasm-bindgen` v0.2.88
+
+lint_unnecessary_bundle_item =
+    `{$ty}` can be provided through implicit context item passing

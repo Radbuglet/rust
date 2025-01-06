@@ -87,6 +87,7 @@ mod traits;
 mod types;
 mod unit_bindings;
 mod unqualified_local_imports;
+mod unnecessary_bundle_item;
 mod unused;
 
 use async_closures::AsyncClosureUsage;
@@ -128,6 +129,7 @@ use traits::*;
 use types::*;
 use unit_bindings::*;
 use unqualified_local_imports::*;
+use unnecessary_bundle_item::*;
 use unused::*;
 
 #[rustfmt::skip]
@@ -251,6 +253,7 @@ late_lint_methods!(
             TailExprDropOrder: TailExprDropOrder,
             IfLetRescope: IfLetRescope::default(),
             StaticMutRefs: StaticMutRefs,
+            UnnecessaryBundleItem: UnnecessaryBundleItem,
             UnqualifiedLocalImports: UnqualifiedLocalImports,
         ]
     ]

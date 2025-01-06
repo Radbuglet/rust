@@ -3061,3 +3061,9 @@ pub(crate) enum MutRefSugg {
 #[derive(LintDiagnostic)]
 #[diag(lint_unqualified_local_imports)]
 pub(crate) struct UnqualifiedLocalImportsDiag {}
+
+#[derive(LintDiagnostic)]
+#[diag(lint_unnecessary_bundle_item)]
+pub(crate) struct UnnecessaryBundleItem<'tcx> {
+    pub ty: Ty<'tcx>,
+}

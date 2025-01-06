@@ -38,7 +38,7 @@ pub enum AutoArgKind {
 
 impl AutoArgKind {
     pub fn of<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Option<AutoArgKind> {
-        if ty.ty_adt_def().map(|def| def.did()) == tcx.lang_items().bundle() {
+        if ty.opt_bundle_item_set(tcx).is_some() {
             return Some(AutoArgKind::PackBundle);
         }
 
