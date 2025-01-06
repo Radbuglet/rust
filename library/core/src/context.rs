@@ -130,6 +130,21 @@ impl<T: BundleItemSet> Bundle<T> {
     }
 }
 
+macro_rules! impl_bundle_split {
+    ($($para:ident)*) => {
+        impl<$($para: BundleItemSet,)*> Bundle<($($para,)*)> {
+            #[allow(non_snake_case)]
+            pub const fn split(self) -> ($(Bundle<$para>,)*) {
+                let ($($para,)*) = self.unwrap();
+
+                ($(Bundle::new($para),)*)
+            }
+        }
+    }
+}
+
+tuple!(impl_bundle_split);
+
 mod make_single_item_bundle {
     use super::*;
 
