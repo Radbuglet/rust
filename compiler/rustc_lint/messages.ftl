@@ -976,3 +976,6 @@ lint_wasm_c_abi =
 
 lint_unnecessary_bundle_item =
     `{$ty}` can be provided through implicit context item passing
+
+lint_bundle_infer_overlap =
+    `{$ty}` is borrowed both implicitly by the function and explicitly in this bundle

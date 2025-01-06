@@ -46,6 +46,7 @@
 mod async_closures;
 mod async_fn_in_trait;
 pub mod builtin;
+mod bundle;
 mod context;
 mod deref_into_dyn_supertrait;
 mod drop_forget_useless;
@@ -87,12 +88,12 @@ mod traits;
 mod types;
 mod unit_bindings;
 mod unqualified_local_imports;
-mod unnecessary_bundle_item;
 mod unused;
 
 use async_closures::AsyncClosureUsage;
 use async_fn_in_trait::AsyncFnInTrait;
 use builtin::*;
+use bundle::*;
 use deref_into_dyn_supertrait::*;
 use drop_forget_useless::*;
 use enum_intrinsics_non_enums::EnumIntrinsicsNonEnums;
@@ -129,7 +130,6 @@ use traits::*;
 use types::*;
 use unit_bindings::*;
 use unqualified_local_imports::*;
-use unnecessary_bundle_item::*;
 use unused::*;
 
 #[rustfmt::skip]
@@ -253,8 +253,8 @@ late_lint_methods!(
             TailExprDropOrder: TailExprDropOrder,
             IfLetRescope: IfLetRescope::default(),
             StaticMutRefs: StaticMutRefs,
-            UnnecessaryBundleItem: UnnecessaryBundleItem,
             UnqualifiedLocalImports: UnqualifiedLocalImports,
+            BundleLintPass: BundleLintPass,
         ]
     ]
 );

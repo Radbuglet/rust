@@ -6,7 +6,10 @@ use std::panic::Location;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet, FxIndexMap, FxIndexSet, IndexEntry};
 use rustc_data_structures::graph::{DirectedGraph, Successors, scc};
 use rustc_data_structures::sync::Lrc;
-use rustc_errors::{Diag, DiagMessage, DiagStyledString, StyledSection as Sty};
+use rustc_errors::{
+    Diag, DiagMessage, DiagStyledString, EmissionGuarantee, Subdiagnostic, SubdiagMessageOp,
+    StyledSection as Sty,
+};
 use rustc_hir as hir;
 use rustc_hir::{def_id::{DefId, LocalDefId, LocalDefIdMap}, def::DefKind};
 use rustc_index::{IndexVec, IndexSlice};
@@ -2040,14 +2043,39 @@ fn components_borrowed_borrow_free_checks<'tcx>(tcx: TyCtxt<'tcx>, (): ()) {
                 // If it did, report the error!
                 let span = tcx.hir().span(node_hir_id);
                 let mut diag = tcx.dcx().create_err(errors::ReifiedFnUsingCtx { span });
-                diag.highlighted_note(format_borrow_origins(tcx, unsized_def_id).0);
+                diag.subdiagnostic(BorrowOriginsSubdiag::new(tcx, unsized_def_id));
                 diag.emit();
             }
         }
     }
 }
 
-// === Diagnostic Formatting === //
+// === BorrowOriginsSubdiag === //
+
+pub struct BorrowOriginsSubdiag {
+    styled: DiagStyledString,
+}
+
+impl Subdiagnostic for BorrowOriginsSubdiag {
+    fn add_to_diag_with<G: EmissionGuarantee, F: SubdiagMessageOp<G>>(
+        self,
+        diag: &mut Diag<'_, G>,
+        _f: &F,
+    ) {
+        diag.highlighted_note(self.styled.0);
+    }
+}
+
+impl BorrowOriginsSubdiag {
+    pub fn new<'tcx>(
+        tcx: TyCtxt<'tcx>,
+        root_func: DefId,
+    ) -> Self {
+        Self {
+            styled: format_borrow_origins(tcx, root_func),
+        }
+    }
+}
 
 fn format_borrow_origins<'tcx>(
     tcx: TyCtxt<'tcx>,

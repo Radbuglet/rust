@@ -12,7 +12,7 @@ use rustc_hir::def_id::DefId;
 use rustc_hir::{self as hir, MissingLifetimeKind};
 use rustc_macros::{LintDiagnostic, Subdiagnostic};
 use rustc_middle::ty::inhabitedness::InhabitedPredicate;
-use rustc_middle::ty::{Clause, PolyExistentialTraitRef, Ty, TyCtxt};
+use rustc_middle::ty::{self, Clause, PolyExistentialTraitRef, Ty, TyCtxt};
 use rustc_session::Session;
 use rustc_session::lint::AmbiguityErrorDiag;
 use rustc_span::edition::Edition;
@@ -3061,6 +3061,14 @@ pub(crate) enum MutRefSugg {
 #[derive(LintDiagnostic)]
 #[diag(lint_unqualified_local_imports)]
 pub(crate) struct UnqualifiedLocalImportsDiag {}
+
+#[derive(LintDiagnostic)]
+#[diag(lint_bundle_infer_overlap)]
+pub(crate) struct BundleInferOverlap<'tcx> {
+    pub ty: Ty<'tcx>,
+    #[subdiagnostic]
+    pub origin: ty::BorrowOriginsSubdiag,
+}
 
 #[derive(LintDiagnostic)]
 #[diag(lint_unnecessary_bundle_item)]
