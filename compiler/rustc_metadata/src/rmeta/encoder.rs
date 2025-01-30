@@ -1560,7 +1560,7 @@ impl<'a, 'tcx> EncodeContext<'a, 'tcx> {
                 let table = tcx.associated_types_for_impl_traits_in_associated_fn(def_id);
                 record_defaulted_array!(self.tables.associated_types_for_impl_traits_in_associated_fn[def_id] <- table);
             }
-            if ty::has_components_borrowed_entry(tcx, def_id) {
+            if ty::is_valid_components_borrowed_target(tcx, def_id) {
                 record!(self.tables.components_borrowed[def_id] <-
                     tcx.components_borrowed(local_id));
             }

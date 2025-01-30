@@ -1074,23 +1074,11 @@ pub fn context_binds_by_stmt<'tcx>(
         }
     }
 }
-
-pub fn has_components_borrowed_entry<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> bool {
-    tcx.def_kind(def_id) == DefKind::InferBundle
-        || can_participate_in_context_solving(tcx, def_id)
-}
-
-pub fn can_participate_in_context_solving<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> bool {
-    tcx.is_mir_available(def_id)
-        // The non-const condition is load bearing as it helps avoid recursive query calls.
-        && !tcx.is_const_fn_raw(def_id)
-}
-
 pub fn extract_static_callee_for_context<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Option<DefId> {
     match ty.kind() {
         &ty::FnDef(def_id, ..) => {
-            let include = can_participate_in_context_solving(tcx, def_id)
-                && def_can_borrow_context(tcx, def_id).is_ok();
+            // Basic culling. Not needed for correctness.
+            let include = def_can_borrow_context(tcx, def_id).is_ok();
 
             include.then_some(def_id)
         }
@@ -1319,7 +1307,13 @@ fn components_borrowed_local<'tcx>(
 ) -> &'tcx ty::ContextBorrowsLocal<'tcx> {
     let empty_set = tcx.arena.alloc(ContextSet::default());
 
-    let Ok((thir, entry)) = tcx.thir_body(def_id) else {
+    // `const` functions are not allowed to use any context borrowing or binding operations so
+    // this filter is fine. Indeed, it's actually needed to avoid query cycles.
+    let thir_body = (!tcx.is_const_fn_raw(def_id.to_def_id()))
+        .then(|| tcx.thir_body(def_id).ok())
+        .flatten();
+
+    let Some((thir, entry)) = thir_body else {
         return tcx.arena.alloc(ContextBorrowsLocal {
             entry: ContextBorrowsLocalNode {
                 local: ContextSet::default(),
@@ -1672,14 +1666,7 @@ fn components_borrowed_graph<'tcx>(
         nodes: FxIndexMap::default(),
     };
 
-    // `can_participate_in_context_solving` contains a check for `is_mir_available`, which uses
-    // `tcx.mir_keys` to make its determination. Hence, this will not miss any important
-    // `LocalDefId`s.
     for &def_id in tcx.mir_keys(()) {
-        if !can_participate_in_context_solving(tcx, def_id.to_def_id()) {
-            continue;
-        }
-
         for (node_def_id, info) in tcx.components_borrowed_local(def_id).nodes() {
             let node_def_id = node_def_id.unwrap_or(def_id.to_def_id());
 
@@ -1901,20 +1888,27 @@ fn components_borrowed_graph<'tcx>(
     tcx.arena.alloc(map)
 }
 
+pub fn is_valid_components_borrowed_target<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> bool {
+    matches!(
+        tcx.def_kind(def_id),
+        DefKind::Fn
+        | DefKind::AssocFn
+        | DefKind::Ctor(..)
+        | DefKind::Closure
+        | DefKind::InferBundle
+    )
+}
+
 fn components_borrowed<'tcx>(tcx: TyCtxt<'tcx>, def_id: LocalDefId) -> &'tcx ContextSet {
-    assert!(has_components_borrowed_entry(tcx, def_id.to_def_id()), "{def_id:?} does not have a borrowed entry");
+    debug_assert!(
+        is_valid_components_borrowed_target(tcx, def_id.to_def_id()),
+        "cannot call components_borrowed on {def_id:?}",
+    );
 
     tcx.components_borrowed_graph(())
         .get(&def_id)
         .copied()
-        .unwrap_or_else(|| {
-            assert_eq!(
-                tcx.def_kind(def_id.to_def_id()),
-                DefKind::InferBundle,
-                "only infer bundles can lack an entry in the context borrow graph, got {def_id:?}",
-            );
-            tcx.arena.alloc(ContextSet::default())
-        })
+        .unwrap_or_else(|| tcx.arena.alloc(ContextSet::default()))
 }
 
 pub fn resolve_infer_bundle_set<'tcx>(
@@ -1954,10 +1948,6 @@ pub fn resolve_infer_bundle_values<'tcx>(
 fn components_borrowed_borrow_free_checks<'tcx>(tcx: TyCtxt<'tcx>, (): ()) {
     // Check function borrow rules.
     for &def_id in tcx.mir_keys(()) {
-        if !has_components_borrowed_entry(tcx, def_id.to_def_id()) {
-            continue;
-        }
-
         if
             !tcx.components_borrowed(def_id).is_empty()
             && let Err((def_id_for_span, msg)) = def_can_borrow_context(tcx, def_id.to_def_id())
@@ -2028,11 +2018,6 @@ fn components_borrowed_borrow_free_checks<'tcx>(tcx: TyCtxt<'tcx>, (): ()) {
                         continue;
                     }
                 };
-
-                // Ignore functions which can't borrow anything.
-                if !has_components_borrowed_entry(tcx, unsized_def_id) {
-                    continue;
-                }
 
                 // See whether the unsized function borrowed any context.
                 let comps = tcx.components_borrowed(unsized_def_id);
