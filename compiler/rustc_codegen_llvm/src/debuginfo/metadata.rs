@@ -1406,10 +1406,10 @@ pub(crate) fn build_global_var_di_node<'ll>(
     let is_local_to_unit = is_node_local_to_unit(cx, def_id);
 
     match cx.tcx.def_kind(def_id) {
-        DefKind::Static { nested: true, .. } | DefKind::Context => {
+        DefKind::Static { nested: false, .. } | DefKind::Context => {
             // (fallthrough)
         }
-        DefKind::Static { nested: false, .. } => {
+        DefKind::Static { nested: true, .. } => {
             return;
         }
         _ => bug!(),
