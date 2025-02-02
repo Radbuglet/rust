@@ -1307,9 +1307,12 @@ fn components_borrowed_local<'tcx>(
 ) -> &'tcx ty::ContextBorrowsLocal<'tcx> {
     let empty_set = tcx.arena.alloc(ContextSet::default());
 
+    let can_get_body = !tcx.is_const_fn_raw(def_id.to_def_id())
+        && !tcx.has_const_evaluated_body(def_id.to_def_id());
+
     // `const` functions are not allowed to use any context borrowing or binding operations so
     // this filter is fine. Indeed, it's actually needed to avoid query cycles.
-    let thir_body = (!tcx.is_const_fn_raw(def_id.to_def_id()))
+    let thir_body = can_get_body
         .then(|| tcx.thir_body(def_id).ok())
         .flatten();
 

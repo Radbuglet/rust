@@ -2024,6 +2024,45 @@ impl<'tcx> TyCtxt<'tcx> {
     }
 
     #[inline]
+    pub fn has_const_evaluated_body(self, def_id: DefId) -> bool {
+        match self.def_kind(def_id) {
+            DefKind::Variant
+            | DefKind::Const
+            | DefKind::ConstParam
+            | DefKind::Static { .. }
+            | DefKind::AssocConst
+            | DefKind::AnonConst
+            | DefKind::InlineConst => true,
+            DefKind::Mod
+            | DefKind::Struct
+            | DefKind::Union
+            | DefKind::Enum
+            | DefKind::Trait
+            | DefKind::TyAlias
+            | DefKind::ForeignTy
+            | DefKind::TraitAlias
+            | DefKind::AssocTy
+            | DefKind::TyParam
+            | DefKind::Fn
+            | DefKind::Ctor(..)
+            | DefKind::AssocFn
+            | DefKind::Macro(..)
+            | DefKind::ExternCrate
+            | DefKind::Use
+            | DefKind::ForeignMod
+            | DefKind::OpaqueTy
+            | DefKind::Field
+            | DefKind::LifetimeParam
+            | DefKind::GlobalAsm
+            | DefKind::Impl { .. }
+            | DefKind::Closure
+            | DefKind::SyntheticCoroutineBody
+            | DefKind::Context
+            | DefKind::InferBundle => false,
+        }
+    }
+
+    #[inline]
     pub fn is_const_trait(self, def_id: DefId) -> bool {
         self.trait_def(def_id).constness == hir::Constness::Const
     }
