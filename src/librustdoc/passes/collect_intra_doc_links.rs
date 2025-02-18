@@ -125,7 +125,7 @@ impl Res {
             DefKind::Static { .. } => "static",
             // Now handle things that don't have a specific disambiguator
             _ => match kind
-                .ns()
+                .primary_ns()
                 .expect("tried to calculate a disambiguator for a def without a namespace?")
             {
                 Namespace::TypeNS => "type",
@@ -512,6 +512,9 @@ impl<'a, 'tcx> LinkCollector<'a, 'tcx> {
             | ty::Placeholder(_)
             | ty::Infer(_)
             | ty::Error(_) => return None,
+
+            ty::InferBundle(..)
+            | ty::ContextMarker(..) => todo!(),
         })
     }
 
@@ -1570,7 +1573,7 @@ impl Disambiguator {
         match self {
             Self::Namespace(n) => n,
             Self::Kind(k) => {
-                k.ns().expect("only DefKinds with a valid namespace can be disambiguators")
+                k.primary_ns().expect("only DefKinds with a valid namespace can be disambiguators")
             }
             Self::Primitive => TypeNS,
         }
@@ -1953,6 +1956,8 @@ fn resolution_failure(
                             Impl { .. } | GlobalAsm | SyntheticCoroutineBody => {
                                 unreachable!("not a path")
                             }
+
+                            Context | InferBundle => todo!(),
                         }
                     } else {
                         "associated item"

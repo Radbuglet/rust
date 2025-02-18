@@ -1846,6 +1846,7 @@ pub(crate) fn clean_ty<'tcx>(ty: &hir::Ty<'tcx>, cx: &mut DocContext<'tcx>) -> T
         TyKind::BareFn(barefn) => BareFunction(Box::new(clean_bare_fn_ty(barefn, cx))),
         // Rustdoc handles `TyKind::Err`s by turning them into `Type::Infer`s.
         TyKind::Infer | TyKind::Err(_) | TyKind::Typeof(..) | TyKind::InferDelegation(..) => Infer,
+        TyKind::InferBundle(..) => todo!(),
         TyKind::AnonAdt(..) => {
             unimplemented!("Anonymous structs or unions are not supported yet")
         }
@@ -2252,6 +2253,7 @@ pub(crate) fn clean_middle_ty<'tcx>(
         ty::Coroutine(..) => panic!("Coroutine"),
         ty::Placeholder(..) => panic!("Placeholder"),
         ty::CoroutineWitness(..) => panic!("CoroutineWitness"),
+        ty::InferBundle(..) | ty::ContextMarker(..) => todo!(),
         ty::Infer(..) => panic!("Infer"),
         ty::Error(_) => FatalError.raise(),
     }

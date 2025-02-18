@@ -247,6 +247,7 @@ impl<'tcx> Visitor<'tcx> for SpanMapVisitor<'tcx> {
             | ItemKind::OpaqueTy(_)
             // We already have "visit_mod" above so no need to check it here.
             | ItemKind::Mod(_) => {}
+            ItemKind::InferBundle => todo!(),
         }
         intravisit::walk_item(self, item);
     }

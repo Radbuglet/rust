@@ -137,7 +137,10 @@ fn format_stmt(
                 .max_width_error(shape.width, ex.span())?;
             format_expr(ex, expr_type, context, shape).map(|s| s + suffix)
         }
-        ast::StmtKind::MacCall(..) | ast::StmtKind::Item(..) | ast::StmtKind::Empty => {
+        ast::StmtKind::MacCall(..)
+        | ast::StmtKind::Item(..)
+        | ast::StmtKind::BindContext(..)
+        | ast::StmtKind::Empty => {
             Err(RewriteError::Unknown)
         }
     };

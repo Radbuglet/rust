@@ -535,6 +535,7 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
                     self.add_to_current_mod(item, None, None);
                 }
             }
+            hir::ItemKind::InferBundle => todo!(),
         }
     }
 

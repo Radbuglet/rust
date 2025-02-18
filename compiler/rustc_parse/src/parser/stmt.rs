@@ -76,7 +76,7 @@ impl<'a> Parser<'a> {
                 if this.token.is_keyword(kw::Static) {
                     this.expect_keyword(kw::Static)?;
 
-                    let bind = this.parse_context_bind(attrs)?;
+                    let bind = this.parse_context_bind(lo, attrs)?;
                     let trailing = Trailing::from(capture_semi && this.token == token::Semi);
 
                     Ok((
@@ -413,8 +413,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_context_bind(&mut self, attrs: AttrVec) -> PResult<'a, P<ast::BindContext>> {
-        let lo = self.prev_token.span;
+    fn parse_context_bind(&mut self, lo: Span, attrs: AttrVec) -> PResult<'a, P<ast::BindContext>> {
         let kind = if self.check(&TokenKind::DotDot) {
             self.expect(&TokenKind::DotDot)?;
             let expr = self.parse_expr()?;

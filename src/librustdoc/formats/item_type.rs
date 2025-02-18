@@ -164,6 +164,9 @@ impl ItemType {
             | DefKind::Impl { .. }
             | DefKind::Closure
             | DefKind::SyntheticCoroutineBody => Self::ForeignType,
+
+            DefKind::InferBundle
+            | DefKind::Context => todo!(),
         }
     }
 

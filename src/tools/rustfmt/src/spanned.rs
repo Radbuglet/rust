@@ -63,6 +63,7 @@ impl Spanned for ast::Stmt {
     fn span(&self) -> Span {
         match self.kind {
             ast::StmtKind::Let(ref local) => mk_sp(local.span().lo(), self.span.hi()),
+            ast::StmtKind::BindContext(ref bind) => mk_sp(bind.span.lo(), self.span.hi()),
             ast::StmtKind::Item(ref item) => mk_sp(item.span().lo(), self.span.hi()),
             ast::StmtKind::Expr(ref expr) | ast::StmtKind::Semi(ref expr) => {
                 mk_sp(expr.span().lo(), self.span.hi())
