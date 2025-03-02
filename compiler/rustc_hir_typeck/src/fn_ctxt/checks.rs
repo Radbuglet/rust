@@ -286,7 +286,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         };
 
         // If there are no external expectations at the call site, just use the types from the function defn
-        let mut expected_input_tys = if let Some(expected_input_tys) = expected_input_tys {
+        let expected_input_tys = if let Some(expected_input_tys) = expected_input_tys {
             assert_eq!(expected_input_tys.len(), formal_input_tys.len());
             expected_input_tys
         } else {
@@ -294,6 +294,8 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         };
 
         // If we're not variadic, try to introduce some auto arguments!
+        let mut minimum_input_count = expected_input_tys.len();
+
         if !c_variadic {
             let args_introduced = self.compute_auto_args(
                 call_expr,
@@ -305,10 +307,9 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 false,
             );
 
-            expected_input_tys.truncate(expected_input_tys.len() - args_introduced);
+            minimum_input_count -= args_introduced;
         }
 
-        let minimum_input_count = expected_input_tys.len();
         let provided_arg_count = provided_args.len();
 
         // We introduce a helper function to demand that a given argument satisfy a given input
